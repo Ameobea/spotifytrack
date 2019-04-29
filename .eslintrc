@@ -1,0 +1,46 @@
+{
+  "rules": {
+    "@typescript-eslint/indent": 0,
+    "quotes": [2, "single", { "avoidEscape": true }],
+    "linebreak-style": [2, "unix"],
+    "semi": [2, "always"],
+    "comma-dangle": [2, "only-multiline"],
+    "no-console": 0,
+    "no-global-assign": 0,
+    "no-multiple-empty-lines": [2, { "max": 1 }],
+    "prefer-const": [
+      "error",
+      {
+        "destructuring": "any",
+        "ignoreReadBeforeAssign": false
+      }
+    ],
+    "@typescript-eslint/explicit-function-return-type": 0,
+    "@typescript-eslint/no-explicit-any": 0,
+    "@typescript-eslint/no-non-null-assertion": 0,
+    "@typescript-eslint/camelcase": 0,
+    "react/prop-types": 0
+  },
+  "env": {
+    "es6": true,
+    "browser": true
+  },
+  "extends": ["plugin:@typescript-eslint/recommended", "plugin:react/recommended", "prettier"],
+  "parser": "@typescript-eslint/parser",
+  "parserOptions": {
+    "sourceType": "module",
+    "ecmaFeatures": {
+      "experimentalObjectRestSpread": true,
+      "jsx": true
+    },
+    "ecmaVersion": 2017
+  },
+  "plugins": ["@typescript-eslint", "react"],
+  "globals": {
+    "process": true,
+    "ga": true,
+    "module": true,
+    "__dirname": true,
+    "require": true
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "name": "spotify-homepage",
+  "version": "0.1.0",
+  "description": "A personal homepage showing users' top songs and artists, providing a shareable link that they can use to show it off to friends.",
+  "main": "src/index.tsx",
+  "repository": "https://github.com/Ameobea/spotify-homepage",
+  "author": "Casey Primozic (Ameo) <me@ameo.link>",
+  "license": "Blue Oak 1.0.0 (https://blueoakcouncil.org/license/1.0.0#markdown)",
+  "private": false,
+  "scripts": {
+    "start": "webpack-dev-server"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.4.4",
+    "@babel/plugin-syntax-dynamic-import": "^7.2.0",
+    "@babel/preset-react": "^7.0.0",
+    "@babel/preset-typescript": "^7.3.3",
+    "@typescript-eslint/eslint-plugin": "^1.7.0",
+    "@typescript-eslint/parser": "^1.7.0",
+    "babel-eslint": "^10.0.1",
+    "babel-loader": "^8.0.5",
+    "css-loader": "^2.1.1",
+    "eslint": "^5.16.0",
+    "eslint-config-prettier": "^4.2.0",
+    "eslint-plugin-react": "^7.12.4",
+    "file-loader": "^3.0.1",
+    "handlebars": "^4.1.2",
+    "handlebars-loader": "^1.7.1",
+    "html-webpack-plugin": "^4.0.0-alpha",
+    "style-loader": "^0.23.1",
+    "ts-loader": "^5.4.4",
+    "typescript": "^3.4.5",
+    "webpack": "^4.30.0",
+    "webpack-cli": "^3.3.1",
+    "webpack-dev-server": "^3.3.1"
+  },
+  "dependencies": {
+    "@types/react": "^16.8.3",
+    "@types/react-dom": "^16.8.2",
+    "ramda": "^0.26.1",
+    "react": "^16.8.6",
+    "react-dom": "16.8.6"
+  }
+}
