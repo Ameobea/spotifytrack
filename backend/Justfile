@@ -1,0 +1,5 @@
+docker_build:
+  docker build -t ameo/spotify-homepage-backend .
+
+docker_start:
+  docker run -it -p 3999:3999 -e ROCKET_DATABASES="{ spotify_homepage = { url = \"$DATABASE_URL\" } }" -e "ROCKET_PORT=3999"
