@@ -23,6 +23,7 @@ table! {
     users (id) {
         id -> Bigint,
         creation_time -> Datetime,
+        last_update_time -> Datetime,
         username -> Varchar,
         token -> Varchar,
         refresh_token -> Varchar,

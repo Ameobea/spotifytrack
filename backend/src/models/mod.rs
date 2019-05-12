@@ -1,7 +1,19 @@
 use chrono::NaiveDateTime;
 use serde::Serialize;
 
-#[derive(Serialize)]
+use crate::schema::users;
+
+#[derive(Insertable)]
+#[table_name = "users"]
+pub struct NewUser {
+    pub creation_time: NaiveDateTime,
+    pub last_update_time: NaiveDateTime,
+    pub username: String,
+    pub token: String,
+    pub refresh_token: String,
+}
+
+#[derive(Serialize, Queryable)]
 pub struct User {
     pub id: i64,
     pub creation_time: NaiveDateTime,
@@ -42,4 +54,13 @@ pub struct StatsSnapshot {
     pub last_update_time: NaiveDateTime,
     pub tracks: TimeFrames<Track>,
     pub artists: TimeFrames<Artist>,
+}
+
+#[derive(Deserialize)]
+pub struct OAuthTokenResponse {
+    pub access_token: String,
+    pub token_type: String,
+    pub scope: String,
+    pub expires_in: isize,
+    pub refresh_token: String,
 }
