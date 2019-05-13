@@ -35,27 +35,20 @@ fn get_absolute_oauth_cb_uri() -> String {
 /// Redirects to the Spotify authorization page for the application
 #[get("/authorize")]
 pub fn authorize() -> Redirect {
-    let state = "TODO";
     let scopes = "user-read-recently-played%20user-top-read";
     let callback_uri = get_absolute_oauth_cb_uri();
 
     Redirect::to(format!(
-        "https://accounts.spotify.com/authorize?client_id={}&response_type=code&redirect_uri={}&state={}&scope={}",
+        "https://accounts.spotify.com/authorize?client_id={}&response_type=code&redirect_uri={}&scope={}",
         CONF.client_id,
         callback_uri,
-        state,
         scopes
     ))
 }
 
 
-#[get("/oauth_cb?<error>&<code>&<state>")]
-pub fn oauth_cb(
-    conn: DbConn,
-    error: Option<&RawStr>,
-    code: &RawStr,
-    state: Option<&RawStr>,
-) -> Result<Redirect, String> {
+#[get("/oauth_cb?<error>&<code>")]
+pub fn oauth_cb(conn: DbConn, error: Option<&RawStr>, code: &RawStr) -> Result<Redirect, String> {
     if error.is_some() {
         error!("Error during Oauth authorization process: {:?}", error);
         unimplemented!();
@@ -133,12 +126,15 @@ pub fn oauth_cb(
         .expect("Failed to load just inserted user from database");
 
     // Create an initial stats snapshot to store for the user
-    let cur_user_stats = match crate::spotify_api::fetch_cur_stats(&user, &username)? {
+    let cur_user_stats = match crate::spotify_api::fetch_cur_stats(&user)? {
         Some(stats) => stats,
         None => {
-            error!("Failed to fetch stats for user \"{}\"; bad response from Spotify API?", username);
+            error!(
+                "Failed to fetch stats for user \"{}\"; bad response from Spotify API?",
+                username
+            );
             return Err("Error fetching user stats from the Spotify API.".into());
-        },
+        }
     };
 
     crate::spotify_api::store_stats_snapshot(conn, &user, cur_user_stats)?;

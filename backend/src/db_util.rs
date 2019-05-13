@@ -14,7 +14,6 @@ pub fn get_user_by_spotify_id(
         .filter(spotify_id.eq(user_spotify_id))
         .load::<User>(&conn.0)
         .map_err(|_| -> String { "Error loading current user from the database.".into() })?;
-    println!("FETCHED USERS::: {:?}", users_query_res);
 
     let user = users_query_res.into_iter().next();
     Ok(user)

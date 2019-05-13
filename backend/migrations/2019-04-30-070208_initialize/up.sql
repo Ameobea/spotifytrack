@@ -14,7 +14,8 @@ START TRANSACTION;
   CREATE TABLE `spotify_homepage`.`track_history` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
     `user_id` BIGINT NOT NULL,
-    `spotify_id` VARCHAR(255) UNIQUE NOT NULL,
+    `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `spotify_id` VARCHAR(255) NOT NULL,
     `timeframe` TINYINT UNSIGNED NOT NULL,
     `ranking` SMALLINT UNSIGNED NOT NULL,
     PRIMARY KEY (`id`),
@@ -25,7 +26,8 @@ START TRANSACTION;
   CREATE TABLE `spotify_homepage`.`artist_history` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
     `user_id` BIGINT NOT NULL,
-    `spotify_id` VARCHAR(255) UNIQUE NOT NULL,
+    `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `spotify_id` VARCHAR(255) NOT NULL,
     `timeframe` TINYINT UNSIGNED NOT NULL,
     `ranking` SMALLINT UNSIGNED NOT NULL,
     PRIMARY KEY (`id`),

@@ -6,6 +6,8 @@ version = "0.1.0"
 [dependencies]
 chrono = { version = "0.4.6", features = ["serde"] }
 
+crossbeam = "0.7.1"
+
 diesel = { version = "1.4.2", features = ["chrono"] }
 
 dotenv = "0.14.0"

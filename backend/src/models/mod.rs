@@ -1,9 +1,9 @@
+use crate::schema::{artist_history, track_history, users};
+use chrono::{NaiveDateTime, Utc};
+use serde::Serialize;
+use std::default::Default;
 use std::vec;
 
-use chrono::NaiveDateTime;
-use serde::Serialize;
-
-use crate::schema::{users, track_history, artist_history};
 
 #[derive(Insertable)]
 #[table_name = "users"]
@@ -16,7 +16,7 @@ pub struct NewUser {
     pub refresh_token: String,
 }
 
-#[derive(Serialize, Queryable, Debug)]
+#[derive(Serialize, Queryable, Clone, Debug)]
 pub struct User {
     pub id: i64,
     pub creation_time: NaiveDateTime,
@@ -27,17 +27,6 @@ pub struct User {
     pub refresh_token: String,
 }
 
-#[derive(Serialize)]
-pub struct Track {
-    pub id: i64,
-    pub spotify_id: String,
-    pub title: String,
-    pub artists: String,
-    pub preview_url: String,
-    pub album: String,
-    pub image_url: String,
-}
-
 #[derive(Serialize, Insertable, Queryable, Associations)]
 #[belongs_to(User)]
 #[table_name = "track_history"]
@@ -46,16 +35,6 @@ pub struct NewTrackHistoryEntry {
     pub spotify_id: String,
     pub timeframe: u8,
     pub ranking: u16,
-}
-
-#[derive(Serialize)]
-pub struct Artist {
-    pub id: i64,
-    pub spotify_id: String,
-    pub name: String,
-    pub genres: String,
-    pub image_url: String,
-    pub uri: String,
 }
 
 #[derive(Serialize, Insertable, Queryable, Associations)]
@@ -75,12 +54,40 @@ pub struct TimeFrames<T: Serialize> {
     pub long: Vec<T>,
 }
 
+impl<T: Serialize> TimeFrames<T> {
+    pub fn add_item(&mut self, timeframe: &str, item: T) {
+        let collection = match timeframe {
+            "short" => &mut self.short,
+            "medium" => &mut self.medium,
+            "long" => &mut self.long,
+            _ => panic!("Invalid timeframe passed to `TimeFrames::add_item`"),
+        };
+
+        collection.push(item);
+    }
+}
+
+impl<T: Serialize> Default for TimeFrames<T> {
+    fn default() -> Self {
+        TimeFrames {
+            short: Vec::new(),
+            medium: Vec::new(),
+            long: Vec::new(),
+        }
+    }
+}
+
 impl<T: Serialize> IntoIterator for TimeFrames<T> {
     type Item = (&'static str, Vec<T>);
     type IntoIter = vec::IntoIter<Self::Item>;
 
     fn into_iter(self) -> Self::IntoIter {
-        vec![("short", self.short), ("medium", self.medium), ("long", self.long)].into_iter()
+        vec![
+            ("short", self.short),
+            ("medium", self.medium),
+            ("long", self.long),
+        ]
+        .into_iter()
     }
 }
 
@@ -89,6 +96,16 @@ pub struct StatsSnapshot {
     pub last_update_time: NaiveDateTime,
     pub tracks: TimeFrames<Track>,
     pub artists: TimeFrames<Artist>,
+}
+
+impl Default for StatsSnapshot {
+    fn default() -> Self {
+        StatsSnapshot {
+            last_update_time: Utc::now().naive_utc(),
+            tracks: TimeFrames::default(),
+            artists: TimeFrames::default(),
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -104,5 +121,72 @@ pub enum OAuthTokenResponse {
     Error {
         error: String,
         error_description: String,
-    }
+    },
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Followers {
+    pub href: Option<String>,
+    pub total: usize,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Image {
+    pub height: usize,
+    pub url: String,
+    pub width: usize,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Album {
+    pub album_group: Option<String>,
+    pub album_type: String,
+    pub artists: Vec<Artist>,
+    pub available_markets: Vec<String>,
+    pub href: String,
+    pub id: String,
+    pub images: Vec<Image>,
+    pub name: String,
+    pub release_date: String,
+    pub release_date_precision: String,
+    pub uri: String,
+}
+
+#[derive(Deserialize)]
+pub struct TopTracksResponse {
+    pub items: Vec<Track>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Track {
+    pub album: Album,
+    pub available_markets: Vec<String>,
+    pub disc_number: usize,
+    pub duration_ms: usize,
+    pub explicit: bool,
+    pub href: Option<String>,
+    pub id: String,
+    pub is_playable: Option<bool>,
+    pub name: String,
+    pub popularity: usize,
+    pub preview_url: Option<String>,
+    pub track_number: usize,
+    pub uri: String,
+}
+
+#[derive(Deserialize)]
+pub struct TopArtistsResponse {
+    pub items: Vec<Artist>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Artist {
+    pub followers: Option<Followers>,
+    pub genres: Option<Vec<String>>,
+    pub href: String,
+    pub id: String,
+    pub images: Option<Vec<Image>>,
+    pub name: String,
+    pub popularity: Option<usize>,
+    pub uri: String,
 }

@@ -1,6 +1,7 @@
 #![feature(proc_macro_hygiene, decl_macro)]
 
 extern crate chrono;
+extern crate crossbeam;
 #[macro_use]
 extern crate diesel;
 extern crate dotenv;

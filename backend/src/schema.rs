@@ -2,6 +2,7 @@ table! {
     artist_history (id) {
         id -> Bigint,
         user_id -> Bigint,
+        update_time -> Datetime,
         spotify_id -> Varchar,
         timeframe -> Unsigned<Tinyint>,
         ranking -> Unsigned<Smallint>,
@@ -22,6 +23,7 @@ table! {
     track_history (id) {
         id -> Bigint,
         user_id -> Bigint,
+        update_time -> Datetime,
         spotify_id -> Varchar,
         timeframe -> Unsigned<Tinyint>,
         ranking -> Unsigned<Smallint>,
