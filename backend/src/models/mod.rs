@@ -132,9 +132,9 @@ pub struct Followers {
 
 #[derive(Serialize, Deserialize)]
 pub struct Image {
-    pub height: usize,
+    pub height: Option<usize>,
     pub url: String,
-    pub width: usize,
+    pub width: Option<usize>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -188,5 +188,15 @@ pub struct Artist {
     pub images: Option<Vec<Image>>,
     pub name: String,
     pub popularity: Option<usize>,
+    pub uri: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct UserProfile {
+    pub display_name: String,
+    pub followers: Followers,
+    pub href: String,
+    pub images: Vec<Image>,
+    pub id: String,
     pub uri: String,
 }

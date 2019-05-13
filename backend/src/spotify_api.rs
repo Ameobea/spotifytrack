@@ -7,12 +7,13 @@ use reqwest;
 
 use crate::models::{
     NewArtistHistoryEntry, NewTrackHistoryEntry, StatsSnapshot, TopArtistsResponse,
-    TopTracksResponse, User,
+    TopTracksResponse, User, UserProfile,
 };
 use crate::DbConn;
 
 const SPOTIFY_USER_RECENTLY_PLAYED_URL: &str =
     "https://api.spotify.com/v1/me/player/recently-played";
+const SPOTIFY_USER_PROFILE_INFO_URL: &str = "https://api.spotify.com/v1/me";
 const ENTITY_FETCH_COUNT: usize = 50;
 
 fn get_top_entities_url(entity_type: &str, timeframe: &str) -> String {
@@ -20,6 +21,25 @@ fn get_top_entities_url(entity_type: &str, timeframe: &str) -> String {
         "https://api.spotify.com/v1/me/top/{}?limit={}&time_range={}_term",
         entity_type, ENTITY_FETCH_COUNT, timeframe
     )
+}
+
+pub fn get_user_profile_info(token: &str) -> Result<UserProfile, String> {
+    let client = reqwest::Client::new();
+    let mut res = client
+        .get(SPOTIFY_USER_PROFILE_INFO_URL)
+        .bearer_auth(token)
+        .send()
+        .map_err(|_err| -> String {
+            "Error requesting latest user profile info from the Spotify API".into()
+        })?;
+
+    res.json().map_err(|err| -> String {
+        error!(
+            "Error parsing user profile info response from Spotify API: {:?}",
+            err
+        );
+        "Error parsing user profile infor response from Spotify API".into()
+    })
 }
 
 pub fn fetch_cur_stats(user: &User) -> Result<Option<StatsSnapshot>, String> {

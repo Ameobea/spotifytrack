@@ -35,7 +35,7 @@ fn get_absolute_oauth_cb_uri() -> String {
 /// Redirects to the Spotify authorization page for the application
 #[get("/authorize")]
 pub fn authorize() -> Redirect {
-    let scopes = "user-read-recently-played%20user-top-read";
+    let scopes = "user-read-recently-played%20user-top-read%20user-follow-read";
     let callback_uri = get_absolute_oauth_cb_uri();
 
     Redirect::to(format!(
@@ -102,7 +102,9 @@ pub fn oauth_cb(conn: DbConn, error: Option<&RawStr>, code: &RawStr) -> Result<R
     debug!("Fetched user tokens.  Inserting user into database...");
 
     // Fetch the user's username and spotify ID from the Spotify API
-    let (user_spotify_id, username): (String, String) = ("TODO".into(), "TODO".into());
+    let user_profile_info = crate::spotify_api::get_user_profile_info(&access_token)?;
+    let user_spotify_id = user_profile_info.id;
+    let username = user_profile_info.display_name;
 
     let user = NewUser {
         creation_time: Utc::now().naive_utc(),
@@ -140,5 +142,5 @@ pub fn oauth_cb(conn: DbConn, error: Option<&RawStr>, code: &RawStr) -> Result<R
     crate::spotify_api::store_stats_snapshot(conn, &user, cur_user_stats)?;
 
     // Redirect the user to their stats page
-    Ok(Redirect::to(format!("/stats/{}", username)))
+    Ok(Redirect::to(format!("/stats/{}", user_spotify_id)))
 }
