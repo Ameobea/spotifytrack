@@ -57,7 +57,7 @@ pub fn oauth_cb(
     state: Option<&RawStr>,
 ) -> Result<Redirect, String> {
     if error.is_some() {
-        println!("Error during Oauth authorization process: {:?}", error);
+        error!("Error during Oauth authorization process: {:?}", error);
         unimplemented!();
     }
 
@@ -71,6 +71,7 @@ pub fn oauth_cb(
     params.insert("client_secret", CONF.client_secret.as_str());
 
     let client = reqwest::Client::new();
+    debug!("Making request to fetch user token from OAuth CB response...");
     let mut res = client
         .post(SPOTIFY_TOKEN_FETCH_URL)
         .form(&params)
@@ -81,18 +82,42 @@ pub fn oauth_cb(
 
     let res: OAuthTokenResponse = match res.json() {
         Ok(res) => res,
-        Err(_) => return Err("Error parsing response from token fetch endpoint".into()),
+        Err(err) => {
+            error!("Failed to fetch user tokens from OAuth CB code: {:?}", err);
+            return Err("Error parsing response from token fetch endpoint".into());
+        }
     };
 
-    // Fetch the user's username from the Spotify API
-    let username: String = "TODO".into();
+    let (access_token, refresh_token) = match res {
+        OAuthTokenResponse::Success {
+            access_token,
+            refresh_token,
+            ..
+        } => (access_token, refresh_token),
+        OAuthTokenResponse::Error {
+            error,
+            error_description,
+        } => {
+            error!(
+                "Error fetching tokens for user: {}; {}",
+                error, error_description
+            );
+            return Err("Error fetching user access tokens from Spotify API.".into());
+        }
+    };
+
+    debug!("Fetched user tokens.  Inserting user into database...");
+
+    // Fetch the user's username and spotify ID from the Spotify API
+    let (user_spotify_id, username): (String, String) = ("TODO".into(), "TODO".into());
 
     let user = NewUser {
         creation_time: Utc::now().naive_utc(),
         last_update_time: Utc::now().naive_utc(),
+        spotify_id: user_spotify_id.clone(),
         username: username.clone(),
-        token: res.access_token,
-        refresh_token: res.refresh_token,
+        token: access_token,
+        refresh_token,
     };
 
     diesel::insert_into(crate::schema::users::table)
@@ -103,11 +128,21 @@ pub fn oauth_cb(
             "Error inserting user into database".into()
         })?;
 
+    // Retrieve the inserted user row
+    let user = crate::db_util::get_user_by_spotify_id(&conn, &user_spotify_id)?
+        .expect("Failed to load just inserted user from database");
 
-    let cur_user_stats = crate::spotify_api::fetch_cur_stats(conn, &username)?.expect(
-        "Failed to load user's data from the database even though we should have just inserted it",
-    );
+    // Create an initial stats snapshot to store for the user
+    let cur_user_stats = match crate::spotify_api::fetch_cur_stats(&user, &username)? {
+        Some(stats) => stats,
+        None => {
+            error!("Failed to fetch stats for user \"{}\"; bad response from Spotify API?", username);
+            return Err("Error fetching user stats from the Spotify API.".into());
+        },
+    };
+
+    crate::spotify_api::store_stats_snapshot(conn, &user, cur_user_stats)?;
 
     // Redirect the user to their stats page
-    Ok(Redirect::to("/"))
+    Ok(Redirect::to(format!("/stats/{}", username)))
 }

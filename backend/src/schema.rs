@@ -11,7 +11,7 @@ table! {
 table! {
     artist_stats_history (id) {
         id -> Bigint,
-        artist_spotify_id -> Varchar,
+        spotify_id -> Varchar,
         followers -> Unsigned<Bigint>,
         popularity -> Unsigned<Bigint>,
         uri -> Text,
@@ -42,6 +42,7 @@ table! {
         id -> Bigint,
         creation_time -> Datetime,
         last_update_time -> Datetime,
+        spotify_id -> Varchar,
         username -> Text,
         token -> Text,
         refresh_token -> Text,

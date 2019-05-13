@@ -10,16 +10,18 @@ use crate::schema::{users, track_history, artist_history};
 pub struct NewUser {
     pub creation_time: NaiveDateTime,
     pub last_update_time: NaiveDateTime,
+    pub spotify_id: String,
     pub username: String,
     pub token: String,
     pub refresh_token: String,
 }
 
-#[derive(Serialize, Queryable)]
+#[derive(Serialize, Queryable, Debug)]
 pub struct User {
     pub id: i64,
     pub creation_time: NaiveDateTime,
     pub last_update_time: NaiveDateTime,
+    pub spotify_id: String,
     pub username: String,
     pub token: String,
     pub refresh_token: String,
@@ -90,10 +92,17 @@ pub struct StatsSnapshot {
 }
 
 #[derive(Deserialize)]
-pub struct OAuthTokenResponse {
-    pub access_token: String,
-    pub token_type: String,
-    pub scope: String,
-    pub expires_in: isize,
-    pub refresh_token: String,
+#[serde(untagged)]
+pub enum OAuthTokenResponse {
+    Success {
+        access_token: String,
+        token_type: String,
+        scope: String,
+        expires_in: isize,
+        refresh_token: String,
+    },
+    Error {
+        error: String,
+        error_description: String,
+    }
 }

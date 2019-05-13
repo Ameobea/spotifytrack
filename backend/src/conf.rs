@@ -12,7 +12,7 @@ impl Conf {
         Conf {
             client_id: env::var("SPOTIFY_CLIENT_ID")
                 .expect("The `SPOTIFY_CLIENT_ID` environment variable must be set."),
-            client_secret: env::var("SPOTIFY_CLIENT_ID")
+            client_secret: env::var("SPOTIFY_CLIENT_SECRET")
                 .expect("The `SPOTIFY_CLIENT_SECRET` environment variable must be set."),
             server_base_url: env::var("SERVER_BASE_URL")
                 .expect("The `SERVER_BASE_URL` environment variable must be set."),
