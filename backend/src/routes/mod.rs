@@ -7,7 +7,7 @@ use rocket::response::Redirect;
 use rocket_contrib::json::Json;
 
 use crate::conf::CONF;
-use crate::models::{OAuthTokenResponse, StatsSnapshot, NewUser};
+use crate::models::{NewUser, OAuthTokenResponse, StatsSnapshot};
 use crate::DbConn;
 
 const SPOTIFY_TOKEN_FETCH_URL: &str = "https://accounts.spotify.com/api/token";
@@ -71,20 +71,26 @@ pub fn oauth_cb(
     params.insert("client_secret", CONF.client_secret.as_str());
 
     let client = reqwest::Client::new();
-    let mut res = client.post(SPOTIFY_TOKEN_FETCH_URL)
+    let mut res = client
+        .post(SPOTIFY_TOKEN_FETCH_URL)
         .form(&params)
         .send()
-        .map_err(|_| -> String { "Error fetching token from Spotify from response Oauth code".into() })?;
+        .map_err(|_| -> String {
+            "Error fetching token from Spotify from response Oauth code".into()
+        })?;
 
     let res: OAuthTokenResponse = match res.json() {
         Ok(res) => res,
-        Err(_) => {return Err("Error parsing response from token fetch endpoint".into())}
+        Err(_) => return Err("Error parsing response from token fetch endpoint".into()),
     };
+
+    // Fetch the user's username from the Spotify API
+    let username: String = "TODO".into();
 
     let user = NewUser {
         creation_time: Utc::now().naive_utc(),
         last_update_time: Utc::now().naive_utc(),
-        username: "UGH we have to fetch this too... TODO".into(),
+        username: username.clone(),
         token: res.access_token,
         refresh_token: res.refresh_token,
     };
@@ -97,7 +103,10 @@ pub fn oauth_cb(
             "Error inserting user into database".into()
         })?;
 
-    // TODO: Kick off requests for the user's stats and store them in the database
+
+    let cur_user_stats = crate::spotify_api::fetch_cur_stats(conn, &username)?.expect(
+        "Failed to load user's data from the database even though we should have just inserted it",
+    );
 
     // Redirect the user to their stats page
     Ok(Redirect::to("/"))

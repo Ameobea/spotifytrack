@@ -3,31 +3,49 @@ START TRANSACTION;
     `id` BIGINT NOT NULL AUTO_INCREMENT,
     `creation_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `last_update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `username` VARCHAR(255) NOT NULL,
-    `token` VARCHAR(2083) NOT NULL,
-    `refresh_token` VARCHAR(2083) NOT NULL,
+    `username` TEXT NOT NULL,
+    `token` TEXT NOT NULL,
+    `refresh_token` TEXT NOT NULL,
     PRIMARY KEY (`id`)
   );
   -- TODO: Create indices
 
   CREATE TABLE `spotify_homepage`.`track_history` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
-    `title` VARCHAR(1023) NOT NULL,
-    `artists` VARCHAR(2083) NOT NULL,
-    `preview_url` VARCHAR(511) NOT NULL,
-    `album` VARCHAR(255) NOT NULL,
-    `image_url` VARCHAR(511) NOT NULL,
-    PRIMARY KEY (`id`)
+    `user_id` BIGINT NOT NULL,
+    `spotify_id` VARCHAR(255) NOT NULL,
+    `timeframe` TINYINT UNSIGNED NOT NULL,
+    `ranking` SMALLINT UNSIGNED NOT NULL,
+    PRIMARY KEY (`id`),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
   -- TODO: Create indices
 
   CREATE TABLE `spotify_homepage`.`artist_history` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
-    `name` VARCHAR(1023) NOT NULL,
-    `genres` VARCHAR(2083) NOT NULL,
-    `image_url` VARCHAR(511) NOT NULL,
-    `uri` VARCHAR(511) NOT NULL,
-    PRIMARY KEY (`id`)
+    `user_id` BIGINT NOT NULL,
+    `spotify_id` VARCHAR(255) NOT NULL,
+    `timeframe` TINYINT UNSIGNED NOT NULL,
+    `ranking` SMALLINT UNSIGNED NOT NULL,
+    PRIMARY KEY (`id`),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
   -- TODO: Create indices
+
+  CREATE TABLE `spotify_homepage`.`artist_stats_history` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT,
+    `artist_spotify_id` VARCHAR(255) NOT NULL,
+    `followers` BIGINT UNSIGNED NOT NULL,
+    `popularity` BIGINT UNSIGNED NOT NULL,
+    `uri` TEXT NOT NULL,
+    PRIMARY KEY (`id`)
+  );
+
+  CREATE TABLE `spotify_homepage`.`track_stats_history` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT,
+    `followers` BIGINT UNSIGNED NOT NULL,
+    `popularity` BIGINT UNSIGNED NOT NULL,
+    `playcount` BIGINT UNSIGNED,
+    PRIMARY KEY (`id`)
+  );
 COMMIT;
