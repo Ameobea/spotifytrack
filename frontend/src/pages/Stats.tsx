@@ -3,10 +3,7 @@ import { useSelector, useDispatch } from 'react-redux';
 
 import { Store, ReactRouterRouteProps } from '../types';
 import { useOnce } from '../util/hooks';
-
-const fetchUserStats = async username => {
-  // TODO;
-};
+import { getUserStats } from '../api';
 
 const Stats: React.FunctionComponent<ReactRouterRouteProps> = ({
   match: {

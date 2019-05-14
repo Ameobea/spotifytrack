@@ -5,3 +5,5 @@ export interface ReactRouterRouteProps {
     params: { [key: string]: string };
   };
 }
+
+export type ValueOf<T> = T[keyof T];
