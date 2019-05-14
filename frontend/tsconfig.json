@@ -27,6 +27,6 @@
       "*": ["./node_modules/@types/*", "*"]
     }
   },
-  "include": ["./index.d.ts"],
+  "include": ["index.d.ts"],
   "exclude": ["node_modules", "build"]
 }

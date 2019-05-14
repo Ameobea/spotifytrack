@@ -7,6 +7,7 @@ module.exports = {
   output: {
     path: path.resolve(__dirname, 'dist'),
     filename: 'index.js',
+    publicPath: '/',
   },
   mode: 'development',
   devtool: 'inline-source-map',
@@ -25,6 +26,20 @@ module.exports = {
         test: /\.css$/,
         use: ['style-loader', 'css-loader'],
       },
+      {
+        test: /\.scss$/,
+        use: [
+          {
+            loader: 'style-loader',
+          },
+          {
+            loader: 'css-loader',
+          },
+          {
+            loader: 'sass-loader',
+          },
+        ],
+      },
     ],
   },
   resolve: {
@@ -40,6 +55,10 @@ module.exports = {
       title: 'Personal Spotify Stats',
       minify: true,
       template: 'index.hbs',
+      inject: false,
     }),
   ],
+  devServer: {
+    historyApiFallback: true,
+  },
 };
