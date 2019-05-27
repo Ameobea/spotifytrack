@@ -1,8 +1,8 @@
 import { API_BASE_URL } from '../conf';
 
-export const getUrl = path => `${API_BASE_URL}${path}`;
+export const getUrl = (path: string) => `${API_BASE_URL}${path}`;
 
-const getJsonEndpoint = url =>
+const getJsonEndpoint = (url: string) =>
   fetch(url)
     .then(res => res.json())
     .catch(err => {
@@ -10,4 +10,4 @@ const getJsonEndpoint = url =>
       throw err;
     });
 
-export const getUserStats = username => getJsonEndpoint(getUrl(`/stats/${username}`));
+export const fetchUserStats = (username: string) => getJsonEndpoint(getUrl(`/stats/${username}`));

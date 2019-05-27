@@ -253,6 +253,19 @@
     "@types/minimatch" "*"
     "@types/node" "*"
 
+"@types/history@*", "@types/history@^4.7.2":
+  version "4.7.2"
+  resolved "https://registry.yarnpkg.com/@types/history/-/history-4.7.2.tgz#0e670ea254d559241b6eeb3894f8754991e73220"
+  integrity sha512-ui3WwXmjTaY73fOQ3/m3nnajU/Orhi6cEu5rzX+BrAAJxa3eITXZ5ch9suPqtM03OWhAHhPSyBGCN4UKoxO20Q==
+
+"@types/hoist-non-react-statics@^3.3.0":
+  version "3.3.1"
+  resolved "https://registry.yarnpkg.com/@types/hoist-non-react-statics/-/hoist-non-react-statics-3.3.1.tgz#1124aafe5118cb591977aeb1ceaaed1070eb039f"
+  integrity sha512-iMIqiko6ooLrTh1joXodJK5X9xeEALT1kM5G3ZLhD3hszxBdIEd5C75U834D9mLcINgD4OyZf5uQXjkuYydWvA==
+  dependencies:
+    "@types/react" "*"
+    hoist-non-react-statics "^3.3.0"
+
 "@types/minimatch@*":
   version "3.0.3"
   resolved "https://registry.yarnpkg.com/@types/minimatch/-/minimatch-3.0.3.tgz#3dca0e3f33b200fc7d1139c0cd96c1268cadfd9d"
@@ -268,11 +281,34 @@
   resolved "https://registry.yarnpkg.com/@types/prop-types/-/prop-types-15.7.1.tgz#f1a11e7babb0c3cad68100be381d1e064c68f1f6"
   integrity sha512-CFzn9idOEpHrgdw8JsoTkaDDyRWk1jrzIV8djzcgpq0y9tG4B4lFT+Nxh52DVpDXV+n4+NPNv7M1Dj5uMp6XFg==
 
+"@types/ramda@^0.26.8":
+  version "0.26.8"
+  resolved "https://registry.yarnpkg.com/@types/ramda/-/ramda-0.26.8.tgz#e002612cca52e52f9176d577f4d6229c8c72a10a"
+  integrity sha512-PSMkNNhB900U2xcyndlkVjJeCXpVtf1yod0Kdq/ArsLDIE0tW8pLBChmQeJs4o4dfp3AEP+AGm6zIseZPU4ndA==
+
 "@types/react-dom@^16.8.2":
   version "16.8.4"
   resolved "https://registry.yarnpkg.com/@types/react-dom/-/react-dom-16.8.4.tgz#7fb7ba368857c7aa0f4e4511c4710ca2c5a12a88"
   integrity sha512-eIRpEW73DCzPIMaNBDP5pPIpK1KXyZwNgfxiVagb5iGiz6da+9A5hslSX6GAQKdO7SayVCS/Fr2kjqprgAvkfA==
   dependencies:
+    "@types/react" "*"
+
+"@types/react-redux@^7.0.9":
+  version "7.0.9"
+  resolved "https://registry.yarnpkg.com/@types/react-redux/-/react-redux-7.0.9.tgz#4825ee2872c44768916304b6bb8df5b46d443b88"
+  integrity sha512-fMVX9SneWWw68d/JoeNUh6hj42kx2G30YhPdCYJTOv3xqbJ1xzIz6tEM/xzi7nBvpNbwZkSa9TMsV06kWOFIIg==
+  dependencies:
+    "@types/hoist-non-react-statics" "^3.3.0"
+    "@types/react" "*"
+    hoist-non-react-statics "^3.3.0"
+    redux "^4.0.0"
+
+"@types/react-router@^5.0.1":
+  version "5.0.1"
+  resolved "https://registry.yarnpkg.com/@types/react-router/-/react-router-5.0.1.tgz#9f4548c75755c55b0cffdd743080e5afa87da6dd"
+  integrity sha512-vOyVO0u3Cs0w6G5DzYqNVqcTsurEnDgOmmkJf2s7VwtunWzpPgI6dHsCBX68vXqeICpP6jCfojgJcHkm5BV7hQ==
+  dependencies:
+    "@types/history" "*"
     "@types/react" "*"
 
 "@types/react@*", "@types/react@^16.8.3":
@@ -3221,6 +3257,11 @@ isstream@~0.1.2:
   resolved "https://registry.yarnpkg.com/isstream/-/isstream-0.1.2.tgz#47e63f7af55afa6f92e1500e690eb8b8529c099a"
   integrity sha1-R+Y/evVa+m+S4VAOaQ64uFKcCZo=
 
+jantix@=0.2.0:
+  version "0.2.0"
+  resolved "https://registry.yarnpkg.com/jantix/-/jantix-0.2.0.tgz#6e2f41dc1c29c3c3f772ff9e0d1430c3bfbc6c95"
+  integrity sha512-nz+LG/6slgkF0TJF731oDz7cYWbclMj1sGCKGm1SyDsSmPyowrTWKjYd5Vpo/n/DAnjK1SJ9glt3LM0Ie4RLdw==
+
 js-base64@^2.1.8:
   version "2.5.1"
   resolved "https://registry.yarnpkg.com/js-base64/-/js-base64-2.5.1.tgz#1efa39ef2c5f7980bb1784ade4a8af2de3291121"
@@ -4625,10 +4666,10 @@ react-is@^16.6.0, react-is@^16.7.0, react-is@^16.8.1, react-is@^16.8.6:
   resolved "https://registry.yarnpkg.com/react-is/-/react-is-16.8.6.tgz#5bbc1e2d29141c9fbdfed456343fe2bc430a6a16"
   integrity sha512-aUk3bHfZ2bRSVFFbbeVS4i+lNPZr3/WM5jT2J5omUVV1zzcs1nAaf3l51ctA5FFvCRbhrH0bdAsRRQddFJZPtA==
 
-react-redux@^7.1.0-alpha.4:
-  version "7.1.0-alpha.4"
-  resolved "https://registry.yarnpkg.com/react-redux/-/react-redux-7.1.0-alpha.4.tgz#103bab23e336ce18951bc76a8c9567ce0607fc44"
-  integrity sha512-Vxk6F1ibo2EC/cThTVUbvhTyltUFg7iLnEtro+QwOfOCygKpvwUtag1a8MPWPGv+BLWMXHniOaeo0sy6INhzFg==
+react-redux@=7.1.0-alpha.5:
+  version "7.1.0-alpha.5"
+  resolved "https://registry.yarnpkg.com/react-redux/-/react-redux-7.1.0-alpha.5.tgz#762336fd7a941ed5503ee4890e2324ce29ec0488"
+  integrity sha512-bLDaXcNWcoiXKIBz/waf+oImYIBhR8h1YgXo4GKgBEyMJXtMqZkkNqD4w7JNlTsN2Xxo2/1E4akcmAo+wzJAnw==
   dependencies:
     "@babel/runtime" "^7.4.3"
     hoist-non-react-statics "^3.3.0"
@@ -4732,7 +4773,7 @@ redent@^1.0.0:
     indent-string "^2.1.0"
     strip-indent "^1.0.1"
 
-redux@^4.0.1:
+redux@^4.0.0, redux@^4.0.1:
   version "4.0.1"
   resolved "https://registry.yarnpkg.com/redux/-/redux-4.0.1.tgz#436cae6cc40fbe4727689d7c8fae44808f1bfef5"
   integrity sha512-R7bAtSkk7nY6O/OYMVR9RiBI+XghjF9rlbl5806HJbQph0LJVHZrU5oaO4q70eUKiqMRqm4y07KLTlMZ2BlVmg==

@@ -1,22 +1,21 @@
 import React from 'react';
-import { useSelector, useDispatch } from 'react-redux';
 
-import { Store, ReactRouterRouteProps } from '../types';
+import { ReactRouterRouteProps } from '../types';
 import { useOnce } from '../util/hooks';
-import { getUserStats } from '../api';
+import { fetchUserStats } from '../api';
+import { dispatch, actionCreators, useSelector } from 'src/store';
 
 const Stats: React.FunctionComponent<ReactRouterRouteProps> = ({
   match: {
     params: { username },
   },
 }) => {
-  const statsForUser = useSelector(({ userStats }: Store) => userStats.users[username]);
+  const statsForUser = useSelector(({ userStats }) => userStats[username]);
 
-  const dispatch = useDispatch();
   useOnce(async () => {
     if (!statsForUser) {
       const userStats = await fetchUserStats(username);
-      dispatch({ type: 'TODO' }); // TODO
+      dispatch(actionCreators.userStats.ADD_USER_STATS(username, userStats)); // TODO
     }
   });
 

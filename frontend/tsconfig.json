@@ -9,13 +9,14 @@
     "moduleResolution": "node",
     "rootDir": ".",
     "forceConsistentCasingInFileNames": true,
-    "noImplicitReturns": false,
+    "noImplicitReturns": true,
     "noImplicitThis": true,
     "noImplicitAny": true,
     "noStrictGenericChecks": false,
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "strictNullChecks": true,
+    "strictFunctionTypes": false,
     "suppressImplicitAnyIndexErrors": true,
     "noUnusedLocals": false,
     "skipLibCheck": true,
@@ -27,6 +28,6 @@
       "*": ["./node_modules/@types/*", "*"]
     }
   },
-  "include": ["index.d.ts"],
+  "include": ["index.d.ts", "src"],
   "exclude": ["node_modules", "build"]
 }
