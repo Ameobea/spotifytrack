@@ -7,7 +7,7 @@ use reqwest;
 
 use crate::models::{
     NewArtistHistoryEntry, NewTrackHistoryEntry, StatsSnapshot, TopArtistsResponse,
-    TopTracksResponse, User, UserProfile,
+    TopTracksResponse, User, UserProfile, Track, Artist
 };
 use crate::DbConn;
 
@@ -73,11 +73,7 @@ pub fn fetch_cur_stats(user: &User) -> Result<Option<StatsSnapshot>, String> {
         }
     }
 
-    let mut tracks_responses: Vec<NewTrackHistoryEntry> = Vec::new();
-    let mut artists_responses: Vec<NewArtistHistoryEntry> = Vec::new();
-
-    let mut stats_snapshot = StatsSnapshot::default();
-    stats_snapshot.last_update_time = Utc::now().naive_utc();
+    let mut stats_snapshot = StatsSnapshot::new(Utc::now().naive_utc());
 
     // Wait for all 6 requests to return back and then
     debug!("Waiting for all 6 inner stats requests to return...");
@@ -89,15 +85,8 @@ pub fn fetch_cur_stats(user: &User) -> Result<Option<StatsSnapshot>, String> {
                     "Error parsing response from Spotify".into()
                 })?;
 
-                for (ranking, top_track) in parsed_res.items.into_iter().enumerate() {
-                    let entry = NewTrackHistoryEntry {
-                        ranking: ranking as u16,
-                        spotify_id: top_track.id.clone(),
-                        timeframe: map_timeframe_to_timeframe_id(timeframe),
-                        user_id: user.id,
-                    };
+                for top_track in parsed_res.items.into_iter() {
                     stats_snapshot.tracks.add_item(timeframe, top_track);
-                    tracks_responses.push(entry);
                 }
             }
             ("artists", timeframe, res) => {
@@ -106,15 +95,8 @@ pub fn fetch_cur_stats(user: &User) -> Result<Option<StatsSnapshot>, String> {
                     "Error parsing response from Spotify".into()
                 })?;
 
-                for (ranking, top_artist) in parsed_res.items.into_iter().enumerate() {
-                    let entry = NewArtistHistoryEntry {
-                        ranking: ranking as u16,
-                        spotify_id: top_artist.id.clone(),
-                        timeframe: map_timeframe_to_timeframe_id(timeframe),
-                        user_id: user.id,
-                    };
+                for top_artist in parsed_res.items.into_iter() {
                     stats_snapshot.artists.add_item(timeframe, top_artist);
-                    artists_responses.push(entry);
                 }
             }
             _ => unreachable!(),
@@ -139,6 +121,10 @@ fn map_timeframe_to_timeframe_id(timeframe: &str) -> u8 {
 /// For each track and artist timeframe, store a row in the `track_history` and `artist_history`
 /// tables respectively
 pub fn store_stats_snapshot(conn: DbConn, user: &User, stats: StatsSnapshot) -> Result<(), String> {
+    use crate::schema::users::dsl::*;
+
+    let update_time = stats.last_update_time;
+
     let artist_entries: Vec<NewArtistHistoryEntry> = stats
         .artists
         .into_iter()
@@ -149,6 +135,7 @@ pub fn store_stats_snapshot(conn: DbConn, user: &User, stats: StatsSnapshot) -> 
                 .map(move |(artist_ranking, artist)| NewArtistHistoryEntry {
                     user_id: user.id,
                     spotify_id: artist.id,
+                    update_time,
                     timeframe: map_timeframe_to_timeframe_id(&artist_timeframe),
                     ranking: artist_ranking as u16,
                 })
@@ -173,6 +160,7 @@ pub fn store_stats_snapshot(conn: DbConn, user: &User, stats: StatsSnapshot) -> 
                 .map(move |(track_ranking, track)| NewTrackHistoryEntry {
                     user_id: user.id,
                     spotify_id: track.id,
+                    update_time,
                     timeframe: map_timeframe_to_timeframe_id(&track_timeframe),
                     ranking: track_ranking as u16,
                 })
@@ -187,5 +175,29 @@ pub fn store_stats_snapshot(conn: DbConn, user: &User, stats: StatsSnapshot) -> 
             "Error inserting user into database".into()
         })?;
 
+    // Update the user to have a last update time that matches all of the new updates
+    let updated_row_count = diesel::update(users.filter(id.eq(user.id)))
+        .set(last_update_time.eq(update_time))
+        .execute(&conn.0)
+        .map_err(|err| -> String {
+            error!("Error updating user's last update time: {:?}", err);
+            "Error updating user's last update time.".into()
+        })?;
+
+    if updated_row_count != 1 {
+        error!(
+            "Updated {} rows when setting last update time, but should have updated 1.",
+            updated_row_count
+        );
+    }
+
     Ok(())
+}
+
+pub fn fetch_artists(spotify_ids: &[&str]) -> Result<Vec<Option<Artist>>, String> {
+    unimplemented!();
+}
+
+pub fn fetch_tracks(spotify_ids: &[&str]) -> Result<Vec<Option<Track>>, String> {
+    unimplemented!()
 }

@@ -1,5 +1,13 @@
-#![feature(proc_macro_hygiene, decl_macro)]
+#![feature(
+    proc_macro_hygiene,
+    decl_macro,
+    slice_patterns,
+    bind_by_move_pattern_guards,
+    box_patterns,
+    nll
+)]
 
+extern crate arrayvec;
 extern crate chrono;
 extern crate crossbeam;
 #[macro_use]
@@ -9,6 +17,8 @@ extern crate dotenv;
 extern crate lazy_static;
 #[macro_use]
 extern crate log;
+extern crate rayon;
+extern crate redis;
 #[macro_use]
 extern crate rocket;
 #[macro_use]
@@ -18,13 +28,15 @@ extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;
 
+pub mod cache;
 pub mod conf;
 pub mod cors;
+pub mod db_util;
 pub mod models;
 pub mod routes;
 pub mod schema;
 pub mod spotify_api;
-pub mod db_util;
+
 
 #[database("spotify_homepage")]
 pub struct DbConn(diesel::MysqlConnection);

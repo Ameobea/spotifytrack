@@ -7,8 +7,13 @@ use rocket::response::Redirect;
 use rocket_contrib::json::Json;
 
 use crate::conf::CONF;
-use crate::models::{NewUser, OAuthTokenResponse, StatsSnapshot};
+
+use crate::models::{
+    ArtistHistoryEntry, NewUser, OAuthTokenResponse, StatsSnapshot, TrackHistoryEntry,
+};
 use crate::DbConn;
+
+use crate::db_util::{self, diesel_not_found_to_none};
 
 const SPOTIFY_TOKEN_FETCH_URL: &str = "https://accounts.spotify.com/api/token";
 
@@ -19,8 +24,104 @@ pub fn index() -> &'static str {
 
 /// Retrieves the current top tracks and artist for the current user
 #[get("/stats/<username>")]
-pub fn get_current_stats(conn: DbConn, username: String) -> Result<Json<StatsSnapshot>, String> {
-    unimplemented!(); // TODO
+pub fn get_current_stats(
+    conn: DbConn,
+    username: String,
+) -> Result<Option<Json<StatsSnapshot>>, String> {
+    let user = match db_util::get_user_by_spotify_id(&conn, &username)? {
+        Some(user) => user,
+        None => {
+            return Ok(None);
+        }
+    };
+
+    // TODO: Parallelize
+    let artist_stats = {
+        use crate::schema::artist_history::dsl::*;
+
+        let artists_stats_opt = diesel_not_found_to_none(
+            artist_history
+                .filter(user_id.eq(user.id))
+                .filter(update_time.eq(user.last_update_time))
+                .order_by(update_time)
+                .load::<ArtistHistoryEntry>(&conn.0),
+        )?;
+
+        let artists_stats = match artists_stats_opt {
+            None => return Ok(None),
+            Some(res) => res,
+        };
+
+        let artist_spotify_ids: Vec<&str> = artists_stats
+            .iter()
+            .map(|entry| entry.spotify_id.as_str())
+            .collect();
+        let artists_opts = crate::spotify_api::fetch_artists(&artist_spotify_ids)?;
+        artists_opts
+            .into_iter()
+            .enumerate()
+            .filter_map(|(i, opt)| {
+                if opt.is_none() {
+                    warn!(
+                        "Missing artist for spotify ID \"{}\"",
+                        artist_spotify_ids[i]
+                    );
+                    None
+                } else {
+                    let timeframe_id = artists_stats[i].timeframe;
+                    opt.map(|artist| (timeframe_id, artist))
+                }
+            })
+            .collect::<Vec<_>>()
+    };
+
+    let track_stats = {
+        use crate::schema::track_history::dsl::*;
+
+        let track_stats_opt = diesel_not_found_to_none(
+            track_history
+                .filter(user_id.eq(user.id))
+                .filter(update_time.eq(user.last_update_time))
+                .order_by(update_time)
+                .load::<TrackHistoryEntry>(&conn.0),
+        )?;
+
+        let track_stats = match track_stats_opt {
+            None => return Ok(None),
+            Some(res) => res,
+        };
+
+        let track_spotify_ids: Vec<&str> = track_stats
+            .iter()
+            .map(|entry| entry.spotify_id.as_str())
+            .collect();
+        let track_opts = crate::spotify_api::fetch_tracks(&track_spotify_ids)?;
+        track_opts
+            .into_iter()
+            .enumerate()
+            .filter_map(|(i, opt)| {
+                if opt.is_none() {
+                    warn!("Missing artist for spotify ID \"{}\"", track_spotify_ids[i]);
+                    None
+                } else {
+                    let timeframe_id = track_stats[i].timeframe;
+                    opt.map(|track| (timeframe_id, track))
+                }
+            })
+            .collect::<Vec<_>>()
+    };
+
+    let mut snapshot = StatsSnapshot::new(user.last_update_time);
+
+    for (timeframe_id, artist) in artist_stats {
+        snapshot.artists.add_item_by_id(timeframe_id, artist);
+    }
+
+    for (timeframe_id, track) in track_stats {
+        snapshot.tracks.add_item_by_id(timeframe_id, track);
+    }
+
+    Ok(Some(Json(snapshot)))
 }
 
 #[post("/connect", data = "<account_data>")]
@@ -45,7 +146,6 @@ pub fn authorize() -> Redirect {
         scopes
     ))
 }
-
 
 #[get("/oauth_cb?<error>&<code>")]
 pub fn oauth_cb(conn: DbConn, error: Option<&RawStr>, code: &RawStr) -> Result<Redirect, String> {

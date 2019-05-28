@@ -4,7 +4,6 @@ use serde::Serialize;
 use std::default::Default;
 use std::vec;
 
-
 #[derive(Insertable)]
 #[table_name = "users"]
 pub struct NewUser {
@@ -27,24 +26,63 @@ pub struct User {
     pub refresh_token: String,
 }
 
-#[derive(Serialize, Insertable, Queryable, Associations)]
+#[derive(Serialize, Insertable, Associations)]
 #[belongs_to(User)]
 #[table_name = "track_history"]
 pub struct NewTrackHistoryEntry {
     pub user_id: i64,
     pub spotify_id: String,
+    pub update_time: NaiveDateTime,
     pub timeframe: u8,
     pub ranking: u16,
 }
 
-#[derive(Serialize, Insertable, Queryable, Associations)]
+#[derive(Serialize, Queryable, Associations)]
+#[belongs_to(User)]
+#[table_name = "track_history"]
+pub struct TrackHistoryEntry {
+    pub id: i64,
+    pub user_id: i64,
+    pub update_time: NaiveDateTime,
+    pub spotify_id: String,
+    pub timeframe: u8,
+    pub ranking: u16,
+}
+
+#[derive(Serialize, Insertable, Associations)]
 #[belongs_to(User)]
 #[table_name = "artist_history"]
 pub struct NewArtistHistoryEntry {
     pub user_id: i64,
     pub spotify_id: String,
+    pub update_time: NaiveDateTime,
     pub timeframe: u8,
     pub ranking: u16,
+}
+
+#[derive(Serialize, Queryable, Associations, Debug)]
+#[belongs_to(User)]
+#[table_name = "artist_history"]
+pub struct ArtistHistoryEntry {
+    pub id: i64,
+    pub user_id: i64,
+    pub update_time: NaiveDateTime,
+    pub spotify_id: String,
+    pub timeframe: u8,
+    pub ranking: u16,
+}
+
+impl Default for ArtistHistoryEntry {
+    fn default() -> Self {
+        ArtistHistoryEntry {
+            id: 0,
+            user_id: 0,
+            update_time: Utc::now().naive_utc(),
+            spotify_id: "".into(),
+            timeframe: 0,
+            ranking: 0,
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -61,6 +99,17 @@ impl<T: Serialize> TimeFrames<T> {
             "medium" => &mut self.medium,
             "long" => &mut self.long,
             _ => panic!("Invalid timeframe passed to `TimeFrames::add_item`"),
+        };
+
+        collection.push(item);
+    }
+
+    pub fn add_item_by_id(&mut self, timeframe_id: u8, item: T) {
+        let collection = match timeframe_id {
+            0 => &mut self.short,
+            1 => &mut self.medium,
+            2 => &mut self.long,
+            _ => panic!("Invalid timeframe id passed to `TimeFrames::add_item_by_id`"),
         };
 
         collection.push(item);
@@ -98,10 +147,10 @@ pub struct StatsSnapshot {
     pub artists: TimeFrames<Artist>,
 }
 
-impl Default for StatsSnapshot {
-    fn default() -> Self {
+impl StatsSnapshot {
+    pub fn new(last_update_time: NaiveDateTime) -> Self {
         StatsSnapshot {
-            last_update_time: Utc::now().naive_utc(),
+            last_update_time,
             tracks: TimeFrames::default(),
             artists: TimeFrames::default(),
         }

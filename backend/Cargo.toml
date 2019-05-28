@@ -4,6 +4,8 @@ edition = "2018"
 name = "spotify-homepage-backend"
 version = "0.1.0"
 [dependencies]
+arrayvec = "0.4.10"
+
 chrono = { version = "0.4.6", features = ["serde"] }
 
 crossbeam = "0.7.1"
@@ -15,6 +17,10 @@ dotenv = "0.14.0"
 lazy_static = "1.3.0"
 
 log = "0.4"
+
+rayon = "1.0.3"
+
+redis = "0.10.0"
 
 reqwest = "0.9.15"
 
