@@ -12,6 +12,8 @@ pub struct Conf {
 
 impl Conf {
     pub fn build_from_env() -> Self {
+        dotenv::dotenv().expect("dotenv file parsing failed");
+
         Conf {
             client_id: env::var("SPOTIFY_CLIENT_ID")
                 .expect("The `SPOTIFY_CLIENT_ID` environment variable must be set."),

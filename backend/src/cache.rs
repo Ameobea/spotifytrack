@@ -59,11 +59,11 @@ pub fn get_hash_items<T: for<'de> Deserialize<'de>>(
         .into_iter()
         .fold(cmd.arg(hash_name), |acc, key| acc.arg(*key));
 
-    cmd.query(&*conn)
+    cmd.query::<Vec<Option<String>>>(&*conn)
         .map_err(|err| -> String {
             error!("Error pulling data from Redis cache: {:?}", err);
             "Error pulling data from Redis cache".into()
-        })
+        })?
         .into_iter()
         .map(|opt: Option<String>| match opt {
             Some(val) => serde_json::from_str(&val).map_err(|err| -> String {
@@ -82,7 +82,7 @@ fn cache_set_get() {
 
     set_hash_items(
         "__test",
-        &[("key1", Foo("val1".into())), ("key3", Foo("Val3".into()))],
+        &[("key1", Foo("val1".into())), ("key3", Foo("val3".into()))],
     )
     .expect("Error setting hash items");
     let vals: Vec<Option<Foo>> =

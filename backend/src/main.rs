@@ -7,7 +7,7 @@
     nll
 )]
 
-extern crate arrayvec;
+extern crate base64;
 extern crate chrono;
 extern crate crossbeam;
 #[macro_use]
@@ -50,7 +50,6 @@ fn main() {
             routes![
                 routes::index,
                 routes::get_current_stats,
-                routes::connect_to_spotify,
                 routes::oauth_cb,
                 routes::authorize
             ],

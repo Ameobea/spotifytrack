@@ -22,6 +22,8 @@ pub fn index() -> &'static str {
     "Application successfully started!"
 }
 
+// fn query_entity_stats(query: Expr)
+
 /// Retrieves the current top tracks and artist for the current user
 #[get("/stats/<username>")]
 pub fn get_current_stats(
@@ -35,7 +37,7 @@ pub fn get_current_stats(
         }
     };
 
-    // TODO: Parallelize
+    // TODO: Parallelize, if possible.  We only have one connection and that's the bottleneck here...
     let artist_stats = {
         use crate::schema::artist_history::dsl::*;
 
@@ -107,11 +109,6 @@ pub fn get_current_stats(
     }
 
     Ok(Some(Json(snapshot)))
-}
-
-#[post("/connect", data = "<account_data>")]
-pub fn connect_to_spotify(conn: DbConn, account_data: String) -> Result<(), ()> {
-    Ok(()) // TODO
 }
 
 fn get_absolute_oauth_cb_uri() -> String {

@@ -249,3 +249,26 @@ pub struct UserProfile {
     pub id: String,
     pub uri: String,
 }
+
+// {
+//     "error": {
+//         "status": 401,
+//         "message": "Invalid access token"
+//     }
+// }
+#[derive(Deserialize)]
+pub struct SpotifyBatchArtistsResponse {
+    pub artists: Vec<Artist>,
+}
+
+#[derive(Deserialize)]
+pub struct SpotifyBatchTracksResponse {
+    pub tracks: Vec<Track>,
+}
+
+#[derive(Deserialize)]
+pub struct AccessTokenResponse {
+    pub access_token: String,
+    pub token_type: String,
+    pub expires_in: usize,
+}

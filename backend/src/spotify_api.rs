@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::thread;
 
 use chrono::Utc;
@@ -6,8 +7,10 @@ use diesel::prelude::*;
 use reqwest;
 use serde::{Deserialize, Serialize};
 
+use crate::conf::CONF;
 use crate::models::{
-    Artist, NewArtistHistoryEntry, NewTrackHistoryEntry, StatsSnapshot, TopArtistsResponse,
+    AccessTokenResponse, Artist, NewArtistHistoryEntry, NewTrackHistoryEntry,
+    SpotifyBatchArtistsResponse, SpotifyBatchTracksResponse, StatsSnapshot, TopArtistsResponse,
     TopTracksResponse, Track, User, UserProfile,
 };
 use crate::DbConn;
@@ -15,8 +18,9 @@ use crate::DbConn;
 const SPOTIFY_USER_RECENTLY_PLAYED_URL: &str =
     "https://api.spotify.com/v1/me/player/recently-played";
 const SPOTIFY_USER_PROFILE_INFO_URL: &str = "https://api.spotify.com/v1/me";
-const SPOTIFY_BATCH_TRACKS_URL: &str = "https://api.spotify.com/v1/TODO TODO TODO";
-const SPOTIFY_BATCH_ARTISTS_URL: &str = "https://api.spotify.com/v1/TODO TODO TODO";
+const SPOTIFY_BATCH_TRACKS_URL: &str = "https://api.spotify.com/v1/tracks";
+const SPOTIFY_BATCH_ARTISTS_URL: &str = "https://api.spotify.com/v1/artists";
+const SPOTIFY_APP_TOKEN_URL: &str = "https://accounts.spotify.com/api/token";
 const ENTITY_FETCH_COUNT: usize = 50;
 
 fn get_top_entities_url(entity_type: &str, timeframe: &str) -> String {
@@ -32,7 +36,8 @@ pub fn get_user_profile_info(token: &str) -> Result<UserProfile, String> {
         .get(SPOTIFY_USER_PROFILE_INFO_URL)
         .bearer_auth(token)
         .send()
-        .map_err(|_err| -> String {
+        .map_err(|err| -> String {
+            error!("Error fetching user profile from Spotify API: {:?}", err);
             "Error requesting latest user profile info from the Spotify API".into()
         })?;
 
@@ -43,6 +48,38 @@ pub fn get_user_profile_info(token: &str) -> Result<UserProfile, String> {
         );
         "Error parsing user profile infor response from Spotify API".into()
     })
+}
+
+pub fn fetch_auth_token() -> Result<String, String> {
+    let client = reqwest::Client::new();
+    let mut params = HashMap::new();
+    params.insert("grant_type", "client_credentials");
+
+    let mut res = client
+        .post(SPOTIFY_APP_TOKEN_URL)
+        .header(
+            "Authorization",
+            format!(
+                "Basic {}",
+                base64::encode(&format!("{}:{}", CONF.client_id, CONF.client_secret))
+            ),
+        )
+        .form(&params)
+        .send()
+        .map_err(|err| -> String {
+            error!("Error fetching token from Spotify API: {:?}", err);
+            "Error requesting access token from the Spotify API".into()
+        })?;
+
+    res.json::<AccessTokenResponse>()
+        .map_err(|err| {
+            error!(
+                "Error decoding response while fetching token from Spotify API: {:?}",
+                err
+            );
+            "Error decoding response from Spotify API".into()
+        })
+        .map(|res| res.access_token)
 }
 
 pub fn fetch_cur_stats(user: &User) -> Result<Option<StatsSnapshot>, String> {
@@ -197,10 +234,14 @@ pub fn store_stats_snapshot(conn: DbConn, user: &User, stats: StatsSnapshot) -> 
     Ok(())
 }
 
-fn fetch_with_cache<T: Clone + Serialize + for<'de> Deserialize<'de>>(
+fn fetch_with_cache<
+    ResponseType: for<'de> Deserialize<'de>,
+    T: Clone + Serialize + for<'de> Deserialize<'de>,
+>(
     cache_key: &str,
     api_url: &str,
     spotify_ids: &[&str],
+    map_response_to_items: fn(ResponseType) -> Result<Vec<T>, String>,
 ) -> Result<Vec<T>, String> {
     // First, try to get as many items as we can from the cache
     let cache_res = crate::cache::get_hash_items::<T>(cache_key, spotify_ids)?;
@@ -216,9 +257,9 @@ fn fetch_with_cache<T: Clone + Serialize + for<'de> Deserialize<'de>>(
     }
 
     let client = reqwest::Client::new();
-    let fetched_artist_data: Vec<T> = client // TODO: This will probably be some other model wrapping it
+    let res: ResponseType = client // TODO: This will probably be some other model wrapping it
         .get(api_url)
-        .bearer_auth(&crate::conf::CONF.client_secret) // TODO: Make sure this is what we're suppoed to be sending
+        .bearer_auth(&fetch_auth_token()?) // TODO: get this from managed state
         .send()
         .map_err(|_err| -> String { "Error requesting batch data from the Spotify API".into() })?
         .json()
@@ -226,6 +267,7 @@ fn fetch_with_cache<T: Clone + Serialize + for<'de> Deserialize<'de>>(
             error!("Error decoding JSON from Spotify API: {:?}", err);
             "Error reading data from the Spotify API".into()
         })?;
+    let fetched_artist_data = map_response_to_items(res)?;
     // TODO: Handle error cases
     // Check what it looks like when we supply an invalid spotify ID and handle that situation
 
@@ -245,7 +287,7 @@ fn fetch_with_cache<T: Clone + Serialize + for<'de> Deserialize<'de>>(
         .map(|opt| {
             opt.unwrap_or_else(|| {
                 // We could avoid this clone by reversing the direction in which we fetch the items
-                // but that's 1005 premature and likely useless optimization
+                // but that's 100% premature and likely useless optimization
                 let val = fetched_artist_data[i].clone();
                 i += 1;
                 val
@@ -256,17 +298,19 @@ fn fetch_with_cache<T: Clone + Serialize + for<'de> Deserialize<'de>>(
 }
 
 pub fn fetch_artists(spotify_ids: &[&str]) -> Result<Vec<Artist>, String> {
-    fetch_with_cache(
+    fetch_with_cache::<SpotifyBatchArtistsResponse, _>(
         &crate::conf::CONF.artists_cache_hash_name,
         SPOTIFY_BATCH_ARTISTS_URL,
         spotify_ids,
+        |res: SpotifyBatchArtistsResponse| Ok(res.artists),
     )
 }
 
 pub fn fetch_tracks(spotify_ids: &[&str]) -> Result<Vec<Track>, String> {
-    fetch_with_cache(
+    fetch_with_cache::<SpotifyBatchTracksResponse, _>(
         &crate::conf::CONF.tracks_cache_hash_name,
         SPOTIFY_BATCH_TRACKS_URL,
         spotify_ids,
+        |res: SpotifyBatchTracksResponse| Ok(res.tracks),
     )
 }
