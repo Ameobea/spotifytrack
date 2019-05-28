@@ -1,19 +1,23 @@
+use std::collections::HashMap;
 use std::thread;
 
 use chrono::Utc;
 use crossbeam::channel;
 use diesel::prelude::*;
 use reqwest;
+use serde::{Deserialize, Serialize};
 
 use crate::models::{
-    NewArtistHistoryEntry, NewTrackHistoryEntry, StatsSnapshot, TopArtistsResponse,
-    TopTracksResponse, User, UserProfile, Track, Artist
+    Artist, NewArtistHistoryEntry, NewTrackHistoryEntry, StatsSnapshot, TopArtistsResponse,
+    TopTracksResponse, Track, User, UserProfile,
 };
 use crate::DbConn;
 
 const SPOTIFY_USER_RECENTLY_PLAYED_URL: &str =
     "https://api.spotify.com/v1/me/player/recently-played";
 const SPOTIFY_USER_PROFILE_INFO_URL: &str = "https://api.spotify.com/v1/me";
+const SPOTIFY_BATCH_TRACKS_URL: &str = "https://api.spotify.com/v1/TODO TODO TODO";
+const SPOTIFY_BATCH_ARTISTS_URL: &str = "https://api.spotify.com/v1/TODO TODO TODO";
 const ENTITY_FETCH_COUNT: usize = 50;
 
 fn get_top_entities_url(entity_type: &str, timeframe: &str) -> String {
@@ -194,10 +198,76 @@ pub fn store_stats_snapshot(conn: DbConn, user: &User, stats: StatsSnapshot) -> 
     Ok(())
 }
 
-pub fn fetch_artists(spotify_ids: &[&str]) -> Result<Vec<Option<Artist>>, String> {
-    unimplemented!();
+fn fetch_with_cache<T: Clone + Serialize + for<'de> Deserialize<'de>>(
+    cache_key: &str,
+    api_url: &str,
+    spotify_ids: &[&str],
+) -> Result<Vec<T>, String> {
+    // First, try to get as many items as we can from the cache
+    let cache_res = crate::cache::get_hash_items::<T>(cache_key, spotify_ids)?;
+
+    // Fire off a request to Spotify to fill in the missing items
+    let mut missing_indices = Vec::new();
+    let mut missing_ids = Vec::new();
+    for (i, datum) in cache_res.iter().enumerate() {
+        if datum.is_none() {
+            missing_indices.push(i);
+            missing_ids.push(spotify_ids[i].clone());
+        }
+    }
+
+    let client = reqwest::Client::new();
+    let fetched_artist_data: Vec<T> = client // TODO: This will probably be some other model wrapping it
+        .get(api_url)
+        .bearer_auth(&crate::conf::CONF.client_secret) // TODO: Make sure this is what we're suppoed to be sending
+        .send()
+        .map_err(|_err| -> String { "Error requesting batch data from the Spotify API".into() })?
+        .json()
+        .map_err(|err| -> String {
+            error!("Error decoding JSON from Spotify API: {:?}", err);
+            "Error reading data from the Spotify API".into()
+        })?;
+    // TODO: Handle error cases
+    // Check what it looks like when we supply an invalid spotify ID and handle that situation
+
+    // Update the cache with the missing items
+    crate::cache::set_hash_items(
+        cache_key,
+        &fetched_artist_data
+            .iter()
+            .enumerate()
+            .map(|(i, datum)| (missing_ids[i], datum))
+            .collect::<Vec<_>>(),
+    )?;
+
+    let mut i = 0;
+    let combined_results = cache_res
+        .into_iter()
+        .map(|opt| {
+            opt.unwrap_or_else(|| {
+                // We could avoid this clone by reversing the direction in which we fetch the items
+                // but that's 1005 premature and likely useless optimization
+                let val = fetched_artist_data[i].clone();
+                i += 1;
+                val
+            })
+        })
+        .collect::<Vec<_>>();
+    Ok(combined_results)
 }
 
-pub fn fetch_tracks(spotify_ids: &[&str]) -> Result<Vec<Option<Track>>, String> {
-    unimplemented!()
+pub fn fetch_artists(spotify_ids: &[&str]) -> Result<Vec<Artist>, String> {
+    fetch_with_cache(
+        &crate::conf::CONF.artists_cache_hash_name,
+        SPOTIFY_BATCH_ARTISTS_URL,
+        spotify_ids,
+    )
+}
+
+pub fn fetch_tracks(spotify_ids: &[&str]) -> Result<Vec<Track>, String> {
+    fetch_with_cache(
+        &crate::conf::CONF.tracks_cache_hash_name,
+        SPOTIFY_BATCH_TRACKS_URL,
+        spotify_ids,
+    )
 }

@@ -47,30 +47,21 @@ pub fn get_current_stats(
                 .load::<ArtistHistoryEntry>(&conn.0),
         )?;
 
-        let artists_stats = match artists_stats_opt {
+        let artist_stats = match artists_stats_opt {
             None => return Ok(None),
             Some(res) => res,
         };
 
-        let artist_spotify_ids: Vec<&str> = artists_stats
+        let artist_spotify_ids: Vec<&str> = artist_stats
             .iter()
             .map(|entry| entry.spotify_id.as_str())
             .collect();
-        let artists_opts = crate::spotify_api::fetch_artists(&artist_spotify_ids)?;
-        artists_opts
+        crate::spotify_api::fetch_artists(&artist_spotify_ids)?
             .into_iter()
             .enumerate()
-            .filter_map(|(i, opt)| {
-                if opt.is_none() {
-                    warn!(
-                        "Missing artist for spotify ID \"{}\"",
-                        artist_spotify_ids[i]
-                    );
-                    None
-                } else {
-                    let timeframe_id = artists_stats[i].timeframe;
-                    opt.map(|artist| (timeframe_id, artist))
-                }
+            .map(|(i, artist)| {
+                let timeframe_id = artist_stats[i].timeframe;
+                (timeframe_id, artist)
             })
             .collect::<Vec<_>>()
     };
@@ -95,18 +86,12 @@ pub fn get_current_stats(
             .iter()
             .map(|entry| entry.spotify_id.as_str())
             .collect();
-        let track_opts = crate::spotify_api::fetch_tracks(&track_spotify_ids)?;
-        track_opts
+        crate::spotify_api::fetch_tracks(&track_spotify_ids)?
             .into_iter()
             .enumerate()
-            .filter_map(|(i, opt)| {
-                if opt.is_none() {
-                    warn!("Missing artist for spotify ID \"{}\"", track_spotify_ids[i]);
-                    None
-                } else {
-                    let timeframe_id = track_stats[i].timeframe;
-                    opt.map(|track| (timeframe_id, track))
-                }
+            .map(|(i, track)| {
+                let timeframe_id = track_stats[i].timeframe;
+                (timeframe_id, track)
             })
             .collect::<Vec<_>>()
     };

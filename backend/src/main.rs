@@ -17,6 +17,7 @@ extern crate dotenv;
 extern crate lazy_static;
 #[macro_use]
 extern crate log;
+extern crate r2d2_redis;
 extern crate rayon;
 extern crate redis;
 #[macro_use]
@@ -36,7 +37,6 @@ pub mod models;
 pub mod routes;
 pub mod schema;
 pub mod spotify_api;
-
 
 #[database("spotify_homepage")]
 pub struct DbConn(diesel::MysqlConnection);

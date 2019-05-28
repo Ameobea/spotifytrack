@@ -173,20 +173,20 @@ pub enum OAuthTokenResponse {
     },
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Followers {
     pub href: Option<String>,
     pub total: usize,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Image {
     pub height: Option<usize>,
     pub url: String,
     pub width: Option<usize>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Album {
     pub album_group: Option<String>,
     pub album_type: String,
@@ -206,7 +206,7 @@ pub struct TopTracksResponse {
     pub items: Vec<Track>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Track {
     pub album: Album,
     pub available_markets: Vec<String>,
@@ -228,7 +228,7 @@ pub struct TopArtistsResponse {
     pub items: Vec<Artist>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Artist {
     pub followers: Option<Followers>,
     pub genres: Option<Vec<String>>,
