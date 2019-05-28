@@ -136,7 +136,7 @@ pub fn authorize() -> Redirect {
 pub fn oauth_cb(conn: DbConn, error: Option<&RawStr>, code: &RawStr) -> Result<Redirect, String> {
     if error.is_some() {
         error!("Error during Oauth authorization process: {:?}", error);
-        unimplemented!();
+        return Err("An error occured while authenticating with Spotify.".into());
     }
 
     // Shoot the code back to Spotify and get an API token for the user in return

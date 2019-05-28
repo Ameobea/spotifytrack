@@ -77,19 +77,19 @@ pub fn get_hash_items<T: for<'de> Deserialize<'de>>(
 
 #[test]
 fn cache_set_get() {
-    let conn = REDIS_CONN_POOL
-        .get()
-        .expect("Unable to get Redis client from pool");
-    conn.hset_multiple::<&str, &str, &str, ()>("__test", &[("key1", "val1"), ("key3", "val3")])
-        .expect("Failed to set keys");
+    #[derive(Serialize, Deserialize, PartialEq, Debug)]
+    struct Foo(String);
 
-    let vals: Vec<Option<String>> = redis::cmd("HMGET")
-        .arg("__test")
-        .arg("key1")
-        .arg("key2")
-        .arg("key3")
-        .query(&*conn)
-        .expect("Error running `HMGET` query");
+    set_hash_items(
+        "__test",
+        &[("key1", Foo("val1".into())), ("key3", Foo("Val3".into()))],
+    )
+    .expect("Error setting hash items");
+    let vals: Vec<Option<Foo>> =
+        get_hash_items("__test", &["key1", "key2", "key3"]).expect("Error fetching hash values");
 
-    assert_eq!(vals, vec![Some("val1".into()), None, Some("val3".into())]);
+    assert_eq!(
+        vals,
+        vec![Some(Foo("val1".into())), None, Some(Foo("val3".into()))]
+    );
 }
