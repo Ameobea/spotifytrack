@@ -92,7 +92,7 @@ pub fn fetch_cur_stats(user: &User) -> Result<Option<StatsSnapshot>, String> {
 
     // Create threads for each of the inner requests (we have to make 6; one for each of the three
     // timeframes, and then that multiplied by each of the two entities (tracks and artists)).
-    debug!("Kicking off 6 API requests on separate threads...");
+    info!("Kicking off 6 API requests on separate threads...");
     for entity_type in &["tracks", "artists"] {
         for timeframe in &["short", "medium", "long"] {
             let token = user.token.clone();
@@ -116,7 +116,7 @@ pub fn fetch_cur_stats(user: &User) -> Result<Option<StatsSnapshot>, String> {
     let mut stats_snapshot = StatsSnapshot::new(Utc::now().naive_utc());
 
     // Wait for all 6 requests to return back and then
-    debug!("Waiting for all 6 inner stats requests to return...");
+    info!("Waiting for all 6 inner stats requests to return...");
     for _ in 0..6 {
         match rx.recv().unwrap() {
             ("tracks", timeframe, res) => {
@@ -265,6 +265,7 @@ fn fetch_with_cache<
     map_response_to_items: fn(ResponseType) -> Result<Vec<T>, String>,
 ) -> Result<Vec<T>, String> {
     // First, try to get as many items as we can from the cache
+    info!("Checking cache for {} spotify ids...", spotify_ids.len());
     let cache_res = crate::cache::get_hash_items::<T>(cache_key, spotify_ids)?;
 
     // Fire off a request to Spotify to fill in the missing items
@@ -276,11 +277,24 @@ fn fetch_with_cache<
             missing_ids.push(spotify_ids[i]);
         }
     }
+    info!(
+        "{}/{} items found in the cache.",
+        cache_res.len() - missing_indices.len(),
+        spotify_ids.len()
+    );
 
     let mut fetched_entities = Vec::with_capacity(missing_indices.len());
     for (chunk_ix, chunk) in missing_ids.chunks(MAX_BATCH_ENTITY_COUNT).enumerate() {
+        info!("Fetching chunk {}...", chunk_ix);
         let res: ResponseType = fetch_batch_entities(api_url, chunk)?;
         let fetched_artist_data = map_response_to_items(res)?;
+
+        for i in 0..chunk.len() {
+            debug_assert_eq!(
+                chunk[i],
+                missing_ids[(chunk_ix * MAX_BATCH_ENTITY_COUNT) + i]
+            );
+        }
 
         // Update the cache with the missing items
         crate::cache::set_hash_items(
@@ -288,12 +302,13 @@ fn fetch_with_cache<
             &fetched_artist_data
                 .iter()
                 .enumerate()
-                .map(|(i, datum)| (missing_ids[(chunk_ix * MAX_BATCH_ENTITY_COUNT) + i], datum))
+                .map(|(i, datum)| (chunk[i], datum))
                 .collect::<Vec<_>>(),
         )?;
 
         fetched_entities.extend(fetched_artist_data)
     }
+    info!("Fetched all chunks.");
 
     let mut i = 0;
     let combined_results = cache_res

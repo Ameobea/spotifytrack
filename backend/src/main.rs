@@ -29,6 +29,8 @@ extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;
 
+use rocket_contrib::compression::Compression;
+
 pub mod cache;
 pub mod conf;
 pub mod cors;
@@ -56,5 +58,6 @@ fn main() {
         )
         .attach(DbConn::fairing())
         .attach(cors::CorsFairing)
+        .attach(Compression::fairing())
         .launch();
 }

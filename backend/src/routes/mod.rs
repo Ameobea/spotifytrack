@@ -146,7 +146,7 @@ pub fn oauth_cb(conn: DbConn, error: Option<&RawStr>, code: &RawStr) -> Result<R
     params.insert("client_secret", CONF.client_secret.as_str());
 
     let client = reqwest::Client::new();
-    debug!("Making request to fetch user token from OAuth CB response...");
+    info!("Making request to fetch user token from OAuth CB response...");
     let mut res = client
         .post(SPOTIFY_TOKEN_FETCH_URL)
         .form(&params)
@@ -181,7 +181,7 @@ pub fn oauth_cb(conn: DbConn, error: Option<&RawStr>, code: &RawStr) -> Result<R
         }
     };
 
-    debug!("Fetched user tokens.  Inserting user into database...");
+    info!("Fetched user tokens.  Inserting user into database...");
 
     // Fetch the user's username and spotify ID from the Spotify API
     let user_profile_info = crate::spotify_api::get_user_profile_info(&access_token)?;
