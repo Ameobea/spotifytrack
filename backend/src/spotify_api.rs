@@ -234,6 +234,27 @@ pub fn store_stats_snapshot(conn: DbConn, user: &User, stats: StatsSnapshot) -> 
     Ok(())
 }
 
+const MAX_BATCH_ENTITY_COUNT: usize = 50;
+
+fn fetch_batch_entities<T: for<'de> Deserialize<'de>>(
+    base_url: &str,
+    spotify_entity_ids: &[&str],
+) -> Result<T, String> {
+    let url = format!("{}?ids={}", base_url, spotify_entity_ids.join(","));
+    let client = reqwest::Client::new();
+    client
+        .get(&url)
+        .bearer_auth(&fetch_auth_token()?) // TODO: get this from managed state
+        .send()
+        .map_err(|_err| -> String { "Error requesting batch data from the Spotify API".into() })?
+        .json()
+        .map_err(|err| -> String {
+            error!("Error decoding JSON from Spotify API: {:?}", err);
+            "Error reading data from the Spotify API".into()
+        })
+}
+
+// TODO: Enforce API page size limitations and recursively call (or whatever) until all is fetched
 fn fetch_with_cache<
     ResponseType: for<'de> Deserialize<'de>,
     T: Clone + Serialize + for<'de> Deserialize<'de>,
@@ -252,34 +273,27 @@ fn fetch_with_cache<
     for (i, datum) in cache_res.iter().enumerate() {
         if datum.is_none() {
             missing_indices.push(i);
-            missing_ids.push(spotify_ids[i].clone());
+            missing_ids.push(spotify_ids[i]);
         }
     }
 
-    let client = reqwest::Client::new();
-    let res: ResponseType = client // TODO: This will probably be some other model wrapping it
-        .get(api_url)
-        .bearer_auth(&fetch_auth_token()?) // TODO: get this from managed state
-        .send()
-        .map_err(|_err| -> String { "Error requesting batch data from the Spotify API".into() })?
-        .json()
-        .map_err(|err| -> String {
-            error!("Error decoding JSON from Spotify API: {:?}", err);
-            "Error reading data from the Spotify API".into()
-        })?;
-    let fetched_artist_data = map_response_to_items(res)?;
-    // TODO: Handle error cases
-    // Check what it looks like when we supply an invalid spotify ID and handle that situation
+    let mut fetched_entities = Vec::with_capacity(missing_indices.len());
+    for (chunk_ix, chunk) in missing_ids.chunks(MAX_BATCH_ENTITY_COUNT).enumerate() {
+        let res: ResponseType = fetch_batch_entities(api_url, chunk)?;
+        let fetched_artist_data = map_response_to_items(res)?;
 
-    // Update the cache with the missing items
-    crate::cache::set_hash_items(
-        cache_key,
-        &fetched_artist_data
-            .iter()
-            .enumerate()
-            .map(|(i, datum)| (missing_ids[i], datum))
-            .collect::<Vec<_>>(),
-    )?;
+        // Update the cache with the missing items
+        crate::cache::set_hash_items(
+            cache_key,
+            &fetched_artist_data
+                .iter()
+                .enumerate()
+                .map(|(i, datum)| (missing_ids[(chunk_ix * MAX_BATCH_ENTITY_COUNT) + i], datum))
+                .collect::<Vec<_>>(),
+        )?;
+
+        fetched_entities.extend(fetched_artist_data)
+    }
 
     let mut i = 0;
     let combined_results = cache_res
@@ -288,7 +302,7 @@ fn fetch_with_cache<
             opt.unwrap_or_else(|| {
                 // We could avoid this clone by reversing the direction in which we fetch the items
                 // but that's 100% premature and likely useless optimization
-                let val = fetched_artist_data[i].clone();
+                let val = fetched_entities[i].clone();
                 i += 1;
                 val
             })
