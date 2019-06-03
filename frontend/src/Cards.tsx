@@ -69,7 +69,18 @@ const styles: { [key: string]: CSSProperties } = {
 
 const DefaultImageElement = ({ ...args }) => <img {...args} />;
 
-const ImageBox = ({ imageSrc, imgAlt, children, ImageElement = DefaultImageElement }) => (
+interface ImageBoxProps {
+  imageSrc: string;
+  imgAlt: string;
+  ImageElement?: typeof DefaultImageElement;
+}
+
+const ImageBox: React.FunctionComponent<ImageBoxProps> = ({
+  imageSrc,
+  imgAlt,
+  children,
+  ImageElement = DefaultImageElement,
+}) => (
   <div style={styles.root}>
     <div className="track">
       <ImageElement
@@ -84,9 +95,27 @@ const ImageBox = ({ imageSrc, imgAlt, children, ImageElement = DefaultImageEleme
   </div>
 );
 
-export const Track = ({ title, artists, previewUrl, album, imageSrc, playing, setPlaying }) => {
+interface TrackProps {
+  title: string;
+  artists: { name: string; uri: string }[];
+  previewUrl: string;
+  album: React.ReactNode;
+  imageSrc: string;
+  playing: string | false;
+  setPlaying: (currentlyPlayingPreviewUrl: string | false) => void;
+}
+
+export const Track: React.FunctionComponent<TrackProps> = ({
+  title,
+  artists,
+  previewUrl,
+  album,
+  imageSrc,
+  playing,
+  setPlaying,
+}) => {
   const isPlaying = playing === previewUrl;
-  const audioTag = useRef(null);
+  const audioTag = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     const audioElem = audioTag.current;
@@ -192,9 +221,17 @@ export const Artist = ({
   );
 };
 
-const TIMEFRAMES = ['short', 'medium', 'long'];
+const TIMEFRAMES: Timeframe[] = ['short', 'medium', 'long'];
 
-const TimeframeSelector = ({ timeframe, setTimeframe }) => (
+interface TimeframeSelectorProps {
+  timeframe: Timeframe;
+  setTimeframe: (newTimeframe: Timeframe) => void;
+}
+
+const TimeframeSelector: React.FunctionComponent<TimeframeSelectorProps> = ({
+  timeframe,
+  setTimeframe,
+}) => (
   <div style={styles.timeframeSelector}>
     Timeframe:{' '}
     {TIMEFRAMES.map((frame, i, frames) => (
@@ -214,8 +251,22 @@ const TimeframeSelector = ({ timeframe, setTimeframe }) => (
   </div>
 );
 
-export const ImageBoxGrid = ({ renderItem, initialItems, maxItems, title }) => {
-  const [timeframe, setTimeframe] = useState('short');
+type Timeframe = 'short' | 'medium' | 'long';
+
+interface ImageBoxGridProps {
+  renderItem: (i: number, timeframe: Timeframe) => React.ReactNode;
+  initialItems: number;
+  maxItems: number;
+  title: string;
+}
+
+export const ImageBoxGrid: React.FunctionComponent<ImageBoxGridProps> = ({
+  renderItem,
+  initialItems,
+  maxItems,
+  title,
+}) => {
+  const [timeframe, setTimeframe] = useState<Timeframe>('short');
   const [isExpanded, setIsExpanded] = useState(false);
   const itemCount = isExpanded ? maxItems : initialItems;
 
