@@ -1,9 +1,10 @@
 use std::collections::HashMap;
+use std::sync::Mutex;
 
 use chrono::Utc;
 use diesel::{self, prelude::*};
 use rocket::http::RawStr;
-use rocket::response::Redirect;
+use rocket::{response::Redirect, State};
 use rocket_contrib::json::Json;
 
 use crate::conf::CONF;
@@ -12,7 +13,7 @@ use crate::models::{
     ArtistHistoryEntry, NewUser, OAuthTokenResponse, StatsSnapshot, TrackHistoryEntry,
 };
 use crate::DbConn;
-
+use crate::SpotifyTokenData;
 use crate::db_util::{self, diesel_not_found_to_none};
 
 const SPOTIFY_TOKEN_FETCH_URL: &str = "https://accounts.spotify.com/api/token";
@@ -22,13 +23,12 @@ pub fn index() -> &'static str {
     "Application successfully started!"
 }
 
-// fn query_entity_stats(query: Expr)
-
 /// Retrieves the current top tracks and artist for the current user
 #[get("/stats/<username>")]
 pub fn get_current_stats(
     conn: DbConn,
     username: String,
+    token_data: State<Mutex<SpotifyTokenData>>,
 ) -> Result<Option<Json<StatsSnapshot>>, String> {
     let user = match db_util::get_user_by_spotify_id(&conn, &username)? {
         Some(user) => user,
@@ -36,6 +36,9 @@ pub fn get_current_stats(
             return Ok(None);
         }
     };
+
+    let token_data = &mut *(&*token_data).lock().unwrap();
+    let spotify_access_token = token_data.get()?;
 
     // TODO: Parallelize, if possible.  We only have one connection and that's the bottleneck here...
     let artist_stats = {
@@ -58,7 +61,7 @@ pub fn get_current_stats(
             .iter()
             .map(|entry| entry.spotify_id.as_str())
             .collect();
-        crate::spotify_api::fetch_artists(&artist_spotify_ids)?
+        crate::spotify_api::fetch_artists(spotify_access_token, &artist_spotify_ids)?
             .into_iter()
             .enumerate()
             .map(|(i, artist)| {
@@ -88,7 +91,7 @@ pub fn get_current_stats(
             .iter()
             .map(|entry| entry.spotify_id.as_str())
             .collect();
-        crate::spotify_api::fetch_tracks(&track_spotify_ids)?
+        crate::spotify_api::fetch_tracks(spotify_access_token, &track_spotify_ids)?
             .into_iter()
             .enumerate()
             .map(|(i, track)| {

@@ -9,7 +9,8 @@ START TRANSACTION;
     `refresh_token` TEXT NOT NULL,
     PRIMARY KEY (`id`)
   );
-  -- TODO: Create indices
+  CREATE INDEX spotify_id_ix ON `spotify_homepage`.`users` (spotify_id);
+  CREATE INDEX update_time_ix ON `spotify_homepage`.`users` (last_update_time);
 
   CREATE TABLE `spotify_homepage`.`track_history` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
@@ -21,7 +22,8 @@ START TRANSACTION;
     PRIMARY KEY (`id`),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
-  -- TODO: Create indices
+  CREATE INDEX user_id_ix ON `spotify_homepage`.`track_history` (user_id);
+  CREATE INDEX update_time_ix ON `spotify_homepage`.`track_history` (update_time);
 
   CREATE TABLE `spotify_homepage`.`artist_history` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
@@ -33,7 +35,8 @@ START TRANSACTION;
     PRIMARY KEY (`id`),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
-  -- TODO: Create indices
+  CREATE INDEX user_id_ix ON `spotify_homepage`.`artist_history` (user_id);
+  CREATE INDEX update_time_ix ON `spotify_homepage`.`artist_history` (update_time);
 
   CREATE TABLE `spotify_homepage`.`artist_stats_history` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,

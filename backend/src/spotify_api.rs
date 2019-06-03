@@ -50,7 +50,7 @@ pub fn get_user_profile_info(token: &str) -> Result<UserProfile, String> {
     })
 }
 
-pub fn fetch_auth_token() -> Result<String, String> {
+pub fn fetch_auth_token() -> Result<AccessTokenResponse, String> {
     let client = reqwest::Client::new();
     let mut params = HashMap::new();
     params.insert("grant_type", "client_credentials");
@@ -79,7 +79,6 @@ pub fn fetch_auth_token() -> Result<String, String> {
             );
             "Error decoding response from Spotify API".into()
         })
-        .map(|res| res.access_token)
 }
 
 pub fn fetch_cur_stats(user: &User) -> Result<Option<StatsSnapshot>, String> {
@@ -238,13 +237,14 @@ const MAX_BATCH_ENTITY_COUNT: usize = 50;
 
 fn fetch_batch_entities<T: for<'de> Deserialize<'de>>(
     base_url: &str,
+    token: &str,
     spotify_entity_ids: &[&str],
 ) -> Result<T, String> {
     let url = format!("{}?ids={}", base_url, spotify_entity_ids.join(","));
     let client = reqwest::Client::new();
     client
         .get(&url)
-        .bearer_auth(&fetch_auth_token()?) // TODO: get this from managed state
+        .bearer_auth(token)
         .send()
         .map_err(|_err| -> String { "Error requesting batch data from the Spotify API".into() })?
         .json()
@@ -261,6 +261,7 @@ fn fetch_with_cache<
 >(
     cache_key: &str,
     api_url: &str,
+    spotify_access_token: &str,
     spotify_ids: &[&str],
     map_response_to_items: fn(ResponseType) -> Result<Vec<T>, String>,
 ) -> Result<Vec<T>, String> {
@@ -286,7 +287,7 @@ fn fetch_with_cache<
     let mut fetched_entities = Vec::with_capacity(missing_indices.len());
     for (chunk_ix, chunk) in missing_ids.chunks(MAX_BATCH_ENTITY_COUNT).enumerate() {
         info!("Fetching chunk {}...", chunk_ix);
-        let res: ResponseType = fetch_batch_entities(api_url, chunk)?;
+        let res: ResponseType = fetch_batch_entities(api_url, spotify_access_token, chunk)?;
         let fetched_artist_data = map_response_to_items(res)?;
 
         for i in 0..chunk.len() {
@@ -326,19 +327,21 @@ fn fetch_with_cache<
     Ok(combined_results)
 }
 
-pub fn fetch_artists(spotify_ids: &[&str]) -> Result<Vec<Artist>, String> {
+pub fn fetch_artists(spotify_access_token: &str, spotify_ids: &[&str]) -> Result<Vec<Artist>, String> {
     fetch_with_cache::<SpotifyBatchArtistsResponse, _>(
         &crate::conf::CONF.artists_cache_hash_name,
         SPOTIFY_BATCH_ARTISTS_URL,
+        spotify_access_token,
         spotify_ids,
         |res: SpotifyBatchArtistsResponse| Ok(res.artists),
     )
 }
 
-pub fn fetch_tracks(spotify_ids: &[&str]) -> Result<Vec<Track>, String> {
+pub fn fetch_tracks(spotify_access_token: &str, spotify_ids: &[&str]) -> Result<Vec<Track>, String> {
     fetch_with_cache::<SpotifyBatchTracksResponse, _>(
         &crate::conf::CONF.tracks_cache_hash_name,
         SPOTIFY_BATCH_TRACKS_URL,
+        spotify_access_token,
         spotify_ids,
         |res: SpotifyBatchTracksResponse| Ok(res.tracks),
     )

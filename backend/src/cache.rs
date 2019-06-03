@@ -26,7 +26,7 @@ fn get_conn() -> Result<diesel::r2d2::PooledConnection<RedisConnectionManager>, 
 
 pub fn set_hash_items<T: Serialize>(hash_name: &str, kv_pairs: &[(&str, T)]) -> Result<(), String> {
     let kv_pairs_serialized = kv_pairs
-        .into_iter()
+        .iter()
         .map(|(key, val)| -> Result<(&str, String), String> {
             let serialized: String = serde_json::to_string(val).map_err(|err| -> String {
                 error!("Error serializing value to string: {:?}", err);
@@ -56,7 +56,7 @@ pub fn get_hash_items<T: for<'de> Deserialize<'de>>(
 
     let mut cmd = redis::cmd("HMGET");
     let cmd = keys
-        .into_iter()
+        .iter()
         .fold(cmd.arg(hash_name), |acc, key| acc.arg(*key));
 
     cmd.query::<Vec<Option<String>>>(&*conn)
