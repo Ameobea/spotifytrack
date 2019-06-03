@@ -1,8 +1,9 @@
 import * as R from 'ramda';
 import { buildStore, buildActionGroup, buildModule } from 'jantix';
-
 import { createBrowserHistory } from 'history';
 import { routerMiddleware, connectRouter } from 'connected-react-router';
+
+import { UserStats } from '../types';
 
 export const history = createBrowserHistory();
 
@@ -11,11 +12,6 @@ const customReducers = {
 };
 
 const middleware = routerMiddleware(history);
-
-export interface UserStats {
-  username: string;
-  displayName: string;
-}
 
 const userStats = {
   ADD_USER_STATS: buildActionGroup({

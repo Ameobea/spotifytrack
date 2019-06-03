@@ -4,6 +4,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPlay, faPause } from '@fortawesome/free-solid-svg-icons';
 
 import { ANewTab, truncateWithElipsis } from './util';
+import { Timeframe } from 'src/types';
 
 const styles: { [key: string]: CSSProperties } = {
   root: {
@@ -33,7 +34,6 @@ const styles: { [key: string]: CSSProperties } = {
     position: 'absolute',
     width: 160,
     height: 160,
-    zIndex: -1,
   },
   playPauseButton: {
     cursor: 'pointer',
@@ -99,7 +99,7 @@ interface TrackProps {
   title: string;
   artists: { name: string; uri: string }[];
   previewUrl: string;
-  album: React.ReactNode;
+  album: string;
   imageSrc: string;
   playing: string | false;
   setPlaying: (currentlyPlayingPreviewUrl: string | false) => void;
@@ -228,7 +228,7 @@ interface TimeframeSelectorProps {
   setTimeframe: (newTimeframe: Timeframe) => void;
 }
 
-const TimeframeSelector: React.FunctionComponent<TimeframeSelectorProps> = ({
+export const TimeframeSelector: React.FunctionComponent<TimeframeSelectorProps> = ({
   timeframe,
   setTimeframe,
 }) => (
@@ -250,8 +250,6 @@ const TimeframeSelector: React.FunctionComponent<TimeframeSelectorProps> = ({
     ))}
   </div>
 );
-
-type Timeframe = 'short' | 'medium' | 'long';
 
 interface ImageBoxGridProps {
   renderItem: (i: number, timeframe: Timeframe) => React.ReactNode;
