@@ -2,6 +2,8 @@ import React, { Fragment, useRef, useEffect, useState, CSSProperties } from 'rea
 import * as R from 'ramda';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPlay, faPause } from '@fortawesome/free-solid-svg-icons';
+import HTMLEllipsis from 'react-lines-ellipsis/lib/html';
+import ReactDOMServer from 'react-dom/server';
 
 import { ANewTab, truncateWithElipsis } from './util';
 import { Timeframe } from 'src/types';
@@ -11,7 +13,8 @@ const styles: { [key: string]: CSSProperties } = {
     display: 'flex',
     flexDirection: 'column',
     flexBasis: 160,
-    height: 160,
+    height: 232,
+    overflow: 'hidden',
     marginBottom: 30,
     fontSize: 14,
     marginRight: 10,
@@ -20,26 +23,23 @@ const styles: { [key: string]: CSSProperties } = {
   },
   imageBoxContent: {
     display: 'flex',
-    flexDirection: 'column',
-    height: 160,
   },
   data: {
     zIndex: 2,
     padding: 4,
     alignItems: 'flex-start',
-    width: 160,
-    height: 160,
+    width: 160 - 32,
+    display: 'inline',
   },
   imageContainer: {
-    position: 'absolute',
     width: 160,
     height: 160,
   },
   playPauseButton: {
     cursor: 'pointer',
-    display: 'inline-block',
     mixBlendMode: 'exclusion',
     fontSize: 20,
+    display: 'inline',
   },
   link: {
     zIndex: 2,
@@ -114,7 +114,7 @@ export const Track: React.FunctionComponent<TrackProps> = ({
   playing,
   setPlaying,
 }) => {
-  const isPlaying = playing === previewUrl;
+  const isPlaying = playing && playing === previewUrl;
   const audioTag = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
@@ -142,7 +142,7 @@ export const Track: React.FunctionComponent<TrackProps> = ({
     >
       <div style={styles.data} className="track-datum">
         <div>{truncateWithElipsis(title, 50)}</div>
-        <div>{album}</div>
+        {/* <div>{album}</div> */}
         <span style={{ zIndex: 2 }}>
           {artists.map(({ name, uri }, i) => (
             <Fragment key={uri || name}>
@@ -157,10 +157,12 @@ export const Track: React.FunctionComponent<TrackProps> = ({
       </div>
 
       <div
-        style={{ display: 'flex', padding: 4 }}
+        style={{ display: 'inline', padding: 4, height: 18 }}
         onClick={() => setPlaying(isPlaying ? false : previewUrl)}
       >
-        <FontAwesomeIcon icon={isPlaying ? faPause : faPlay} style={styles.playPauseButton} />
+        {previewUrl ? (
+          <FontAwesomeIcon icon={isPlaying ? faPause : faPlay} style={styles.playPauseButton} />
+        ) : null}
       </div>
     </ImageBox>
   );
@@ -186,7 +188,7 @@ interface ArtistProps {
 
 const Genre = ({ genre }: { genre: string }) => {
   const to = `http://everynoise.com/engenremap-${genre.replace(/ /g, '')}.html`;
-  return <ANewTab to={to} text={genre} style={{ color: 'white' }} />;
+  return <ANewTab to={to} text={genre} style={{ color: 'white', fontSize: 11 }} />;
 };
 
 export const Artist = ({
@@ -208,14 +210,21 @@ export const Artist = ({
             {name}
           </a>
         </div>
-        <div>
-          {trimmedGenres.map((genre, i) => (
-            <Fragment key={genre}>
-              <Genre genre={genre} />
-              {i !== trimmedGenres.length - 1 ? ', ' : null}
-            </Fragment>
-          ))}
-        </div>
+        <HTMLEllipsis
+          maxLine={3}
+          basedOn="words"
+          trimRight={false}
+          unsafeHTML={ReactDOMServer.renderToString(
+            <div style={{ lineHeight: '1em' }}>
+              {trimmedGenres.map((genre, i) => (
+                <Fragment key={genre}>
+                  <Genre genre={genre} />
+                  {i !== trimmedGenres.length - 1 ? ', ' : null}
+                </Fragment>
+              ))}
+            </div>
+          )}
+        />
       </div>
     </ImageBox>
   );
@@ -269,7 +278,7 @@ export const ImageBoxGrid: React.FunctionComponent<ImageBoxGridProps> = ({
   const itemCount = isExpanded ? maxItems : initialItems;
 
   return (
-    <Fragment>
+    <>
       <h3 style={styles.header}>{title}</h3>
       <TimeframeSelector timeframe={timeframe} setTimeframe={setTimeframe} />
       <div style={styles.imageBoxGrid}>
@@ -281,6 +290,6 @@ export const ImageBoxGrid: React.FunctionComponent<ImageBoxGridProps> = ({
           Show More
         </div>
       ) : null}
-    </Fragment>
+    </>
   );
 };

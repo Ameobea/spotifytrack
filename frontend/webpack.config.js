@@ -1,5 +1,6 @@
 const path = require('path');
 
+const webpack = require('webpack');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 
 module.exports = {
@@ -57,9 +58,10 @@ module.exports = {
       template: 'index.hbs',
       inject: false,
     }),
+    new webpack.EnvironmentPlugin(['REACT_APP_API_BASE_URL']),
   ],
   devServer: {
     historyApiFallback: true,
-    port: 9000
-},
+    port: 9000,
+  },
 };

@@ -2,4 +2,5 @@ docker_build:
   docker build -t ameo/spotify-homepage-backend .
 
 docker_start:
-  docker run -it -p 3999:3999 -e ROCKET_DATABASES="{ spotify_homepage = { url = \"$DATABASE_URL\" } }" -e "ROCKET_PORT=3999"
+  export $(egrep -v '^#' .env | xargs)
+  docker run -it --net host -p 3999:3999 -e ROCKET_DATABASES="{ spotify_homepage = { url = \"$DATABASE_URL\" } }" -e "ROCKET_PORT=3999" -e SPOTIFY_CLIENT_ID="$SPOTIFY_CLIENT_ID" -e SPOTIFY_CLIENT_SECRET="$SPOTIFY_CLIENT_SECRET" -e SERVER_BASE_URL="$SERVER_BASE_URL" -e REDIS_URL="$REDIS_URL" --name spotifytrack-server ameo/spotify-homepage-backend

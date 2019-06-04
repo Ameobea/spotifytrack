@@ -1,4 +1,4 @@
-import { API_BASE_URL } from '../conf';
+import { API_BASE_URL } from 'src/conf';
 
 export const getUrl = (path: string) => `${API_BASE_URL}${path}`;
 

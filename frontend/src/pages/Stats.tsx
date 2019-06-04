@@ -69,7 +69,15 @@ const Stats: React.FunctionComponent<ReactRouterRouteProps> = ({
     <main>
       <h1>
         User stats for <b>{username}</b>
-        {statsForUser ? <StatsDetails stats={statsForUser} /> : 'Loading...'}
+        {statsForUser ? (
+          <StatsDetails stats={statsForUser} />
+        ) : (
+          <>
+            <br />
+            <br />
+            Loading...
+          </>
+        )}
       </h1>
     </main>
   );

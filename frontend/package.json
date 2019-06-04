@@ -8,7 +8,8 @@
   "license": "Blue Oak 1.0.0 (https://blueoakcouncil.org/license/1.0.0#markdown)",
   "private": false,
   "scripts": {
-    "start": "webpack-dev-server"
+    "start": "webpack-dev-server",
+    "build": "rm -rf dist/* && REACT_APP_API_BASE_URL=https://spotify-api.ameo.design webpack --config webpack.prod.js"
   },
   "devDependencies": {
     "@babel/core": "^7.4.4",
@@ -46,12 +47,14 @@
     "@fortawesome/react-fontawesome": "^0.1.4",
     "@types/react": "^16.8.3",
     "@types/react-dom": "^16.8.2",
+    "@types/react-router-dom": "^4.3.3",
     "connected-react-router": "^6.4.0",
     "history": "^4.9.0",
     "jantix": "=0.2.0",
     "ramda": "^0.26.1",
     "react": "^16.8.6",
     "react-dom": "16.8.6",
+    "react-lines-ellipsis": "^0.14.1",
     "react-redux": "=7.1.0-alpha.5",
     "react-router": "^5.0.0",
     "react-router-dom": "^5.0.0",
