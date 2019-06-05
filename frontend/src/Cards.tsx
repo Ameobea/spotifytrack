@@ -7,90 +7,19 @@ import ReactDOMServer from 'react-dom/server';
 
 import { ANewTab, truncateWithElipsis } from './util';
 import { Timeframe } from 'src/types';
-
-const styles: { [key: string]: CSSProperties } = {
-  root: {
-    display: 'flex',
-    flexDirection: 'column',
-    flexBasis: 160,
-    height: 232,
-    overflow: 'hidden',
-    marginBottom: 30,
-    fontSize: 14,
-    marginRight: 10,
-    alignItems: 'center',
-    color: 'white',
-  },
-  imageBoxContent: {
-    display: 'flex',
-  },
-  data: {
-    zIndex: 2,
-    padding: 4,
-    alignItems: 'flex-start',
-    width: 160 - 32,
-    display: 'inline',
-  },
-  imageContainer: {
-    width: 160,
-    height: 160,
-  },
-  playPauseButton: {
-    cursor: 'pointer',
-    mixBlendMode: 'exclusion',
-    fontSize: 20,
-    display: 'inline',
-  },
-  link: {
-    zIndex: 2,
-    color: 'white',
-  },
-  imageBoxGrid: {
-    display: 'flex',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-around',
-  },
-  header: {
-    paddingTop: 60,
-    paddingBottom: 10,
-    textAlign: 'center',
-  },
-  timeframeSelector: {
-    paddingBottom: 30,
-  },
-  showMore: {
-    textDecoration: 'underline',
-    cursor: 'pointer',
-    fontSize: 21,
-    textAlign: 'center',
-  },
-};
-
-const DefaultImageElement = ({ ...args }) => <img {...args} />;
+import './Cards.scss';
 
 interface ImageBoxProps {
   imageSrc: string;
   imgAlt: string;
-  ImageElement?: typeof DefaultImageElement;
 }
 
-const ImageBox: React.FunctionComponent<ImageBoxProps> = ({
-  imageSrc,
-  imgAlt,
-  children,
-  ImageElement = DefaultImageElement,
-}) => (
-  <div style={styles.root}>
+const ImageBox: React.FunctionComponent<ImageBoxProps> = ({ imageSrc, imgAlt, children }) => (
+  <div className="image-box">
     <div className="track">
-      <ImageElement
-        alt={imgAlt}
-        src={imageSrc}
-        style={styles.imageContainer}
-        className="image-wrapper"
-      />
+      <img alt={imgAlt} src={imageSrc} className="image-container" />
 
-      <div style={styles.imageBoxContent}>{children}</div>
+      <div className="image-box-content">{children}</div>
     </div>
   </div>
 );
@@ -140,15 +69,12 @@ export const Track: React.FunctionComponent<TrackProps> = ({
       imgAlt={`Album art for ${title} on ${album} by ${artists.map(R.prop('name')).join(', ')}`}
       imageSrc={imageSrc}
     >
-      <div style={styles.data} className="track-datum">
+      <div className="card-data">
         <div>{truncateWithElipsis(title, 50)}</div>
-        {/* <div>{album}</div> */}
         <span style={{ zIndex: 2 }}>
           {artists.map(({ name, uri }, i) => (
             <Fragment key={uri || name}>
-              <a href={uri} style={styles.link}>
-                {name}
-              </a>
+              <a href={uri}>{name}</a>
               {i !== artists.length - 1 ? ', ' : null}
             </Fragment>
           ))}
@@ -157,17 +83,17 @@ export const Track: React.FunctionComponent<TrackProps> = ({
       </div>
 
       <div
-        style={{ display: 'inline', padding: 4, height: 18 }}
+        className="play-pause-button-wrapper"
         onClick={() => setPlaying(isPlaying ? false : previewUrl)}
       >
-        {previewUrl ? (
-          <FontAwesomeIcon icon={isPlaying ? faPause : faPlay} style={styles.playPauseButton} />
-        ) : null}
+        {previewUrl ? <FontAwesomeIcon icon={isPlaying ? faPause : faPlay} /> : null}
       </div>
     </ImageBox>
   );
 };
 
+// TODO: Make this configurable, or better yet automatic based off of the user's top genres.
+//       Not high-priority.
 const DEFAULT_PREFERRED_GENRES = new Set([
   'vapor twitch',
   'vapor soul',
@@ -204,11 +130,9 @@ export const Artist = ({
 
   return (
     <ImageBox imgAlt={name} imageSrc={imageSrc}>
-      <div style={styles.data} className="track-datum">
+      <div className="card-data">
         <div>
-          <a href={uri} style={styles.link}>
-            {name}
-          </a>
+          <a href={uri}>{name}</a>
         </div>
         <HTMLEllipsis
           maxLine={3}
@@ -241,7 +165,7 @@ export const TimeframeSelector: React.FunctionComponent<TimeframeSelectorProps> 
   timeframe,
   setTimeframe,
 }) => (
-  <div style={styles.timeframeSelector}>
+  <div className="timeframe-selector">
     Timeframe:{' '}
     {TIMEFRAMES.map((frame, i, frames) => (
       <Fragment key={frame}>
@@ -279,14 +203,14 @@ export const ImageBoxGrid: React.FunctionComponent<ImageBoxGridProps> = ({
 
   return (
     <>
-      <h3 style={styles.header}>{title}</h3>
+      <h3 className="image-box-grid-title">{title}</h3>
       <TimeframeSelector timeframe={timeframe} setTimeframe={setTimeframe} />
-      <div style={styles.imageBoxGrid}>
+      <div className="image-box-grid">
         {R.times(R.identity, itemCount).map(i => renderItem(i, timeframe))}
       </div>
 
       {!isExpanded ? (
-        <div onClick={() => setIsExpanded(true)} style={styles.showMore}>
+        <div onClick={() => setIsExpanded(true)} className="show-more">
           Show More
         </div>
       ) : null}

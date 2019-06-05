@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
 
 import { ReactRouterRouteProps, UserStats } from '../types';
-import { useOnce } from '../util/hooks';
-import { fetchUserStats } from '../api';
+import { useOnce } from 'src/util/hooks';
+import { fetchUserStats } from 'src/api';
 import { dispatch, actionCreators, useSelector } from 'src/store';
 import { ImageBoxGrid, Artist, Track } from 'src/Cards';
+import Loading from 'src/components/Loading';
+import './Stats.scss';
 
 const StatsDetails: React.FunctionComponent<{ stats: UserStats }> = ({ stats }) => {
   const [playing, setPlaying] = useState<string | false>(false);
 
   return (
-    <div style={{ marginLeft: '15vw', marginRight: '15vw' }}>
+    <div className="details">
       <ImageBoxGrid
         renderItem={(i, timeframe) => {
           const track = stats.tracks[timeframe][i];
@@ -66,19 +68,20 @@ const Stats: React.FunctionComponent<ReactRouterRouteProps> = ({
   });
 
   return (
-    <main>
-      <h1>
-        User stats for <b>{username}</b>
-        {statsForUser ? (
-          <StatsDetails stats={statsForUser} />
-        ) : (
-          <>
-            <br />
-            <br />
-            Loading...
-          </>
-        )}
-      </h1>
+    <main className="stats">
+      <span className="headline">
+        User stats for <span className="username">{username}</span>
+      </span>
+
+      {statsForUser ? (
+        <StatsDetails stats={statsForUser} />
+      ) : (
+        <>
+          <br />
+          <br />
+          <Loading />
+        </>
+      )}
     </main>
   );
 };
