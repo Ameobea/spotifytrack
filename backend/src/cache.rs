@@ -52,6 +52,10 @@ pub fn get_hash_items<T: for<'de> Deserialize<'de>>(
     hash_name: &str,
     keys: &[&str],
 ) -> Result<Vec<Option<T>>, String> {
+    if keys.is_empty() {
+        return Ok(Vec::new());
+    }
+
     let conn = get_conn()?;
 
     let mut cmd = redis::cmd("HMGET");

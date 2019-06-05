@@ -57,13 +57,7 @@ pub fn fetch_auth_token() -> Result<AccessTokenResponse, String> {
 
     let mut res = client
         .post(SPOTIFY_APP_TOKEN_URL)
-        .header(
-            "Authorization",
-            format!(
-                "Basic {}",
-                base64::encode(&format!("{}:{}", CONF.client_id, CONF.client_secret))
-            ),
-        )
+        .header("Authorization", CONF.get_authorization_header_content())
         .form(&params)
         .send()
         .map_err(|err| -> String {
@@ -71,14 +65,41 @@ pub fn fetch_auth_token() -> Result<AccessTokenResponse, String> {
             "Error requesting access token from the Spotify API".into()
         })?;
 
+    res.json::<AccessTokenResponse>().map_err(|err| {
+        error!(
+            "Error decoding response while fetching token from Spotify API: {:?}",
+            err
+        );
+        "Error decoding response from Spotify API".into()
+    })
+}
+
+// TODO: Deduplicate with above
+pub fn refresh_user_token(refresh_token: &str) -> Result<String, String> {
+    let client = reqwest::Client::new();
+    let mut params = HashMap::new();
+    params.insert("grant_type", "refresh_token");
+    params.insert("refresh_token", refresh_token);
+
+    let mut res = client
+        .post(SPOTIFY_APP_TOKEN_URL)
+        .header("Authorization", CONF.get_authorization_header_content())
+        .form(&params)
+        .send()
+        .map_err(|err| -> String {
+            error!("Error fetching updated token from Spotify API: {:?}", err);
+            "Error requesting updated token from the Spotify API".into()
+        })?;
+
     res.json::<AccessTokenResponse>()
         .map_err(|err| {
             error!(
-                "Error decoding response while fetching token from Spotify API: {:?}",
+                "Error decoding response while fetching updated token from Spotify API: {:?}",
                 err
             );
             "Error decoding response from Spotify API".into()
         })
+        .map(|res| res.access_token)
 }
 
 pub fn fetch_cur_stats(user: &User) -> Result<Option<StatsSnapshot>, String> {
@@ -159,7 +180,11 @@ fn map_timeframe_to_timeframe_id(timeframe: &str) -> u8 {
 
 /// For each track and artist timeframe, store a row in the `track_history` and `artist_history`
 /// tables respectively
-pub fn store_stats_snapshot(conn: DbConn, user: &User, stats: StatsSnapshot) -> Result<(), String> {
+pub fn store_stats_snapshot(
+    conn: &DbConn,
+    user: &User,
+    stats: StatsSnapshot,
+) -> Result<(), String> {
     use crate::schema::users::dsl::*;
 
     let update_time = stats.last_update_time;
@@ -327,9 +352,12 @@ fn fetch_with_cache<
     Ok(combined_results)
 }
 
-pub fn fetch_artists(spotify_access_token: &str, spotify_ids: &[&str]) -> Result<Vec<Artist>, String> {
+pub fn fetch_artists(
+    spotify_access_token: &str,
+    spotify_ids: &[&str],
+) -> Result<Vec<Artist>, String> {
     fetch_with_cache::<SpotifyBatchArtistsResponse, _>(
-        &crate::conf::CONF.artists_cache_hash_name,
+        &CONF.artists_cache_hash_name,
         SPOTIFY_BATCH_ARTISTS_URL,
         spotify_access_token,
         spotify_ids,
@@ -337,9 +365,12 @@ pub fn fetch_artists(spotify_access_token: &str, spotify_ids: &[&str]) -> Result
     )
 }
 
-pub fn fetch_tracks(spotify_access_token: &str, spotify_ids: &[&str]) -> Result<Vec<Track>, String> {
+pub fn fetch_tracks(
+    spotify_access_token: &str,
+    spotify_ids: &[&str],
+) -> Result<Vec<Track>, String> {
     fetch_with_cache::<SpotifyBatchTracksResponse, _>(
-        &crate::conf::CONF.tracks_cache_hash_name,
+        &CONF.tracks_cache_hash_name,
         SPOTIFY_BATCH_TRACKS_URL,
         spotify_access_token,
         spotify_ids,

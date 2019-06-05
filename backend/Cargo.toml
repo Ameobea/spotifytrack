@@ -3,6 +3,15 @@ authors = ["Casey Primozic <me@ameo.link>"]
 edition = "2018"
 name = "spotify-homepage-backend"
 version = "0.1.0"
+
+[[bin]]
+name = "spotify-homepage-backend"
+path = "src/main.rs"
+
+[[bin]]
+name = "spotify-homepage-scraper"
+path = "src/scraper.rs"
+
 [dependencies]
 base64 = "0.10.1"
 

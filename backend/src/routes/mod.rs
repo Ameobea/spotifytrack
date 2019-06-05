@@ -9,12 +9,12 @@ use rocket_contrib::json::Json;
 
 use crate::conf::CONF;
 
+use crate::db_util::{self, diesel_not_found_to_none};
 use crate::models::{
     ArtistHistoryEntry, NewUser, OAuthTokenResponse, StatsSnapshot, TrackHistoryEntry,
 };
 use crate::DbConn;
 use crate::SpotifyTokenData;
-use crate::db_util::{self, diesel_not_found_to_none};
 
 const SPOTIFY_TOKEN_FETCH_URL: &str = "https://accounts.spotify.com/api/token";
 
@@ -114,15 +114,11 @@ pub fn get_current_stats(
     Ok(Some(Json(snapshot)))
 }
 
-fn get_absolute_oauth_cb_uri() -> String {
-    format!("{}/oauth_cb", CONF.server_base_url)
-}
-
 /// Redirects to the Spotify authorization page for the application
 #[get("/authorize")]
 pub fn authorize() -> Redirect {
     let scopes = "user-read-recently-played%20user-top-read%20user-follow-read";
-    let callback_uri = get_absolute_oauth_cb_uri();
+    let callback_uri = crate::conf::CONF.get_absolute_oauth_cb_uri();
 
     Redirect::to(format!(
         "https://accounts.spotify.com/authorize?client_id={}&response_type=code&redirect_uri={}&scope={}",
@@ -143,7 +139,7 @@ pub fn oauth_cb(conn: DbConn, error: Option<&RawStr>, code: &RawStr) -> Result<R
     let mut params = HashMap::new();
     params.insert("grant_type", "authorization_code");
     params.insert("code", code.as_str());
-    let oauth_cb_url = get_absolute_oauth_cb_uri();
+    let oauth_cb_url = crate::conf::CONF.get_absolute_oauth_cb_uri();
     params.insert("redirect_uri", oauth_cb_url.as_str());
     params.insert("client_id", CONF.client_id.as_str());
     params.insert("client_secret", CONF.client_secret.as_str());
@@ -224,7 +220,7 @@ pub fn oauth_cb(conn: DbConn, error: Option<&RawStr>, code: &RawStr) -> Result<R
         }
     };
 
-    crate::spotify_api::store_stats_snapshot(conn, &user, cur_user_stats)?;
+    crate::spotify_api::store_stats_snapshot(&conn, &user, cur_user_stats)?;
 
     // Redirect the user to their stats page
     Ok(Redirect::to(format!("/stats/{}", user_spotify_id)))
