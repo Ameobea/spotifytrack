@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ops::Try;
 use std::thread;
 
 use chrono::Utc;
@@ -10,8 +11,8 @@ use serde::{Deserialize, Serialize};
 use crate::conf::CONF;
 use crate::models::{
     AccessTokenResponse, Artist, NewArtistHistoryEntry, NewTrackHistoryEntry,
-    SpotifyBatchArtistsResponse, SpotifyBatchTracksResponse, StatsSnapshot, TopArtistsResponse,
-    TopTracksResponse, Track, User, UserProfile,
+    SpotifyBatchArtistsResponse, SpotifyBatchTracksResponse, SpotifyResponse, StatsSnapshot,
+    TopArtistsResponse, TopTracksResponse, Track, User, UserProfile,
 };
 use crate::DbConn;
 
@@ -30,76 +31,73 @@ fn get_top_entities_url(entity_type: &str, timeframe: &str) -> String {
     )
 }
 
-pub fn get_user_profile_info(token: &str) -> Result<UserProfile, String> {
+pub fn spotify_user_api_request<T: for<'de> Deserialize<'de> + std::fmt::Debug + Clone>(
+    url: &str,
+    token: &str,
+) -> Result<T, String> {
     let client = reqwest::Client::new();
     let mut res = client
-        .get(SPOTIFY_USER_PROFILE_INFO_URL)
+        .get(url)
         .bearer_auth(token)
         .send()
         .map_err(|err| -> String {
-            error!("Error fetching user profile from Spotify API: {:?}", err);
-            "Error requesting latest user profile info from the Spotify API".into()
+            error!("Error fetching user data from Spotify API: {:?}", err);
+            "Error requesting latest user data from the Spotify API".into()
         })?;
 
-    res.json().map_err(|err| -> String {
-        error!(
-            "Error parsing user profile info response from Spotify API: {:?}",
-            err
-        );
-        "Error parsing user profile infor response from Spotify API".into()
-    })
+    res.json::<SpotifyResponse<T>>()
+        .map_err(|err| -> String {
+            error!(
+                "Error parsing user data response from Spotify API: {:?}",
+                err
+            );
+            "Error parsing user data response from Spotify API".into()
+        })?
+        .into_result()
 }
 
-pub fn fetch_auth_token() -> Result<AccessTokenResponse, String> {
+pub fn get_user_profile_info(token: &str) -> Result<UserProfile, String> {
+    spotify_user_api_request(SPOTIFY_USER_PROFILE_INFO_URL, token)
+}
+
+pub fn spotify_server_api_request<T: for<'de> Deserialize<'de> + std::fmt::Debug + Clone>(
+    url: &str,
+    params: HashMap<&str, &str>,
+) -> Result<T, String> {
     let client = reqwest::Client::new();
-    let mut params = HashMap::new();
-    params.insert("grant_type", "client_credentials");
 
     let mut res = client
-        .post(SPOTIFY_APP_TOKEN_URL)
+        .post(url)
         .header("Authorization", CONF.get_authorization_header_content())
         .form(&params)
         .send()
         .map_err(|err| -> String {
-            error!("Error fetching token from Spotify API: {:?}", err);
-            "Error requesting access token from the Spotify API".into()
+            error!("Error communicating with Spotify API: {:?}", err);
+            "Error communicating with from the Spotify API".into()
         })?;
 
-    res.json::<AccessTokenResponse>().map_err(|err| {
-        error!(
-            "Error decoding response while fetching token from Spotify API: {:?}",
-            err
-        );
-        "Error decoding response from Spotify API".into()
-    })
+    res.json::<SpotifyResponse<T>>()
+        .map_err(|err| -> String {
+            error!("Error decoding response from Spotify API: {:?}", err);
+            "Error decoding response from Spotify API".into()
+        })?
+        .into_result()
 }
 
-// TODO: Deduplicate with above
+pub fn fetch_auth_token() -> Result<AccessTokenResponse, String> {
+    let mut params = HashMap::new();
+    params.insert("grant_type", "client_credentials");
+
+    spotify_server_api_request(SPOTIFY_APP_TOKEN_URL, params)
+}
+
 pub fn refresh_user_token(refresh_token: &str) -> Result<String, String> {
-    let client = reqwest::Client::new();
     let mut params = HashMap::new();
     params.insert("grant_type", "refresh_token");
     params.insert("refresh_token", refresh_token);
 
-    let mut res = client
-        .post(SPOTIFY_APP_TOKEN_URL)
-        .header("Authorization", CONF.get_authorization_header_content())
-        .form(&params)
-        .send()
-        .map_err(|err| -> String {
-            error!("Error fetching updated token from Spotify API: {:?}", err);
-            "Error requesting updated token from the Spotify API".into()
-        })?;
-
-    res.json::<AccessTokenResponse>()
-        .map_err(|err| {
-            error!(
-                "Error decoding response while fetching updated token from Spotify API: {:?}",
-                err
-            );
-            "Error decoding response from Spotify API".into()
-        })
-        .map(|res| res.access_token)
+    let res: AccessTokenResponse = spotify_server_api_request(SPOTIFY_APP_TOKEN_URL, params)?;
+    Ok(res.access_token)
 }
 
 pub fn fetch_cur_stats(user: &User) -> Result<Option<StatsSnapshot>, String> {

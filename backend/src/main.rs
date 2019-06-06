@@ -4,7 +4,8 @@
     slice_patterns,
     bind_by_move_pattern_guards,
     box_patterns,
-    nll
+    nll,
+    try_trait
 )]
 #![allow(clippy::identity_conversion)]
 

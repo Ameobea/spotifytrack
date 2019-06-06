@@ -1,8 +1,12 @@
-use crate::schema::{artist_history, track_history, users};
-use chrono::{NaiveDateTime, Utc};
-use serde::Serialize;
+use std::collections::HashMap;
 use std::default::Default;
 use std::vec;
+
+use chrono::{NaiveDateTime, Utc};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use crate::schema::{artist_history, track_history, users};
 
 #[derive(Insertable)]
 #[table_name = "users"]
@@ -173,20 +177,20 @@ pub enum OAuthTokenResponse {
     },
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Followers {
     pub href: Option<String>,
     pub total: usize,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Image {
     pub height: Option<usize>,
     pub url: String,
     pub width: Option<usize>,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Album {
     pub album_group: Option<String>,
     pub album_type: String,
@@ -201,12 +205,12 @@ pub struct Album {
     pub uri: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize, Debug)]
 pub struct TopTracksResponse {
     pub items: Vec<Track>,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Track {
     pub album: Album,
     pub available_markets: Vec<String>,
@@ -223,12 +227,12 @@ pub struct Track {
     pub uri: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize, Debug)]
 pub struct TopArtistsResponse {
     pub items: Vec<Artist>,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Artist {
     pub followers: Option<Followers>,
     pub genres: Option<Vec<String>>,
@@ -240,7 +244,7 @@ pub struct Artist {
     pub uri: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UserProfile {
     pub display_name: String,
     pub followers: Followers,
@@ -256,17 +260,74 @@ pub struct UserProfile {
 //         "message": "Invalid access token"
 //     }
 // }
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct SpotifyBatchArtistsResponse {
     pub artists: Vec<Artist>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone, Debug)]
+pub struct SpotifyErrorInner {
+    status: Option<i32>,
+    message: Option<String>,
+    #[serde(flatten)]
+    other: HashMap<String, Value>,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct SpotifyError {
+    pub error: SpotifyErrorInner,
+    #[serde(flatten)]
+    other: HashMap<String, Value>,
+}
+
+#[serde(untagged)]
+#[derive(Deserialize, Clone, Debug)]
+#[serde(bound = "T: for<'d> ::serde::Deserialize<'d>")]
+pub enum SpotifyResponse<T: std::fmt::Debug + Clone> {
+    Success(T),
+    Error(SpotifyError),
+}
+
+impl<T: for<'de> Deserialize<'de> + std::fmt::Debug + Clone> std::ops::Try for SpotifyResponse<T> {
+    type Ok = T;
+    type Error = String;
+
+    fn into_result(self) -> Result<Self::Ok, String> {
+        match self {
+            SpotifyResponse::Success(val) => Ok(val),
+            SpotifyResponse::Error(err) => {
+                error!("Error fetching data from Spotify API: {:?}", err);
+
+                Err(err
+                    .error
+                    .message
+                    .unwrap_or_else(|| -> String { "No error message supplied".into() }))
+            }
+        }
+    }
+
+    fn from_error(err_msg: String) -> Self {
+        SpotifyResponse::Error(SpotifyError {
+            error: SpotifyErrorInner {
+                status: None,
+                message: Some(err_msg),
+                other: HashMap::new(),
+            },
+            other: HashMap::new(),
+        })
+    }
+
+    fn from_ok(val: T) -> Self {
+        SpotifyResponse::Success(val)
+    }
+}
+
+#[derive(Deserialize, Clone, Debug)]
 pub struct SpotifyBatchTracksResponse {
     pub tracks: Vec<Track>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct AccessTokenResponse {
     pub access_token: String,
     pub token_type: String,
