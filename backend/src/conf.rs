@@ -13,6 +13,7 @@ pub struct Conf {
     pub tracks_cache_hash_name: String,
     // Scraper config
     pub min_update_interval: Duration,
+    pub admin_api_token: String,
 }
 
 impl Conf {
@@ -35,6 +36,8 @@ impl Conf {
                 .parse()
                 .expect("Invalid value provided for `MIN_UPDATE_INTERVAL_SECONDS`; must be an unsigned integer")
             ),
+            admin_api_token: env::var("ADMIN_API_TOKEN")
+                .expect("The `ADMIN_API_TOKEN` environment variable must be set"),
         }
     }
 

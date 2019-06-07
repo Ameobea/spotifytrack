@@ -8,10 +8,6 @@ version = "0.1.0"
 name = "spotify-homepage-backend"
 path = "src/main.rs"
 
-[[bin]]
-name = "spotify-homepage-scraper"
-path = "src/scraper.rs"
-
 [dependencies]
 base64 = "0.10.1"
 

@@ -3,7 +3,8 @@ use std::sync::Mutex;
 
 use chrono::Utc;
 use diesel::{self, prelude::*};
-use rocket::http::RawStr;
+use rocket::http::{RawStr, Status};
+use rocket::response::status;
 use rocket::{response::Redirect, State};
 use rocket_contrib::json::Json;
 
@@ -11,7 +12,7 @@ use crate::conf::CONF;
 
 use crate::db_util::{self, diesel_not_found_to_none};
 use crate::models::{
-    ArtistHistoryEntry, NewUser, OAuthTokenResponse, StatsSnapshot, TrackHistoryEntry,
+    ArtistHistoryEntry, NewUser, OAuthTokenResponse, StatsSnapshot, TrackHistoryEntry, User,
 };
 use crate::DbConn;
 use crate::SpotifyTokenData;
@@ -224,4 +225,70 @@ pub fn oauth_cb(conn: DbConn, error: Option<&RawStr>, code: &RawStr) -> Result<R
 
     // Redirect the user to their stats page
     Ok(Redirect::to(format!("/stats/{}", user_spotify_id)))
+}
+
+/// This route is internal and hit by the cron job that is called to periodically update
+#[post("/update_user", data = "<api_token>")]
+pub fn update_user<'a>(conn: DbConn, api_token: String) -> Result<status::Custom<String>, String> {
+    use crate::schema::users::dsl::*;
+
+    if api_token != CONF.admin_api_token {
+        return Ok(status::Custom(
+            Status::Unauthorized,
+            "Invalid API token supplied".into(),
+        ));
+    }
+
+    // Get the least recently updated user
+    let mut user: User =
+        users
+            .order_by(last_update_time)
+            .first(&conn.0)
+            .map_err(|err| -> String {
+                error!("{:?}", err);
+                "Error querying user to update from database".into()
+            })?;
+
+    // Update the access token for that user using the refresh token
+    let updated_access_token = crate::spotify_api::refresh_user_token(&user.refresh_token)?;
+    diesel::update(users.filter(id.eq(user.id)))
+        .set(token.eq(&updated_access_token))
+        .execute(&conn.0)
+        .map_err(|err| -> String {
+            error!("{:?}", err);
+            "Error updating user with new access token".into()
+        })?;
+    user.token = updated_access_token;
+
+    // Only update the user if it's been longer than the minimum update interval
+    let min_update_interval_seconds = crate::conf::CONF.min_update_interval;
+    let now = chrono::Utc::now().naive_utc();
+    let diff = now - user.last_update_time;
+    if diff < min_update_interval_seconds {
+        let msg = format!(
+            "{} since last update; not updating anything right now.",
+            diff
+        );
+        info!("{}", msg);
+        return Ok(status::Custom(Status::Ok, msg));
+    }
+    info!("{} since last update; proceeding with update.", diff);
+
+    let stats = match crate::spotify_api::fetch_cur_stats(&user)? {
+        Some(stats) => stats,
+        None => {
+            error!(
+                "Error when fetching stats for user {:?}; no stats returned.",
+                user
+            );
+            return Err("No data from Spotify API for that user".into());
+        }
+    };
+
+    crate::spotify_api::store_stats_snapshot(&conn, &user, stats)?;
+
+    Ok(status::Custom(
+        Status::Ok,
+        format!("Successfully updated user {}", user.username),
+    ))
 }

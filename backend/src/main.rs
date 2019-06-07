@@ -60,7 +60,8 @@ fn main() {
                 routes::index,
                 routes::get_current_stats,
                 routes::oauth_cb,
-                routes::authorize
+                routes::authorize,
+                routes::update_user
             ],
         )
         .attach(DbConn::fairing())
