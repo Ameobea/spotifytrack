@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::io::Read;
 use std::sync::Mutex;
 
 use chrono::Utc;
@@ -228,9 +229,22 @@ pub fn oauth_cb(conn: DbConn, error: Option<&RawStr>, code: &RawStr) -> Result<R
 }
 
 /// This route is internal and hit by the cron job that is called to periodically update
-#[post("/update_user", data = "<api_token>")]
-pub fn update_user<'a>(conn: DbConn, api_token: String) -> Result<status::Custom<String>, String> {
+#[post("/update_user", data = "<api_token_data>")]
+pub fn update_user(
+    conn: DbConn,
+    api_token_data: rocket::data::Data,
+) -> Result<status::Custom<String>, String> {
     use crate::schema::users::dsl::*;
+
+    let mut api_token: String = String::new();
+    api_token_data
+        .open()
+        .take(1024 * 1024)
+        .read_to_string(&mut api_token)
+        .map_err(|err| {
+            error!("Error reading provided admin API token: {:?}", err);
+            String::from("Error reading post data body")
+        })?;
 
     if api_token != CONF.admin_api_token {
         return Ok(status::Custom(
