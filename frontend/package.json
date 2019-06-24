@@ -9,7 +9,7 @@
   "private": false,
   "scripts": {
     "start": "webpack-dev-server",
-    "build": "rm -rf dist/* && REACT_APP_API_BASE_URL=https://spotify-api.ameo.design webpack --config webpack.prod.js"
+    "build": "rm -rf dist/* && REACT_APP_API_BASE_URL=https://spotify-api.p.ameo.design webpack --config webpack.prod.js"
   },
   "devDependencies": {
     "@babel/core": "^7.4.4",
@@ -53,6 +53,7 @@
     "jantix": "=0.2.0",
     "ramda": "^0.26.1",
     "react": "^16.8.6",
+    "react-d3-library": "^1.1.8",
     "react-dom": "16.8.6",
     "react-lines-ellipsis": "^0.14.1",
     "react-redux": "=7.1.0-alpha.5",

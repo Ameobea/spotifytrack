@@ -44,6 +44,7 @@ pub mod routes;
 pub mod schema;
 pub mod spotify_api;
 pub mod spotify_token;
+pub mod stats;
 
 use self::spotify_token::SpotifyTokenData;
 

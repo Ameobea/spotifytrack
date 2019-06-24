@@ -1,6 +1,9 @@
+use std::collections::{HashMap, HashSet};
+
+use chrono::NaiveDateTime;
 use diesel::prelude::*;
 
-use crate::models::User;
+use crate::models::{Artist, ArtistHistoryEntry, TimeFrames, Track, TrackHistoryEntry, User};
 use crate::DbConn;
 
 pub fn get_user_by_spotify_id(
@@ -27,4 +30,199 @@ pub fn diesel_not_found_to_none<T>(
         }
         Ok(res) => Ok(Some(res)),
     }
+}
+
+pub fn get_artist_stats(
+    user: &User,
+    conn: &DbConn,
+    spotify_access_token: &str,
+) -> Result<Option<Vec<(u8, Artist)>>, String> {
+    use crate::schema::artist_history::dsl::*;
+
+    let artists_stats_opt = diesel_not_found_to_none(
+        artist_history
+            .filter(user_id.eq(user.id))
+            .filter(update_time.eq(user.last_update_time))
+            .order_by(update_time)
+            .load::<ArtistHistoryEntry>(&conn.0),
+    )?;
+
+    let artist_stats = match artists_stats_opt {
+        None => return Ok(None),
+        Some(res) => res,
+    };
+
+    let artist_spotify_ids: Vec<&str> = artist_stats
+        .iter()
+        .map(|entry| entry.spotify_id.as_str())
+        .collect();
+    let fetched_artists =
+        crate::spotify_api::fetch_artists(spotify_access_token, &artist_spotify_ids)?
+            .into_iter()
+            .enumerate()
+            .map(|(i, artist)| {
+                let timeframe_id = artist_stats[i].timeframe;
+                (timeframe_id, artist)
+            })
+            .collect::<Vec<_>>();
+    Ok(Some(fetched_artists))
+}
+
+pub fn get_artist_stats_history(
+    user: &User,
+    conn: &DbConn,
+    spotify_access_token: &str,
+) -> Result<
+    Option<(
+        HashMap<String, Artist>,
+        Vec<(NaiveDateTime, TimeFrames<String>)>,
+    )>,
+    String,
+> {
+    use crate::schema::artist_history::dsl::*;
+
+    let artists_stats_opt: Option<Vec<ArtistHistoryEntry>> = diesel_not_found_to_none(
+        artist_history
+            .filter(user_id.eq(user.id))
+            .order_by(update_time)
+            .load::<ArtistHistoryEntry>(&conn.0),
+    )?;
+
+    let artist_stats: Vec<ArtistHistoryEntry> = match artists_stats_opt {
+        None => return Ok(None),
+        Some(res) => res,
+    };
+
+    let artist_spotify_ids: HashSet<&str> = artist_stats
+        .iter()
+        .map(|entry| entry.spotify_id.as_str())
+        .collect();
+    let artist_spotify_ids: Vec<&str> = artist_spotify_ids.into_iter().collect();
+
+    let fetched_artists =
+        crate::spotify_api::fetch_artists(spotify_access_token, &artist_spotify_ids)?;
+    let artists_by_id = fetched_artists
+        .into_iter()
+        .fold(HashMap::new(), |mut acc, artist| {
+            acc.insert(artist.id.clone(), artist);
+            acc
+        });
+
+    // Group the artist stats by their update timestamp
+    let mut artist_stats_by_update_timestamp: HashMap<NaiveDateTime, Vec<&ArtistHistoryEntry>> =
+        HashMap::new();
+    for history_entry in &artist_stats {
+        let entries_for_update = artist_stats_by_update_timestamp
+            .entry(history_entry.update_time.clone())
+            .or_insert_with(Vec::new);
+        entries_for_update.push(history_entry);
+    }
+
+    let updates: Vec<(NaiveDateTime, TimeFrames<String>)> = artist_stats_by_update_timestamp
+        .into_iter()
+        .map(|(update_timestamp, mut entries_for_update)| {
+            entries_for_update
+                .sort_unstable_by_key(|artist_history_entry| artist_history_entry.ranking);
+
+            let stats_for_update = entries_for_update.into_iter().enumerate().fold(
+                TimeFrames::default(),
+                |mut acc, (i, artist_history_entry)| {
+                    let timeframe_id = artist_stats[i].timeframe;
+
+                    acc.add_item_by_id(timeframe_id, artist_history_entry.spotify_id.clone());
+                    acc
+                },
+            );
+
+            (update_timestamp, stats_for_update)
+        })
+        .collect();
+
+    return Ok(Some((artists_by_id, updates)));
+}
+
+pub fn get_track_stats(
+    user: &User,
+    conn: &DbConn,
+    spotify_access_token: &str,
+) -> Result<Option<Vec<(u8, Track)>>, String> {
+    use crate::schema::track_history::dsl::*;
+
+    let track_stats_opt = diesel_not_found_to_none(
+        track_history
+            .filter(user_id.eq(user.id))
+            .filter(update_time.eq(user.last_update_time))
+            .order_by(update_time)
+            .load::<TrackHistoryEntry>(&conn.0),
+    )?;
+
+    let track_stats = match track_stats_opt {
+        None => return Ok(None),
+        Some(res) => res,
+    };
+
+    let track_spotify_ids: Vec<&str> = track_stats
+        .iter()
+        .map(|entry| entry.spotify_id.as_str())
+        .collect();
+    let fetched_tracks =
+        crate::spotify_api::fetch_tracks(spotify_access_token, &track_spotify_ids)?
+            .into_iter()
+            .enumerate()
+            .map(|(i, track)| {
+                let timeframe_id = track_stats[i].timeframe;
+                (timeframe_id, track)
+            })
+            .collect::<Vec<_>>();
+    Ok(Some(fetched_tracks))
+}
+
+/// Gets a list of all tracks for a given artist that a user has ever had in their top tracks for
+/// any time period, sorted by their frequency of appearance and ranking when appeared.
+pub fn get_tracks_for_artist(
+    artist_id: &str,
+    track_history: &[TimeFrames<Track>],
+) -> Vec<(String, usize)> {
+    use crate::schema::track_history::dsl::*;
+
+    let track_stats_opt = diesel_not_found_to_none(
+        track_history
+            .filter(user_id.eq(user.id))
+            .filter(spotify_id.eq(artist_id))
+            .order_by(update_time)
+            .load::<TrackHistoryEntry>(&conn.0),
+    )?;
+
+    let mut genre_scores: HashMap<String, usize> = HashMap::new();
+
+    for track_stats_for_update in track_history {
+        for (_timeframe, tracks) in track_stats_for_update.iter() {
+            let track_count = tracks.len();
+            for (i, track) in tracks.iter().enumerate().filter(|(_i, track)| {
+                track
+                    .album
+                    .artists
+                    .iter()
+                    .find(|artist| artist.id == artist_id)
+                    .is_some()
+            }) {
+                let genres = track
+                    .album
+                    .artists
+                    .get(0)
+                    .and_then(|artist| artist.genres.as_ref());
+
+                if let Some(genres) = genres {
+                    for genre in genres {
+                        let score_sum = genre_scores.entry(genre.clone()).or_insert(0);
+                        *score_sum += track_count - i;
+                    }
+                }
+            }
+        }
+    }
+
+    let mut genre_scores: Vec<(String, usize)> = genre_scores.into_iter().collect();
+    genre_scores.sort_unstable_by_key(|(_, score)| *score);
+    genre_scores
 }

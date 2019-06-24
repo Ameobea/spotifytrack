@@ -233,7 +233,7 @@ pub fn store_stats_snapshot(
         .values(&track_entries)
         .execute(&conn.0)
         .map_err(|err| -> String {
-            println!("Error inserting row: {:?}", err);
+            error!("Error inserting row: {:?}", err);
             "Error inserting user into database".into()
         })?;
 

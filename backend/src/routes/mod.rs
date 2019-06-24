@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::io::Read;
 use std::sync::Mutex;
 
-use chrono::Utc;
+use chrono::{NaiveDateTime, Utc};
 use diesel::{self, prelude::*};
 use rocket::http::{RawStr, Status};
 use rocket::response::status;
@@ -11,10 +11,8 @@ use rocket_contrib::json::Json;
 
 use crate::conf::CONF;
 
-use crate::db_util::{self, diesel_not_found_to_none};
-use crate::models::{
-    ArtistHistoryEntry, NewUser, OAuthTokenResponse, StatsSnapshot, TrackHistoryEntry, User,
-};
+use crate::db_util;
+use crate::models::{Artist, NewUser, OAuthTokenResponse, StatsSnapshot, Track, User};
 use crate::DbConn;
 use crate::SpotifyTokenData;
 
@@ -43,64 +41,13 @@ pub fn get_current_stats(
     let spotify_access_token = token_data.get()?;
 
     // TODO: Parallelize, if possible.  We only have one connection and that's the bottleneck here...
-    let artist_stats = {
-        use crate::schema::artist_history::dsl::*;
-
-        let artists_stats_opt = diesel_not_found_to_none(
-            artist_history
-                .filter(user_id.eq(user.id))
-                .filter(update_time.eq(user.last_update_time))
-                .order_by(update_time)
-                .load::<ArtistHistoryEntry>(&conn.0),
-        )?;
-
-        let artist_stats = match artists_stats_opt {
-            None => return Ok(None),
-            Some(res) => res,
-        };
-
-        let artist_spotify_ids: Vec<&str> = artist_stats
-            .iter()
-            .map(|entry| entry.spotify_id.as_str())
-            .collect();
-        crate::spotify_api::fetch_artists(spotify_access_token, &artist_spotify_ids)?
-            .into_iter()
-            .enumerate()
-            .map(|(i, artist)| {
-                let timeframe_id = artist_stats[i].timeframe;
-                (timeframe_id, artist)
-            })
-            .collect::<Vec<_>>()
+    let artist_stats = match db_util::get_artist_stats(&user, &conn, spotify_access_token)? {
+        Some(stats) => stats,
+        None => return Ok(None),
     };
-
-    let track_stats = {
-        use crate::schema::track_history::dsl::*;
-
-        let track_stats_opt = diesel_not_found_to_none(
-            track_history
-                .filter(user_id.eq(user.id))
-                .filter(update_time.eq(user.last_update_time))
-                .order_by(update_time)
-                .load::<TrackHistoryEntry>(&conn.0),
-        )?;
-
-        let track_stats = match track_stats_opt {
-            None => return Ok(None),
-            Some(res) => res,
-        };
-
-        let track_spotify_ids: Vec<&str> = track_stats
-            .iter()
-            .map(|entry| entry.spotify_id.as_str())
-            .collect();
-        crate::spotify_api::fetch_tracks(spotify_access_token, &track_spotify_ids)?
-            .into_iter()
-            .enumerate()
-            .map(|(i, track)| {
-                let timeframe_id = track_stats[i].timeframe;
-                (timeframe_id, track)
-            })
-            .collect::<Vec<_>>()
+    let track_stats = match db_util::get_track_stats(&user, &conn, spotify_access_token)? {
+        Some(stats) => stats,
+        None => return Ok(None),
     };
 
     let mut snapshot = StatsSnapshot::new(user.last_update_time);
@@ -114,6 +61,48 @@ pub fn get_current_stats(
     }
 
     Ok(Some(Json(snapshot)))
+}
+
+#[derive(Serialize)]
+pub struct ArtistStats {
+    pub artists_by_id: HashMap<String, Artist>,
+    pub tracks_by_id: HashMap<String, Track>,
+    pub popularity_history: Vec<(NaiveDateTime, [Option<usize>; 3])>,
+    pub top_tracks: Vec<(String, usize)>,
+}
+
+#[get("/stats/<username>/artist/<artist_id>")]
+pub fn get_artist_stats(
+    conn: DbConn,
+    token_data: State<Mutex<SpotifyTokenData>>,
+    username: String,
+    artist_id: String,
+) -> Result<Option<Json<ArtistStats>>, String> {
+    let user = match db_util::get_user_by_spotify_id(&conn, &username)? {
+        Some(user) => user,
+        None => {
+            return Ok(None);
+        }
+    };
+    let token_data = &mut *(&*token_data).lock().unwrap();
+    let spotify_access_token = token_data.get()?;
+
+    let (artists_by_id, artist_stats_history) =
+        match db_util::get_artist_stats_history(&user, &conn, spotify_access_token)? {
+            Some(res) => res,
+            None => return Ok(None),
+        };
+
+    let popularity_history =
+        crate::stats::get_artist_popularity_history(&artist_id, &artist_stats_history);
+
+    let stats = ArtistStats {
+        artists_by_id,
+        tracks_by_id: unimplemented!(),
+        popularity_history,
+        top_tracks: unimplemented!(),
+    };
+    Ok(Some(Json(stats)))
 }
 
 /// Redirects to the Spotify authorization page for the application
@@ -130,6 +119,9 @@ pub fn authorize() -> Redirect {
     ))
 }
 
+/// This handles the OAuth authentication process for new users.  It is hit as the callback for the
+/// authentication request and handles retrieving user tokens, creating an entry for the user in the
+/// users table, and fetching an initial stats snapshot.
 #[get("/oauth_cb?<error>&<code>")]
 pub fn oauth_cb(conn: DbConn, error: Option<&RawStr>, code: &RawStr) -> Result<Redirect, String> {
     if error.is_some() {
@@ -228,7 +220,8 @@ pub fn oauth_cb(conn: DbConn, error: Option<&RawStr>, code: &RawStr) -> Result<R
     Ok(Redirect::to(format!("/stats/{}", user_spotify_id)))
 }
 
-/// This route is internal and hit by the cron job that is called to periodically update
+/// This route is internal and hit by the cron job that is called to periodically update the stats
+/// for the least recently updated user.
 #[post("/update_user", data = "<api_token_data>")]
 pub fn update_user(
     conn: DbConn,

@@ -144,6 +144,17 @@ impl<T: Serialize> IntoIterator for TimeFrames<T> {
     }
 }
 
+impl<'a, T: Serialize> TimeFrames<T> {
+    pub fn iter(&'a self) -> impl Iterator<Item = (&'static str, &'a Vec<T>)> {
+        vec![
+            ("short", &self.short),
+            ("medium", &self.medium),
+            ("long", &self.long),
+        ]
+        .into_iter()
+    }
+}
+
 #[derive(Serialize)]
 pub struct StatsSnapshot {
     pub last_update_time: NaiveDateTime,
