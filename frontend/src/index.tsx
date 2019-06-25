@@ -5,18 +5,18 @@ import { Provider } from 'react-redux';
 import { ConnectedRouter } from 'connected-react-router';
 
 import { API_BASE_URL } from 'src/conf';
-const LazyHome = import('./pages/Home');
-const LazyStats = import('./pages/Stats');
-import { history, store } from './store';
+import Loading from 'src/components/Loading';
+const LazyHome = import('src/pages/Home');
+const LazyStats = import('src/pages/Stats');
+const LazyArtistStats = import('src/pages/ArtistStats');
+import { history, store } from 'src/store';
 import './index.scss';
 
-const [Home, Stats] = [LazyHome, LazyStats].map(LazyPage => {
+const [Home, Stats, ArtistStats] = [LazyHome, LazyStats, LazyArtistStats].map(LazyPage => {
   const Comp = React.lazy(() => LazyPage);
   const RenderComp = ({ ...props }: any) => <Comp {...props} />;
   return RenderComp;
 });
-
-const Loading = () => <h2>Loading...</h2>;
 
 const App = () => (
   <ConnectedRouter history={history}>
@@ -24,6 +24,7 @@ const App = () => (
       <Switch>
         <Route exact path="/" render={Home} />
         <Route exact path="/stats/:username" component={Stats} />
+        <Route exact path="/stats/:username/artist/:artistId" component={ArtistStats} />
         <Route
           path="/connect"
           component={() => {

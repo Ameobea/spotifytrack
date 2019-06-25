@@ -1,5 +1,7 @@
 import React from 'react';
 
+export * from './util2';
+
 interface ANewTabProps {
   to: string;
   children?: React.ReactElement;

@@ -1,3 +1,7 @@
+import { getState } from 'src/store';
+
+export type ReduxStore = ReturnType<typeof getState>;
+
 export interface ReactRouterRouteProps {
   match: {
     params: { [key: string]: string };
@@ -8,19 +12,19 @@ export type ValueOf<T> = T[keyof T];
 
 export type Timeframe = 'short' | 'medium' | 'long';
 
-interface TimeFrames<T> {
+export interface TimeFrames<T> {
   short: T[];
   medium: T[];
   long: T[];
 }
 
-interface Track {
+export interface Track {
   album: {
     available_markets: string[];
     name: string;
     release_date: string;
     uri: string;
-    artists: { name: string; uri: string }[];
+    artists: { name: string; uri: string; id: string }[];
     images: Image[];
   };
   duration_ms: number;
@@ -28,6 +32,7 @@ interface Track {
   name: string;
   popularity: number;
   uri: string;
+  id: string;
 }
 
 interface Image {
@@ -36,7 +41,7 @@ interface Image {
   width: number;
 }
 
-interface Artist {
+export interface Artist {
   followers: {
     total: number;
   };
@@ -50,6 +55,15 @@ interface Artist {
 
 export interface UserStats {
   last_update_time: string;
-  tracks: TimeFrames<Track>;
-  artists: TimeFrames<Artist>;
+  tracks: TimeFrames<string>;
+  artists: TimeFrames<string>;
+  artistStats: {
+    [artistId: string]: {
+      topTracks: { trackId: string; score: number }[];
+      popularityHistory: {
+        timestamp: Date;
+        popularityPerTimePeriod: [number | null, number | null, number | null];
+      }[];
+    };
+  };
 }

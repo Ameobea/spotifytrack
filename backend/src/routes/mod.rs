@@ -65,7 +65,6 @@ pub fn get_current_stats(
 
 #[derive(Serialize)]
 pub struct ArtistStats {
-    pub artists_by_id: HashMap<String, Artist>,
     pub tracks_by_id: HashMap<String, Track>,
     pub popularity_history: Vec<(NaiveDateTime, [Option<usize>; 3])>,
     pub top_tracks: Vec<(String, usize)>,
@@ -87,7 +86,8 @@ pub fn get_artist_stats(
     let token_data = &mut *(&*token_data).lock().unwrap();
     let spotify_access_token = token_data.get()?;
 
-    let (artists_by_id, artist_stats_history) =
+    // TODO: This is dumb inefficient; no need to fetch ALL artist metadata.  Need to improve once we set up the alternative metadata mappings.
+    let (_artists_by_id, artist_stats_history) =
         match db_util::get_artist_stats_history(&user, &conn, spotify_access_token)? {
             Some(res) => res,
             None => return Ok(None),
@@ -96,11 +96,24 @@ pub fn get_artist_stats(
     let popularity_history =
         crate::stats::get_artist_popularity_history(&artist_id, &artist_stats_history);
 
+    let (mut tracks_by_id, track_history) =
+        match db_util::get_track_stats_history(&user, &conn, spotify_access_token)? {
+            Some(res) => res,
+            None => return Ok(None),
+        };
+    let top_tracks = crate::stats::get_tracks_for_artist(&artist_id, &tracks_by_id, &track_history);
+    // Only send track metadata for this artist's tracks
+    tracks_by_id.retain(|track_id, _| {
+        top_tracks
+            .iter()
+            .find(|(retained_track_id, _)| track_id == retained_track_id)
+            .is_some()
+    });
+
     let stats = ArtistStats {
-        artists_by_id,
-        tracks_by_id: unimplemented!(),
+        tracks_by_id,
         popularity_history,
-        top_tracks: unimplemented!(),
+        top_tracks,
     };
     Ok(Some(Json(stats)))
 }

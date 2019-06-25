@@ -11,3 +11,6 @@ const getJsonEndpoint = (url: string) =>
     });
 
 export const fetchUserStats = (username: string) => getJsonEndpoint(getUrl(`/stats/${username}`));
+
+export const fetchArtistStats = (username: string, artistId: string) =>
+  getJsonEndpoint(getUrl(`/stats/${username}/artist/${artistId}`));

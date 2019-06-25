@@ -8,6 +8,9 @@ import ReactDOMServer from 'react-dom/server';
 import { ANewTab, truncateWithElipsis } from './util';
 import { Timeframe } from 'src/types';
 import './Cards.scss';
+import { Link } from 'react-router-dom';
+import { useSelector } from './store';
+import { useUsername } from './store/selectors';
 
 interface ImageBoxProps {
   imageSrc: string;
@@ -26,13 +29,25 @@ const ImageBox: React.FunctionComponent<ImageBoxProps> = ({ imageSrc, imgAlt, ch
 
 interface TrackProps {
   title: string;
-  artists: { name: string; uri: string }[];
+  artists: { name: string; uri: string; id: string }[];
   previewUrl: string;
   album: string;
   imageSrc: string;
   playing: string | false;
   setPlaying: (currentlyPlayingPreviewUrl: string | false) => void;
 }
+
+export const buildArtistStatsUrl = (username: string, artistId: string): string =>
+  `/stats/${username}/artist/${artistId}/`;
+
+const ArtistStatsLink: React.FC<{ artistId: string }> = ({ artistId, children }) => {
+  const username = useUsername();
+  if (!username) {
+    return <>children</>;
+  }
+
+  return <Link to={buildArtistStatsUrl(username, artistId)}>{children}</Link>;
+};
 
 export const Track: React.FunctionComponent<TrackProps> = ({
   title,
@@ -72,12 +87,14 @@ export const Track: React.FunctionComponent<TrackProps> = ({
       <div className="card-data">
         <div>{truncateWithElipsis(title, 50)}</div>
         <span style={{ zIndex: 2 }}>
-          {artists.map(({ name, uri }, i) => (
-            <Fragment key={uri || name}>
-              <a href={uri}>{name}</a>
-              {i !== artists.length - 1 ? ', ' : null}
-            </Fragment>
-          ))}
+          {artists.map(({ name, id }, i) => {
+            return (
+              <Fragment key={name}>
+                <ArtistStatsLink artistId={id}>{name}</ArtistStatsLink>
+                {i !== artists.length - 1 ? ', ' : null}
+              </Fragment>
+            );
+          })}
         </span>
         <audio preload="none" ref={audioTag} src={previewUrl} />
       </div>
