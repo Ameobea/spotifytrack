@@ -102,3 +102,7 @@ export const { dispatch, getState, actionCreators, useSelector, store } = buildS
   typeof jantixModules,
   typeof customReducers
 >(jantixModules, middleware, customReducers);
+
+(window as any).getState = getState;
+(window as any).dispatch = dispatch;
+(window as any).actionCreators = actionCreators;

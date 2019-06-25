@@ -65,6 +65,7 @@ pub fn get_current_stats(
 
 #[derive(Serialize)]
 pub struct ArtistStats {
+    pub artist: Artist,
     pub tracks_by_id: HashMap<String, Track>,
     pub popularity_history: Vec<(NaiveDateTime, [Option<usize>; 3])>,
     pub top_tracks: Vec<(String, usize)>,
@@ -87,7 +88,7 @@ pub fn get_artist_stats(
     let spotify_access_token = token_data.get()?;
 
     // TODO: This is dumb inefficient; no need to fetch ALL artist metadata.  Need to improve once we set up the alternative metadata mappings.
-    let (_artists_by_id, artist_stats_history) =
+    let (mut artists_by_id, artist_stats_history) =
         match db_util::get_artist_stats_history(&user, &conn, spotify_access_token)? {
             Some(res) => res,
             None => return Ok(None),
@@ -111,6 +112,7 @@ pub fn get_artist_stats(
     });
 
     let stats = ArtistStats {
+        artist: artists_by_id.remove(&artist_id).unwrap(),
         tracks_by_id,
         popularity_history,
         top_tracks,
