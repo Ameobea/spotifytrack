@@ -83,6 +83,7 @@ const ArtistStats: React.FC<ReactRouterRouteProps> = ({ match }) => {
       <LineChart
         series={series}
         otherConfig={{
+          title: { text: `Popularity History for ${artist.name}` },
           xAxis: { type: 'time' },
           yAxis: { type: 'value', inverse: true },
           tooltip: { trigger: 'axis' },

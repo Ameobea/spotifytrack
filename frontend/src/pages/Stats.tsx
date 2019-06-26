@@ -44,7 +44,14 @@ const StatsDetails: React.FunctionComponent<{ stats: UserStats }> = ({ stats }) 
       <ImageBoxGrid
         renderItem={(i, timeframe) => {
           const artistId = stats.artists[timeframe][i];
+          if (!artistId) {
+            return null;
+          }
           const artist = artistsCorpus[artistId];
+          if (!artist) {
+            console.error(`No artist metadata for artist ${artistId}`);
+            return null;
+          }
 
           return (
             <ArtistCard
@@ -52,6 +59,7 @@ const StatsDetails: React.FunctionComponent<{ stats: UserStats }> = ({ stats }) 
               genres={artist.genres}
               imageSrc={artist.images[0].url}
               uri={artist.uri}
+              id={artist.id}
             />
           );
         }}

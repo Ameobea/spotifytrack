@@ -123,10 +123,10 @@ pub fn get_artist_stats_history(
             entries_for_update
                 .sort_unstable_by_key(|artist_history_entry| artist_history_entry.ranking);
 
-            let stats_for_update = entries_for_update.into_iter().enumerate().fold(
+            let stats_for_update = entries_for_update.into_iter().fold(
                 TimeFrames::default(),
-                |mut acc, (i, artist_history_entry)| {
-                    let timeframe_id = artist_stats[i].timeframe;
+                |mut acc, artist_history_entry| {
+                    let timeframe_id = artist_history_entry.timeframe;
 
                     acc.add_item_by_id(timeframe_id, artist_history_entry.spotify_id.clone());
                     acc

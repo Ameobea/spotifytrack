@@ -4,28 +4,37 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPlay, faPause } from '@fortawesome/free-solid-svg-icons';
 import HTMLEllipsis from 'react-lines-ellipsis/lib/html';
 import ReactDOMServer from 'react-dom/server';
-
-import { ANewTab, truncateWithElipsis } from './util';
-import { Timeframe } from 'src/types';
-import './Cards.scss';
 import { Link } from 'react-router-dom';
-import { useSelector } from './store';
+
+import { Timeframe } from 'src/types';
+import { ANewTab, truncateWithElipsis, map } from 'src/util';
 import { useUsername } from './store/selectors';
+import './Cards.scss';
 
 interface ImageBoxProps {
   imageSrc: string;
   imgAlt: string;
+  linkTo?: string;
 }
 
-const ImageBox: React.FunctionComponent<ImageBoxProps> = ({ imageSrc, imgAlt, children }) => (
-  <div className="image-box">
-    <div className="track">
-      <img alt={imgAlt} src={imageSrc} className="image-container" />
+const ImageBox: React.FunctionComponent<ImageBoxProps> = ({
+  imageSrc,
+  imgAlt,
+  children,
+  linkTo,
+}) => {
+  const image = <img alt={imgAlt} src={imageSrc} className="image-container" />;
 
-      <div className="image-box-content">{children}</div>
+  return (
+    <div className="image-box">
+      <div className="track">
+        {linkTo ? <Link to={linkTo}>{image}</Link> : image}
+
+        <div className="image-box-content">{children}</div>
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 interface TrackProps {
   title: string;
@@ -122,6 +131,7 @@ const DEFAULT_PREFERRED_GENRES = new Set([
 ]);
 
 interface ArtistProps {
+  id: string;
   name: string;
   genres: string[];
   imageSrc: string;
@@ -135,21 +145,26 @@ const Genre = ({ genre }: { genre: string }) => {
 };
 
 export const Artist = ({
+  id,
   name,
   genres,
   imageSrc,
-  uri,
   preferredGenres = DEFAULT_PREFERRED_GENRES,
 }: ArtistProps) => {
+  const username = useUsername();
   // Make sure that preferred genres show up and aren't trimmed off
   const [preferred, other] = R.partition(genre => preferredGenres.has(genre), genres);
   const trimmedGenres = [...preferred, ...other].slice(0, 6);
 
   return (
-    <ImageBox imgAlt={name} imageSrc={imageSrc}>
+    <ImageBox
+      imgAlt={name}
+      imageSrc={imageSrc}
+      linkTo={map(username, username => buildArtistStatsUrl(username, id)) || undefined}
+    >
       <div className="card-data">
         <div>
-          <a href={uri}>{name}</a>
+          <ArtistStatsLink artistId={id}>{name}</ArtistStatsLink>
         </div>
         <HTMLEllipsis
           maxLine={3}
