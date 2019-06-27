@@ -17,3 +17,5 @@ export const chartColors = [
   '#ae6cc9',
   '#27b14c',
 ];
+
+export const monochromeChartColors = ['#71ff33', '#3ecc00', '#1f6600'];

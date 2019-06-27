@@ -51,6 +51,7 @@
     "@types/react-router-dom": "^4.3.3",
     "ameo-utils": "^0.1.0",
     "connected-react-router": "^6.4.0",
+    "dayjs": "^1.8.14",
     "echarts": "^4.2.1",
     "echarts-for-react": "^2.0.15-beta.0",
     "history": "^4.9.0",

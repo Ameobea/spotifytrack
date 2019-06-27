@@ -9,4 +9,13 @@ spawn_redis:
 docker_start:
   docker rm spotifytrack-server || true
   echo "$SPOTIFY_CLIENT_ID"
-  docker run -it --net host -p 3999:3999 -e ROCKET_DATABASES="{ spotify_homepage = { url = \"$DATABASE_URL\" } }" -e PORT="$PORT" -e SPOTIFY_CLIENT_ID="$SPOTIFY_CLIENT_ID" -e SPOTIFY_CLIENT_SECRET="$SPOTIFY_CLIENT_SECRET" -e SERVER_BASE_URL="$SERVER_BASE_URL" -e REDIS_URL="$REDIS_URL" -e ADMIN_API_TOKEN="$ADMIN_API_TOKEN" --name spotifytrack-server ameo/spotify-homepage-backend
+  docker run -it --net host -p 3999:3999 --name spotifytrack-server \
+    -e ROCKET_DATABASES="{ spotify_homepage = { url = \"$DATABASE_URL\" } }" \
+    -e PORT="$PORT" \
+    -e SPOTIFY_CLIENT_ID="$SPOTIFY_CLIENT_ID" \
+    -e SPOTIFY_CLIENT_SECRET="$SPOTIFY_CLIENT_SECRET" \
+    -e API_SERVER_URL="$API_SERVER_URL" \
+    -e WEBSITE_URL="$WEBSITE_URL" \
+    -e REDIS_URL="$REDIS_URL" \
+    -e ADMIN_API_TOKEN="$ADMIN_API_TOKEN" \
+    ameo/spotify-homepage-backend

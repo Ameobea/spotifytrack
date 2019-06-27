@@ -205,34 +205,44 @@ pub fn oauth_cb(conn: DbConn, error: Option<&RawStr>, code: &RawStr) -> Result<R
         refresh_token,
     };
 
-    diesel::insert_into(crate::schema::users::table)
+    let res = match diesel::insert_into(crate::schema::users::table)
         .values(&user)
         .execute(&conn.0)
-        .map_err(|err| -> String {
-            println!("Error inserting row: {:?}", err);
-            "Error inserting user into database".into()
-        })?;
+    {
+        Err(diesel::result::Error::DatabaseError(
+            diesel::result::DatabaseErrorKind::UniqueViolation,
+            _,
+        )) => info!("Already have a row for user; skipping manual update and redirecting diretly."),
+        Err(err) => {
+            error!("Error inserting row: {:?}", err);
+            return Err("Error inserting user into database".into());
+        }
+        Ok(res) => {
+            // Retrieve the inserted user row
+            let user = crate::db_util::get_user_by_spotify_id(&conn, &user_spotify_id)?
+                .expect("Failed to load just inserted user from database");
 
-    // Retrieve the inserted user row
-    let user = crate::db_util::get_user_by_spotify_id(&conn, &user_spotify_id)?
-        .expect("Failed to load just inserted user from database");
+            // Create an initial stats snapshot to store for the user
+            let cur_user_stats = match crate::spotify_api::fetch_cur_stats(&user)? {
+                Some(stats) => stats,
+                None => {
+                    error!(
+                        "Failed to fetch stats for user \"{}\"; bad response from Spotify API?",
+                        username
+                    );
+                    return Err("Error fetching user stats from the Spotify API.".into());
+                }
+            };
 
-    // Create an initial stats snapshot to store for the user
-    let cur_user_stats = match crate::spotify_api::fetch_cur_stats(&user)? {
-        Some(stats) => stats,
-        None => {
-            error!(
-                "Failed to fetch stats for user \"{}\"; bad response from Spotify API?",
-                username
-            );
-            return Err("Error fetching user stats from the Spotify API.".into());
+            crate::spotify_api::store_stats_snapshot(&conn, &user, cur_user_stats)?;
         }
     };
 
-    crate::spotify_api::store_stats_snapshot(&conn, &user, cur_user_stats)?;
-
     // Redirect the user to their stats page
-    Ok(Redirect::to(format!("/stats/{}", user_spotify_id)))
+    Ok(Redirect::to(format!(
+        "{}/stats/{}",
+        CONF.website_url, user_spotify_id
+    )))
 }
 
 /// This route is internal and hit by the cron job that is called to periodically update the stats

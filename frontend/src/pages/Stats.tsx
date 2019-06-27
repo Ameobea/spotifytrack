@@ -79,7 +79,7 @@ const Stats: React.FunctionComponent<ReactRouterRouteProps> = ({
   const statsForUser = useSelector(({ userStats }) => userStats[username]);
 
   useOnce(async () => {
-    if (statsForUser) {
+    if (statsForUser && statsForUser.tracks && statsForUser.artists) {
       return;
     }
 
@@ -130,7 +130,7 @@ const Stats: React.FunctionComponent<ReactRouterRouteProps> = ({
         User stats for <span className="username">{username}</span>
       </span>
 
-      {statsForUser ? (
+      {statsForUser && statsForUser.tracks && statsForUser.artists ? (
         <StatsDetails stats={statsForUser} />
       ) : (
         <>

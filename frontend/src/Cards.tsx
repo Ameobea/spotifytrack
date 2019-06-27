@@ -1,4 +1,4 @@
-import React, { Fragment, useRef, useEffect, useState, CSSProperties } from 'react';
+import React, { Fragment, useRef, useEffect, useState } from 'react';
 import * as R from 'ramda';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPlay, faPause } from '@fortawesome/free-solid-svg-icons';

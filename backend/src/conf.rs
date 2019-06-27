@@ -6,7 +6,8 @@ use chrono::Duration;
 pub struct Conf {
     pub client_id: String,
     pub client_secret: String,
-    pub server_base_url: String,
+    pub api_server_url: String,
+    pub website_url: String,
     pub redis_url: String,
     // Internal Config
     pub artists_cache_hash_name: String,
@@ -25,8 +26,9 @@ impl Conf {
                 .expect("The `SPOTIFY_CLIENT_ID` environment variable must be set."),
             client_secret: env::var("SPOTIFY_CLIENT_SECRET")
                 .expect("The `SPOTIFY_CLIENT_SECRET` environment variable must be set."),
-            server_base_url: env::var("SERVER_BASE_URL")
-                .expect("The `SERVER_BASE_URL` environment variable must be set."),
+            api_server_url: env::var("API_SERVER_URL")
+                .expect("The `API_SERVER_URL` environment variable must be set."),
+            website_url: env::var("WEBSITE_URL").expect("The `WEBSITE_URL` must be set."),
             redis_url: env::var("REDIS_URL")
                 .expect("The `REDIS_URL` environment variable must be set."),
             artists_cache_hash_name: "artists".into(),
@@ -42,7 +44,7 @@ impl Conf {
     }
 
     pub fn get_absolute_oauth_cb_uri(&self) -> String {
-        format!("{}/oauth_cb", CONF.server_base_url)
+        format!("{}/oauth_cb", CONF.api_server_url)
     }
 
     pub fn get_authorization_header_content(&self) -> String {
