@@ -218,30 +218,37 @@ export const TimeframeSelector: React.FunctionComponent<TimeframeSelectorProps> 
 
 interface ImageBoxGridProps {
   renderItem: (i: number, timeframe: Timeframe) => React.ReactNode;
+  getItemCount: (timeframe: string) => number;
   initialItems: number;
-  maxItems: number;
   title: string;
 }
 
 export const ImageBoxGrid: React.FunctionComponent<ImageBoxGridProps> = ({
   renderItem,
+  getItemCount,
   initialItems,
-  maxItems,
   title,
 }) => {
   const [timeframe, setTimeframe] = useState<Timeframe>('short');
   const [isExpanded, setIsExpanded] = useState(false);
-  const itemCount = isExpanded ? maxItems : initialItems;
+  const totalItems = getItemCount(timeframe);
+  const itemCount = isExpanded ? totalItems : Math.min(initialItems, totalItems);
+
+  const hasItems = totalItems > 0;
 
   return (
     <>
       <h3 className="image-box-grid-title">{title}</h3>
       <TimeframeSelector timeframe={timeframe} setTimeframe={setTimeframe} />
       <div className="image-box-grid">
-        {R.times(R.identity, itemCount).map(i => renderItem(i, timeframe))}
+        {hasItems ? (
+          R.times(R.identity, itemCount).map(i => renderItem(i, timeframe))
+        ) : (
+          <>No items for timeframe</>
+        )}
       </div>
 
-      {!isExpanded ? (
+      {!isExpanded && hasItems ? (
         <div onClick={() => setIsExpanded(true)} className="show-more">
           Show More
         </div>

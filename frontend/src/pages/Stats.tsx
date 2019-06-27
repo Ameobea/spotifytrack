@@ -22,6 +22,9 @@ const StatsDetails: React.FunctionComponent<{ stats: UserStats }> = ({ stats }) 
       <ImageBoxGrid
         renderItem={(i, timeframe) => {
           const trackId = stats.tracks[timeframe][i];
+          if (!trackId) {
+            return null;
+          }
           const track = tracksCorpus[trackId];
 
           return (
@@ -36,8 +39,8 @@ const StatsDetails: React.FunctionComponent<{ stats: UserStats }> = ({ stats }) 
             />
           );
         }}
+        getItemCount={timeframe => stats.tracks[timeframe].length}
         initialItems={10}
-        maxItems={stats.tracks.short.length}
         title="Tracks"
       />
 
@@ -63,8 +66,8 @@ const StatsDetails: React.FunctionComponent<{ stats: UserStats }> = ({ stats }) 
             />
           );
         }}
+        getItemCount={timeframe => stats.artists[timeframe].length}
         initialItems={10}
-        maxItems={stats.artists.short.length}
         title="Artists"
       />
     </div>

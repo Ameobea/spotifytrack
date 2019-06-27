@@ -84,8 +84,26 @@ const ArtistStats: React.FC<ReactRouterRouteProps> = ({ match }) => {
         series={series}
         otherConfig={{
           title: { text: `Popularity History for ${artist.name}` },
-          xAxis: { type: 'time' },
-          yAxis: { type: 'value', inverse: true },
+          xAxis: {
+            type: 'time',
+            name: 'Update Time',
+            nameLocation: 'center',
+            nameTextStyle: {
+              color: '#ccc',
+              fontSize: 14,
+            },
+          },
+          yAxis: {
+            type: 'value',
+            inverse: true,
+            name: 'Popularity Ranking',
+            nameLocation: 'middle',
+            nameGap: 50,
+            nameTextStyle: {
+              color: '#ccc',
+              fontSize: 14,
+            },
+          },
           tooltip: { trigger: 'axis' },
         }}
       />
