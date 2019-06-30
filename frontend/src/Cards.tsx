@@ -186,7 +186,7 @@ export const Artist = ({
   );
 };
 
-const TIMEFRAMES: Timeframe[] = ['short', 'medium', 'long'];
+const TIMEFRAMES: Timeframe[] = ['short' as const, 'medium' as const, 'long' as const];
 
 interface TimeframeSelectorProps {
   timeframe: Timeframe;
@@ -222,6 +222,8 @@ interface ImageBoxGridProps {
   initialItems: number;
   title: string;
   horizontallyScrollable?: boolean;
+  disableHeader?: boolean;
+  hideShowMore?: boolean;
   style?: React.CSSProperties;
 }
 
@@ -231,6 +233,8 @@ export const ImageBoxGrid: React.FunctionComponent<ImageBoxGridProps> = ({
   initialItems,
   title,
   horizontallyScrollable,
+  disableHeader,
+  hideShowMore,
   style,
 }) => {
   const [timeframe, setTimeframe] = useState<Timeframe>('short');
@@ -242,7 +246,7 @@ export const ImageBoxGrid: React.FunctionComponent<ImageBoxGridProps> = ({
 
   return (
     <div style={style}>
-      <h3 className="image-box-grid-title">{title}</h3>
+      {!disableHeader ? <h3 className="image-box-grid-title">{title}</h3> : null}
       <TimeframeSelector timeframe={timeframe} setTimeframe={setTimeframe} />
       <div className={`image-box-grid${horizontallyScrollable ? ' horizontally-scrollable' : ''}`}>
         {hasItems ? (
@@ -252,7 +256,7 @@ export const ImageBoxGrid: React.FunctionComponent<ImageBoxGridProps> = ({
         )}
       </div>
 
-      {!isExpanded && hasItems ? (
+      {!isExpanded && hasItems && !hideShowMore ? (
         <div onClick={() => setIsExpanded(true)} className="show-more">
           Show More
         </div>

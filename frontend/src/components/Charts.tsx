@@ -3,6 +3,7 @@ import ReactDOMServer from 'react-dom/server';
 import ReactEchartsCore from 'echarts-for-react/lib/core';
 import * as echarts from 'echarts/lib/echarts';
 import 'echarts/lib/chart/line';
+import 'echarts/lib/chart/bar';
 import 'echarts/lib/component/tooltip';
 import 'echarts/lib/component/legend';
 import 'echarts/lib/component/dataZoom';
@@ -12,7 +13,7 @@ import { seriesDefaults, getBaseConfigDefaults } from 'ameo-utils/dist/echarts';
 import { withMobileProp } from 'ameo-utils/dist/responsive';
 import dayjs from 'dayjs';
 
-import { monochromeChartColors } from 'src/style';
+import { monochromeChartColors, colors } from 'src/style';
 
 interface Series {
   seriesName: string;
@@ -23,7 +24,7 @@ const splitLineStyle = {
   lineStyle: { color: '#383838' },
 } as const;
 
-const LineChart: React.FC<{
+const InnerLineChart: React.FC<{
   series: { data: any[]; name: string }[];
   otherConfig?: Partial<EChartOption>;
   mobile: boolean;
@@ -90,6 +91,43 @@ const LineChart: React.FC<{
   return <ReactEchartsCore style={style} echarts={echarts} option={chartConfig} />;
 };
 
-const EnhancedLineChart = withMobileProp({ maxWidth: 400 })(LineChart);
+export const BarChart: React.FC<{
+  style?: React.CSSProperties;
+  data: number[];
+  categories: string[];
+}> = ({ data, categories, style }) => {
+  if (data.length !== categories.length) {
+    throw new Error('The number of supplied data points and categories must be the same');
+  }
 
-export default EnhancedLineChart;
+  const chartConfig = {
+    ...getBaseConfigDefaults(false), // TODO
+    dataZoom: undefined,
+    xAxis: {
+      type: 'category',
+      data: categories,
+      axisLabel: {
+        color: '#ccc',
+      },
+    },
+    backgroundColor: '#111', // TODO: Dedup these things with the line chart
+    yAxis: {
+      axisLabel: {
+        color: '#ccc',
+      },
+    },
+    series: [
+      {
+        data,
+        type: 'bar',
+        itemStyle: {
+          color: colors.green,
+        },
+      },
+    ],
+  };
+
+  return <ReactEchartsCore style={style} echarts={echarts} option={chartConfig} />;
+};
+
+export const LineChart = withMobileProp({ maxWidth: 400 })(InnerLineChart);

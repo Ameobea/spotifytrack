@@ -1,13 +1,12 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useEffect } from 'react';
 import * as R from 'ramda';
 
 import { useSelector, dispatch, actionCreators } from 'src/store';
-import { useOnce } from 'src/util/hooks';
 import { ReactRouterRouteProps, ReduxStore, ValueOf, Track, Artist } from 'src/types';
 import { fetchArtistStats } from 'src/api';
 import { colors } from 'src/style';
 import Loading from 'src/components/Loading';
-import LineChart from 'src/components/LineChart';
+import { LineChart, BarChart } from 'src/components/Charts';
 import { ArtistCards } from 'src/pages/Stats';
 
 const ArtistStats: React.FC<ReactRouterRouteProps> = ({ match }) => {
@@ -18,6 +17,11 @@ const ArtistStats: React.FC<ReactRouterRouteProps> = ({ match }) => {
     R.path([username, 'artistStats', artistId], userStats)
   );
   const artist = useSelector(({ entityStore: { artists } }) => artists[artistId]);
+  const topTracksCorpus = useSelector(({ entityStore: { tracks } }) =>
+    artistStats && artistStats.topTracks
+      ? R.pick(artistStats.topTracks.map(R.prop('trackId')), tracks)
+      : null
+  );
 
   const series = useMemo(
     () =>
@@ -35,11 +39,13 @@ const ArtistStats: React.FC<ReactRouterRouteProps> = ({ match }) => {
     [artistStats]
   );
 
-  useOnce(() => {
-    if (artistStats) {
+  const fetchedStatsFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (fetchedStatsFor.current === artistId) {
       return;
     }
 
+    fetchedStatsFor.current = artistId;
     (async () => {
       const {
         artist,
@@ -89,7 +95,7 @@ const ArtistStats: React.FC<ReactRouterRouteProps> = ({ match }) => {
           </h1>
 
           <LineChart
-            style={{ maxWidth: 800, height: 300 }}
+            style={{ height: 300 }}
             series={series}
             otherConfig={{
               title: { text: `Popularity History for ${artist.name}` },
@@ -120,7 +126,22 @@ const ArtistStats: React.FC<ReactRouterRouteProps> = ({ match }) => {
         </>
       )}
 
-      <ArtistCards style={{ width: '80vw' }} initialItems={100} horizontallyScrollable />
+      <ArtistCards
+        disableHeader
+        hideShowMore
+        style={{ width: '80vw', paddingTop: 30, paddingBottom: 30 }}
+        initialItems={100}
+        horizontallyScrollable
+      />
+
+      {artistStats && artistStats.topTracks && topTracksCorpus ? (
+        <BarChart
+          data={artistStats.topTracks.map(R.prop('score'))}
+          categories={artistStats.topTracks.map(({ trackId }) => topTracksCorpus[trackId].name)}
+        />
+      ) : (
+        <Loading style={{ height: 300 }} />
+      )}
     </div>
   );
 };
