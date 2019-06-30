@@ -8,6 +8,7 @@ import { fetchArtistStats } from 'src/api';
 import { colors } from 'src/style';
 import Loading from 'src/components/Loading';
 import LineChart from 'src/components/LineChart';
+import { ArtistCards } from 'src/pages/Stats';
 
 const ArtistStats: React.FC<ReactRouterRouteProps> = ({ match }) => {
   const [username, artistId] = [match.params.username, match.params.artistId];
@@ -16,9 +17,7 @@ const ArtistStats: React.FC<ReactRouterRouteProps> = ({ match }) => {
     | undefined = useSelector(({ userStats }) =>
     R.path([username, 'artistStats', artistId], userStats)
   );
-  const artist = useSelector(
-    ({ entityStore: { artists } }) => artists[artistId] as Artist | undefined
-  );
+  const artist = useSelector(({ entityStore: { artists } }) => artists[artistId]);
 
   const series = useMemo(
     () =>
@@ -70,46 +69,59 @@ const ArtistStats: React.FC<ReactRouterRouteProps> = ({ match }) => {
     })();
   });
 
-  if (!artistStats || !artist || !series) {
-    return <Loading />;
-  }
-
   return (
-    <>
-      <h1>
-        Artist stats for <span style={{ color: colors.pink }}> {artist.name}</span>
-      </h1>
+    <div
+      style={{
+        marginLeft: 'auto',
+        marginRight: 'auto',
+        display: 'flex',
+        flexDirection: 'column',
+        flex: 1,
+        minWidth: 800,
+      }}
+    >
+      {!artistStats || !artist || !series ? (
+        <Loading style={{ height: 300 + 85 }} />
+      ) : (
+        <>
+          <h1>
+            Artist stats for <span style={{ color: colors.pink }}> {artist.name}</span>
+          </h1>
 
-      <LineChart
-        style={{ maxWidth: 800 }}
-        series={series}
-        otherConfig={{
-          title: { text: `Popularity History for ${artist.name}` },
-          xAxis: {
-            type: 'time',
-            name: 'Update Time',
-            nameLocation: 'center',
-            nameTextStyle: {
-              color: '#ccc',
-              fontSize: 14,
-              padding: 12,
-            },
-          },
-          yAxis: {
-            type: 'value',
-            inverse: true,
-            name: 'Popularity Ranking',
-            nameLocation: 'middle',
-            nameGap: 50,
-            nameTextStyle: {
-              color: '#ccc',
-              fontSize: 14,
-            },
-          },
-          tooltip: { trigger: 'axis' },
-        }}
-      />
-    </>
+          <LineChart
+            style={{ maxWidth: 800, height: 300 }}
+            series={series}
+            otherConfig={{
+              title: { text: `Popularity History for ${artist.name}` },
+              xAxis: {
+                type: 'time',
+                name: 'Update Time',
+                nameLocation: 'center',
+                nameTextStyle: {
+                  color: '#ccc',
+                  fontSize: 14,
+                  padding: 12,
+                },
+              },
+              yAxis: {
+                type: 'value',
+                inverse: true,
+                name: 'Popularity Ranking',
+                nameLocation: 'middle',
+                nameGap: 50,
+                nameTextStyle: {
+                  color: '#ccc',
+                  fontSize: 14,
+                },
+              },
+              tooltip: { trigger: 'axis' },
+            }}
+          />
+        </>
+      )}
+
+      <ArtistCards style={{ width: '80vw' }} initialItems={100} horizontallyScrollable />
+    </div>
   );
 };
 

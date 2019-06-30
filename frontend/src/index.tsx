@@ -8,11 +8,10 @@ import { API_BASE_URL } from 'src/conf';
 import Loading from 'src/components/Loading';
 const LazyHome = import('src/pages/Home');
 const LazyStats = import('src/pages/Stats');
-const LazyArtistStats = import('src/pages/ArtistStats');
 import { history, store } from 'src/store';
 import './index.scss';
 
-const [Home, Stats, ArtistStats] = [LazyHome, LazyStats, LazyArtistStats].map(LazyPage => {
+const [Home, Stats] = [LazyHome, LazyStats].map(LazyPage => {
   const Comp = React.lazy(() => LazyPage);
   const RenderComp = ({ ...props }: any) => <Comp {...props} />;
   return RenderComp;
@@ -24,7 +23,7 @@ const App = () => (
       <Switch>
         <Route exact path="/" render={Home} />
         <Route exact path="/stats/:username" component={Stats} />
-        <Route exact path="/stats/:username/artist/:artistId" component={ArtistStats} />
+        <Route exact path="/stats/:username/artist/:artistId" component={Stats} />
         <Route
           path="/connect"
           component={() => {

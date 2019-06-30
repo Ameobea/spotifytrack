@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 
 import { ReactRouterRouteProps } from '../types';
 
-const Home: React.FunctionComponent<ReactRouterRouteProps> = () => (
+const Home: React.FC<ReactRouterRouteProps> = () => (
   <main>
     <h1>SpotifyTrack</h1>
     <p>Welcome to SpotifyTrack! 100% under construction; stick around for updates!</p>

@@ -20,7 +20,10 @@ const entityStore = {
       tracks: tracksById,
     }),
     subReducer: (
-      state: { tracks: { [trackId: string]: Track }; artists: { [artistId: string]: Artist } },
+      state: {
+        tracks: { [trackId: string]: Track };
+        artists: { [artistId: string]: Artist | undefined };
+      },
       { tracks }
     ) => ({ ...state, tracks: { ...state.tracks, ...tracks } }),
   }),
@@ -30,7 +33,10 @@ const entityStore = {
       artists: artistsById,
     }),
     subReducer: (
-      state: { tracks: { [trackId: string]: Track }; artists: { [artistId: string]: Artist } },
+      state: {
+        tracks: { [trackId: string]: Track };
+        artists: { [artistId: string]: Artist | undefined };
+      },
       { artists }
     ) => ({ ...state, artists: { ...state.artists, ...artists } }),
   }),
@@ -93,7 +99,7 @@ const jantixModules = {
     userStats
   ),
   entityStore: buildModule<
-    { tracks: { [trackId: string]: Track }; artists: { [artistId: string]: Artist } },
+    { tracks: { [trackId: string]: Track }; artists: { [artistId: string]: Artist | undefined } },
     typeof entityStore
   >({ tracks: {}, artists: {} }, entityStore),
 };

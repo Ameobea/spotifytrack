@@ -6,6 +6,13 @@
   min-height: 200px;
 }
 
+.image-box-grid.horizontally-scrollable {
+  flex-wrap: nowrap;
+  width: 100%;
+  overflow-x: scroll;
+  justify-content: flex-start;
+}
+
 .timeframe-selector {
   padding-bottom: 30px;
 }
@@ -27,7 +34,7 @@
 .image-box {
   display: flex;
   flex-direction: column;
-  flex-basis: 160px;
+  min-width: 160px;
   height: 232px;
   overflow: hidden;
   margin-bottom: 30px;

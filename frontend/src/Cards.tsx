@@ -221,6 +221,8 @@ interface ImageBoxGridProps {
   getItemCount: (timeframe: string) => number;
   initialItems: number;
   title: string;
+  horizontallyScrollable?: boolean;
+  style?: React.CSSProperties;
 }
 
 export const ImageBoxGrid: React.FunctionComponent<ImageBoxGridProps> = ({
@@ -228,6 +230,8 @@ export const ImageBoxGrid: React.FunctionComponent<ImageBoxGridProps> = ({
   getItemCount,
   initialItems,
   title,
+  horizontallyScrollable,
+  style,
 }) => {
   const [timeframe, setTimeframe] = useState<Timeframe>('short');
   const [isExpanded, setIsExpanded] = useState(false);
@@ -237,10 +241,10 @@ export const ImageBoxGrid: React.FunctionComponent<ImageBoxGridProps> = ({
   const hasItems = totalItems > 0;
 
   return (
-    <>
+    <div style={style}>
       <h3 className="image-box-grid-title">{title}</h3>
       <TimeframeSelector timeframe={timeframe} setTimeframe={setTimeframe} />
-      <div className="image-box-grid">
+      <div className={`image-box-grid${horizontallyScrollable ? ' horizontally-scrollable' : ''}`}>
         {hasItems ? (
           R.times(R.identity, itemCount).map(i => renderItem(i, timeframe))
         ) : (
@@ -253,6 +257,6 @@ export const ImageBoxGrid: React.FunctionComponent<ImageBoxGridProps> = ({
           Show More
         </div>
       ) : null}
-    </>
+    </div>
   );
 };

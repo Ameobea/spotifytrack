@@ -1,4 +1,7 @@
 .stats {
+  display: flex;
+  flex-direction: column;
+
   .headline {
     font-size: 34px;
 
