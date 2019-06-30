@@ -27,7 +27,8 @@ const LineChart: React.FC<{
   series: { data: any[]; name: string }[];
   otherConfig?: Partial<EChartOption>;
   mobile: boolean;
-}> = ({ series, otherConfig = {}, mobile }) => {
+  style?: React.CSSProperties;
+}> = ({ series, otherConfig = {}, mobile, style }) => {
   const chartConfig: EChartOption = R.mergeDeepRight(
     {
       ...getBaseConfigDefaults(mobile),
@@ -86,7 +87,7 @@ const LineChart: React.FC<{
     otherConfig
   );
 
-  return <ReactEchartsCore echarts={echarts} option={chartConfig} />;
+  return <ReactEchartsCore style={style} echarts={echarts} option={chartConfig} />;
 };
 
 const EnhancedLineChart = withMobileProp({ maxWidth: 400 })(LineChart);

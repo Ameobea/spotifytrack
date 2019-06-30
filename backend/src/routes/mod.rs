@@ -87,7 +87,8 @@ pub fn get_artist_stats(
     let token_data = &mut *(&*token_data).lock().unwrap();
     let spotify_access_token = token_data.get()?;
 
-    // TODO: This is dumb inefficient; no need to fetch ALL artist metadata.  Need to improve once we set up the alternative metadata mappings.
+    // TODO: This is dumb inefficient; no need to fetch ALL artist metadata.  Need to improve once I
+    // set up the alternative metadata mappings.
     let (mut artists_by_id, artist_stats_history) =
         match db_util::get_artist_stats_history(&user, &conn, spotify_access_token)? {
             Some(res) => res,

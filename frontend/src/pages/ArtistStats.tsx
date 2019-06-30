@@ -75,12 +75,13 @@ const ArtistStats: React.FC<ReactRouterRouteProps> = ({ match }) => {
   }
 
   return (
-    <div>
+    <>
       <h1>
         Artist stats for <span style={{ color: colors.pink }}> {artist.name}</span>
       </h1>
 
       <LineChart
+        style={{ maxWidth: 800 }}
         series={series}
         otherConfig={{
           title: { text: `Popularity History for ${artist.name}` },
@@ -91,6 +92,7 @@ const ArtistStats: React.FC<ReactRouterRouteProps> = ({ match }) => {
             nameTextStyle: {
               color: '#ccc',
               fontSize: 14,
+              padding: 12,
             },
           },
           yAxis: {
@@ -107,7 +109,7 @@ const ArtistStats: React.FC<ReactRouterRouteProps> = ({ match }) => {
           tooltip: { trigger: 'axis' },
         }}
       />
-    </div>
+    </>
   );
 };
 
