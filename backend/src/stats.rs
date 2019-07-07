@@ -7,20 +7,27 @@ use crate::models::{Artist, TimeFrames, Track};
 
 /// Give an array of top artists, extrapolates the most listened-to genres for each update.
 pub fn get_top_genres_by_artists(
-    updates: &[(NaiveDateTime, Vec<Artist>)],
+    artists_by_id: &HashMap<String, Artist>,
+    updates: &[(NaiveDateTime, TimeFrames<String>)],
     weight: bool,
 ) -> Vec<(NaiveDateTime, HashMap<String, usize>)> {
     let mut all_genre_counts: Vec<(NaiveDateTime, HashMap<String, usize>)> = Vec::new();
 
     for (dt, update) in updates {
         let mut genre_counts = HashMap::new();
-        let artist_count = update.len();
 
-        for artist in update {
-            if let Some(genres) = &artist.genres {
-                for (i, genre) in genres.into_iter().enumerate() {
-                    let count = genre_counts.entry(genre.clone()).or_insert(0);
-                    *count += if weight { artist_count - i } else { 1 };
+        for (tf, artist_ids) in update.iter() {
+            let artist_count = artist_ids.len();
+
+            for artist_id in artist_ids {
+                let artist = artists_by_id
+                    .get(&*artist_id)
+                    .expect(&format!("Artist with id {} not found in corpus", artist_id));
+                if let Some(genres) = &artist.genres {
+                    for (i, genre) in genres.into_iter().enumerate() {
+                        let count = genre_counts.entry(genre.clone()).or_insert(0);
+                        *count += if weight { artist_count - i } else { 1 };
+                    }
                 }
             }
         }

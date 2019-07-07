@@ -95,37 +95,41 @@ export const BarChart: React.FC<{
   style?: React.CSSProperties;
   data: number[];
   categories: string[];
-}> = ({ data, categories, style }) => {
+  otherConfig?: Partial<EChartOption>;
+}> = ({ data, categories, style, otherConfig = {} }) => {
   if (data.length !== categories.length) {
     throw new Error('The number of supplied data points and categories must be the same');
   }
 
-  const chartConfig = {
-    ...getBaseConfigDefaults(false), // TODO
-    dataZoom: undefined,
-    xAxis: {
-      type: 'category',
-      data: categories,
-      axisLabel: {
-        color: '#ccc',
-      },
-    },
-    backgroundColor: '#111', // TODO: Dedup these things with the line chart
-    yAxis: {
-      axisLabel: {
-        color: '#ccc',
-      },
-    },
-    series: [
-      {
-        data,
-        type: 'bar',
-        itemStyle: {
-          color: colors.green,
+  const chartConfig = R.mergeDeepRight(
+    {
+      ...getBaseConfigDefaults(false), // TODO
+      dataZoom: undefined,
+      xAxis: {
+        type: 'category',
+        data: categories,
+        axisLabel: {
+          color: '#ccc',
         },
       },
-    ],
-  };
+      backgroundColor: '#111', // TODO: Dedup these things with the line chart
+      yAxis: {
+        axisLabel: {
+          color: '#ccc',
+        },
+      },
+      series: [
+        {
+          data,
+          type: 'bar',
+          itemStyle: {
+            color: colors.green,
+          },
+        },
+      ],
+    },
+    otherConfig
+  );
 
   return <ReactEchartsCore style={style} echarts={echarts} option={chartConfig} />;
 };

@@ -121,6 +121,32 @@ pub fn get_artist_stats(
     Ok(Some(Json(stats)))
 }
 
+#[get("/stats/<username>/genre_history")]
+pub fn get_genre_history(
+    conn: DbConn,
+    token_data: State<Mutex<SpotifyTokenData>>,
+    username: String,
+) -> Result<Option<Json<Vec<(NaiveDateTime, HashMap<String, usize>)>>>, String> {
+    let user = match db_util::get_user_by_spotify_id(&conn, &username)? {
+        Some(user) => user,
+        None => {
+            return Ok(None);
+        }
+    };
+    let token_data = &mut *(&*token_data).lock().unwrap();
+    let spotify_access_token = token_data.get()?;
+
+    let (artists_by_id, artist_stats_history) =
+        match db_util::get_artist_stats_history(&user, &conn, spotify_access_token)? {
+            Some(res) => res,
+            None => return Ok(None),
+        };
+
+    let top_genres =
+        crate::stats::get_top_genres_by_artists(&artists_by_id, &artist_stats_history, true);
+    Ok(Some(Json(top_genres)))
+}
+
 /// Redirects to the Spotify authorization page for the application
 #[get("/authorize")]
 pub fn authorize() -> Redirect {

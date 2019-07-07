@@ -135,12 +135,30 @@ const ArtistStats: React.FC<ReactRouterRouteProps> = ({ match }) => {
       />
 
       {artistStats && artistStats.topTracks && topTracksCorpus ? (
-        <BarChart
-          data={artistStats.topTracks.map(R.prop('score'))}
-          categories={artistStats.topTracks.map(({ trackId }) => topTracksCorpus[trackId].name)}
-        />
+        <>
+          {R.isEmpty(artistStats.topTracks) ? (
+            <div style={{ textAlign: 'center' }}>No top tracks available for artist</div>
+          ) : (
+            <BarChart
+              data={artistStats.topTracks.map(R.prop('score'))}
+              categories={artistStats.topTracks.map(({ trackId }) => topTracksCorpus[trackId].name)}
+              style={{ height: 400 }}
+              otherConfig={{
+                xAxis: {
+                  axisLabel: {
+                    interval: 0,
+                    rotate: 70,
+                  },
+                },
+                grid: {
+                  bottom: 200,
+                },
+              }}
+            />
+          )}
+        </>
       ) : (
-        <Loading style={{ height: 300 }} />
+        <Loading style={{ height: 400 }} />
       )}
     </div>
   );
