@@ -42,6 +42,10 @@ const entityStore = {
   }),
 };
 
+interface UserStatsState {
+  [username: string]: UserStats | undefined;
+}
+
 const userStats = {
   ADD_USER_STATS: buildActionGroup({
     actionCreator: (username: string, stats: UserStats) => ({
@@ -49,15 +53,14 @@ const userStats = {
       username,
       stats,
     }),
-    subReducer: (state: { [username: string]: UserStats }, { username, stats }) => ({
+    subReducer: (state: UserStatsState, { username, stats }) => ({
       ...state,
       [username]: stats,
     }),
   }),
   CLEAR_USER_STATS: buildActionGroup({
     actionCreator: (username: string) => ({ type: 'CLEAR_USER_STATS', username }),
-    subReducer: (state: { [username: string]: UserStats }, { username }) =>
-      R.omit([username], state),
+    subReducer: (state: UserStatsState, { username }) => R.omit([username], state),
   }),
   SET_ARTIST_STATS: buildActionGroup({
     actionCreator: (
@@ -70,10 +73,10 @@ const userStats = {
       }[]
     ) => ({ type: 'SET_ARTIST_STATS', username, artistId, topTracks, popularityHistory }),
     subReducer: (
-      state: { [username: string]: UserStats },
+      state: UserStatsState,
       { username, artistId, topTracks, popularityHistory }
-    ) => {
-      const existingUserStats = state[username] || {};
+    ): UserStatsState => {
+      const existingUserStats: UserStats = state[username] || {};
       const existingArtistStats = existingUserStats.artistStats || {};
 
       return {
@@ -91,13 +94,28 @@ const userStats = {
       };
     },
   }),
+  SET_GENRE_HISTORY: buildActionGroup({
+    actionCreator: (username: string, genreHistory: NonNullable<UserStats['genreHistory']>) => ({
+      type: 'SET_GENRE_HISTORY',
+      username,
+      genreHistory,
+    }),
+    subReducer: (state: UserStatsState, { username, genreHistory }): UserStatsState => {
+      const existingUserStats = state[username] || {};
+
+      return {
+        ...state,
+        [username]: {
+          ...existingUserStats,
+          genreHistory,
+        },
+      };
+    },
+  }),
 };
 
 const jantixModules = {
-  userStats: buildModule<{ [username: string]: UserStats | undefined }, typeof userStats>(
-    {},
-    userStats
-  ),
+  userStats: buildModule<UserStatsState, typeof userStats>({}, userStats),
   entityStore: buildModule<
     { tracks: { [trackId: string]: Track }; artists: { [artistId: string]: Artist | undefined } },
     typeof entityStore

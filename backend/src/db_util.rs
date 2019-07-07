@@ -72,6 +72,7 @@ pub fn get_artist_stats_history(
     user: &User,
     conn: &DbConn,
     spotify_access_token: &str,
+    restrict_to_timeframe_id: Option<u8>,
 ) -> Result<
     Option<(
         HashMap<String, Artist>,
@@ -81,11 +82,12 @@ pub fn get_artist_stats_history(
 > {
     use crate::schema::artist_history::dsl::*;
 
-    let artists_stats_opt: Option<Vec<ArtistHistoryEntry>> = diesel_not_found_to_none(
-        artist_history
-            .filter(user_id.eq(user.id))
-            .load::<ArtistHistoryEntry>(&conn.0),
-    )?;
+    let mut query = artist_history.filter(user_id.eq(user.id)).into_boxed();
+    if let Some(timeframe_id) = restrict_to_timeframe_id {
+        query = query.filter(timeframe.eq(timeframe_id))
+    }
+    let artists_stats_opt: Option<Vec<ArtistHistoryEntry>> =
+        diesel_not_found_to_none(query.load::<ArtistHistoryEntry>(&conn.0))?;
 
     let artist_stats: Vec<ArtistHistoryEntry> = match artists_stats_opt {
         None => return Ok(None),

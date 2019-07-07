@@ -41,7 +41,7 @@ const ArtistStats: React.FC<ReactRouterRouteProps> = ({ match }) => {
 
   const fetchedStatsFor = useRef<string | null>(null);
   useEffect(() => {
-    if (fetchedStatsFor.current === artistId) {
+    if (fetchedStatsFor.current === artistId || !!series) {
       return;
     }
 

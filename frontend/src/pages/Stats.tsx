@@ -11,6 +11,7 @@ import { dispatch, actionCreators, useSelector } from 'src/store';
 import { ImageBoxGrid, Artist as ArtistCard, Track as TrackCard } from 'src/Cards';
 import ArtistStats from 'src/pages/ArtistStats';
 import Loading from 'src/components/Loading';
+import GenresTreemap from 'src/components/GenresTreemap';
 import './Stats.scss';
 import { useUsername } from 'src/store/selectors';
 
@@ -73,6 +74,9 @@ const StatsDetails: React.FunctionComponent<{ stats: UserStats }> = ({ stats }) 
     <div className="details">
       <ImageBoxGrid
         renderItem={(i, timeframe) => {
+          if (!stats.tracks) {
+            return null;
+          }
           const trackId = stats.tracks[timeframe][i];
           if (!trackId) {
             return null;
@@ -91,12 +95,14 @@ const StatsDetails: React.FunctionComponent<{ stats: UserStats }> = ({ stats }) 
             />
           );
         }}
-        getItemCount={timeframe => stats.tracks[timeframe].length}
+        getItemCount={timeframe => (stats.tracks ? stats.tracks[timeframe].length : 0)}
         initialItems={10}
         title="Tracks"
       />
 
       <ArtistCards />
+
+      <GenresTreemap />
     </div>
   );
 };

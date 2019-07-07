@@ -4,6 +4,7 @@ import ReactEchartsCore from 'echarts-for-react/lib/core';
 import * as echarts from 'echarts/lib/echarts';
 import 'echarts/lib/chart/line';
 import 'echarts/lib/chart/bar';
+import 'echarts/lib/chart/treemap';
 import 'echarts/lib/component/tooltip';
 import 'echarts/lib/component/legend';
 import 'echarts/lib/component/dataZoom';
@@ -127,6 +128,31 @@ export const BarChart: React.FC<{
           },
         },
       ],
+    },
+    otherConfig
+  );
+
+  return <ReactEchartsCore style={style} echarts={echarts} option={chartConfig} />;
+};
+
+interface TreemapDatum {
+  name: string;
+  value?: number | null;
+  children?: TreemapDatum[];
+  itemStyle?: object;
+}
+
+export const Treemap: React.FC<{
+  otherConfig?: Partial<EChartOption>;
+  style?: React.CSSProperties;
+  data: TreemapDatum[];
+}> = ({ data, style, otherConfig = {} }) => {
+  const chartConfig = R.mergeDeepRight(
+    {
+      series: {
+        type: 'treemap',
+        data,
+      },
     },
     otherConfig
   );

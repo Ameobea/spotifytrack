@@ -90,7 +90,7 @@ pub fn get_artist_stats(
     // TODO: This is dumb inefficient; no need to fetch ALL artist metadata.  Need to improve once I
     // set up the alternative metadata mappings.
     let (mut artists_by_id, artist_stats_history) =
-        match db_util::get_artist_stats_history(&user, &conn, spotify_access_token)? {
+        match db_util::get_artist_stats_history(&user, &conn, spotify_access_token, None)? {
             Some(res) => res,
             None => return Ok(None),
         };
@@ -121,12 +121,18 @@ pub fn get_artist_stats(
     Ok(Some(Json(stats)))
 }
 
+#[derive(Serialize)]
+pub struct GenresHistory {
+    pub timestamps: Vec<NaiveDateTime>,
+    pub history_by_genre: HashMap<String, Vec<Option<usize>>>,
+}
+
 #[get("/stats/<username>/genre_history")]
 pub fn get_genre_history(
     conn: DbConn,
     token_data: State<Mutex<SpotifyTokenData>>,
     username: String,
-) -> Result<Option<Json<Vec<(NaiveDateTime, HashMap<String, usize>)>>>, String> {
+) -> Result<Option<Json<GenresHistory>>, String> {
     let user = match db_util::get_user_by_spotify_id(&conn, &username)? {
         Some(user) => user,
         None => {
@@ -136,15 +142,19 @@ pub fn get_genre_history(
     let token_data = &mut *(&*token_data).lock().unwrap();
     let spotify_access_token = token_data.get()?;
 
+    // Only include data from the "short" timeframe since we're producing a timeseries
     let (artists_by_id, artist_stats_history) =
-        match db_util::get_artist_stats_history(&user, &conn, spotify_access_token)? {
+        match db_util::get_artist_stats_history(&user, &conn, spotify_access_token, Some(0))? {
             Some(res) => res,
             None => return Ok(None),
         };
 
-    let top_genres =
+    let (timestamps, history_by_genre) =
         crate::stats::get_top_genres_by_artists(&artists_by_id, &artist_stats_history, true);
-    Ok(Some(Json(top_genres)))
+    Ok(Some(Json(GenresHistory {
+        timestamps,
+        history_by_genre,
+    })))
 }
 
 /// Redirects to the Spotify authorization page for the application

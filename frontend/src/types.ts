@@ -53,7 +53,7 @@ export interface Artist {
   uri: string;
 }
 
-export interface UserStats {
+export type UserStats = Partial<{
   last_update_time: string;
   tracks: TimeFrames<string>;
   artists: TimeFrames<string>;
@@ -66,4 +66,8 @@ export interface UserStats {
       }[];
     };
   };
-}
+  genreHistory?: {
+    popularityByGenre: { [genre: string]: (number | null)[] };
+    timestamps: Date[];
+  };
+}>;
