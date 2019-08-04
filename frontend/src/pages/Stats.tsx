@@ -10,6 +10,7 @@ import { mapObj } from 'src/util';
 import { dispatch, actionCreators, useSelector } from 'src/store';
 import { ImageBoxGrid, Artist as ArtistCard, Track as TrackCard } from 'src/Cards';
 import ArtistStats from 'src/pages/ArtistStats';
+import GenreStats from 'src/pages/GenreStats';
 import Loading from 'src/components/Loading';
 import GenresTreemap from 'src/components/GenresTreemap';
 import './Stats.scss';
@@ -35,6 +36,9 @@ export const ArtistCards: React.FC<
     <ImageBoxGrid
       horizontallyScrollable={horizontallyScrollable}
       renderItem={(i, timeframe) => {
+        if (!stats.artists) {
+          return null;
+        }
         const artistId = stats.artists[timeframe][i];
         if (!artistId) {
           return null;
@@ -55,7 +59,7 @@ export const ArtistCards: React.FC<
           />
         );
       }}
-      getItemCount={timeframe => stats.artists[timeframe].length}
+      getItemCount={timeframe => (stats.artists ? stats.artists[timeframe].length : 0)}
       initialItems={10}
       title="Artists"
       {...props}
@@ -102,6 +106,7 @@ const StatsDetails: React.FunctionComponent<{ stats: UserStats }> = ({ stats }) 
 
       <ArtistCards />
 
+      <h3 className="image-box-grid-title">Top Genres</h3>
       <GenresTreemap />
     </div>
   );
@@ -161,6 +166,16 @@ const Stats: React.FunctionComponent<ReactRouterRouteProps> = ({
     );
   });
 
+  const InnerContent = () => {
+    if (match.params.artistId) {
+      return <ArtistStats match={match} />;
+    } else if (match.params.genre) {
+      return <GenreStats username={username} genre={match.params.genre} />;
+    } else {
+      return <StatsDetails stats={statsForUser!} />;
+    }
+  };
+
   return (
     <main className="stats">
       <span className="headline">
@@ -171,13 +186,7 @@ const Stats: React.FunctionComponent<ReactRouterRouteProps> = ({
       </span>
 
       {statsForUser && statsForUser.tracks && statsForUser.artists ? (
-        <>
-          {match.params.artistId ? (
-            <ArtistStats match={match} />
-          ) : (
-            <StatsDetails stats={statsForUser} />
-          )}
-        </>
+        <InnerContent />
       ) : (
         <>
           <br />

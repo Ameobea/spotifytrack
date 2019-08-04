@@ -112,8 +112,21 @@ pub fn get_artist_stats(
             .is_some()
     });
 
+    let artist: Artist = match artists_by_id.remove(&artist_id) {
+        Some(artist) => artist,
+        None => {
+            let mut artists: Vec<Artist> =
+                crate::spotify_api::fetch_artists(spotify_access_token, &[&artist_id])?;
+            match artists.pop() {
+                Some(artist) => artist,
+                // Artist no longer exists on Spotify's end
+                None => return Ok(None),
+            }
+        }
+    };
+
     let stats = ArtistStats {
-        artist: artists_by_id.remove(&artist_id).unwrap(),
+        artist,
         tracks_by_id,
         popularity_history,
         top_tracks,

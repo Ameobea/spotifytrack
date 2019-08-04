@@ -1,7 +1,7 @@
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
 import { Option } from 'funfix-core';
 import * as R from 'ramda';
-import { mapObj, useOnChange } from 'ameo-utils/dist/util';
+import { useOnChange } from 'ameo-utils/dist/util';
 
 import { Treemap } from 'src/components/Charts';
 import { useSelector, actionCreators, dispatch } from 'src/store';
@@ -56,6 +56,7 @@ const GenresTreemap: React.FC<{}> = () => {
         name: genre,
         value: R.last(scores),
       }))}
+      style={{ height: 500 }}
     />
   );
 };

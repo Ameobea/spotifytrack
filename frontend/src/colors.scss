@@ -1,0 +1,4 @@
+$js-styles: jsStyles();
+$colors: map-get($js-styles, 'colors');
+$chart-colors: map-get($js-styles, 'chart-colors');
+$monochrome-chart-colors: map-get($js-styles, 'monochrome-chart-colors');

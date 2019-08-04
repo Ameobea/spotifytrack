@@ -53,18 +53,20 @@ export interface Artist {
   uri: string;
 }
 
+export interface ArtistStats {
+  topTracks: { trackId: string; score: number }[];
+  popularityHistory: {
+    timestamp: Date;
+    popularityPerTimePeriod: [number | null, number | null, number | null];
+  }[];
+}
+
 export type UserStats = Partial<{
   last_update_time: string;
   tracks: TimeFrames<string>;
   artists: TimeFrames<string>;
   artistStats: {
-    [artistId: string]: {
-      topTracks: { trackId: string; score: number }[];
-      popularityHistory: {
-        timestamp: Date;
-        popularityPerTimePeriod: [number | null, number | null, number | null];
-      }[];
-    };
+    [artistId: string]: ArtistStats;
   };
   genreHistory?: {
     popularityByGenre: { [genre: string]: (number | null)[] };

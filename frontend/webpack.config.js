@@ -1,7 +1,12 @@
+/* eslint-disable @typescript-eslint/no-var-requires */
 const path = require('path');
 
 const webpack = require('webpack');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const sass = require('node-sass');
+const sassUtils = require('node-sass-utils')(sass);
+
+const styles = require('./src/_style');
 
 module.exports = {
   entry: './src/index.tsx',
@@ -38,6 +43,12 @@ module.exports = {
           },
           {
             loader: 'sass-loader',
+            options: {
+              functions: {
+                'jsStyles()': () => sassUtils.castToSass(styles),
+              },
+              includePaths: ['src/'],
+            },
           },
         ],
       },

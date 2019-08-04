@@ -1,19 +1,33 @@
 import React, { useMemo, useRef, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import * as R from 'ramda';
 
 import { useSelector, dispatch, actionCreators } from 'src/store';
-import { ReactRouterRouteProps, ReduxStore, ValueOf, Track, Artist } from 'src/types';
+import { ReactRouterRouteProps, ArtistStats as ArtistStatsType, Track, Artist } from 'src/types';
 import { fetchArtistStats } from 'src/api';
 import { colors } from 'src/style';
 import Loading from 'src/components/Loading';
 import { LineChart, BarChart } from 'src/components/Charts';
 import { ArtistCards } from 'src/pages/Stats';
+import './ArtistStats.scss';
+
+const GenreChip: React.FC<{ username: string; genre: string }> = ({ username, genre }) => (
+  <Link className="genre-chip-link" to={`/stats/${username}/genre/${genre}/`}>
+    <div className="genre-chip">{genre}</div>
+  </Link>
+);
+
+const GenresListing: React.FC<{ genres: string[]; username: string }> = ({ username, genres }) => (
+  <div className="genres-listing">
+    {genres.map(genre => (
+      <GenreChip key={genre} username={username} genre={genre} />
+    ))}
+  </div>
+);
 
 const ArtistStats: React.FC<ReactRouterRouteProps> = ({ match }) => {
-  const [username, artistId] = [match.params.username, match.params.artistId];
-  const artistStats:
-    | ValueOf<NonNullable<ValueOf<ReduxStore['userStats']>>['artistStats']>
-    | undefined = useSelector(({ userStats }) =>
+  const { username, artistId } = match.params;
+  const artistStats: ArtistStatsType | undefined = useSelector(({ userStats }) =>
     R.path([username, 'artistStats', artistId], userStats)
   );
   const artist = useSelector(({ entityStore: { artists } }) => artists[artistId]);
@@ -76,16 +90,7 @@ const ArtistStats: React.FC<ReactRouterRouteProps> = ({ match }) => {
   });
 
   return (
-    <div
-      style={{
-        marginLeft: 'auto',
-        marginRight: 'auto',
-        display: 'flex',
-        flexDirection: 'column',
-        flex: 1,
-        minWidth: 800,
-      }}
-    >
+    <div className="artist-stats">
       {!artistStats || !artist || !series ? (
         <Loading style={{ height: 300 + 85 }} />
       ) : (
@@ -93,6 +98,9 @@ const ArtistStats: React.FC<ReactRouterRouteProps> = ({ match }) => {
           <h1>
             Artist stats for <span style={{ color: colors.pink }}> {artist.name}</span>
           </h1>
+
+          <p>Top genres:</p>
+          <GenresListing username={username} genres={artist.genres} />
 
           <LineChart
             style={{ height: 300 }}

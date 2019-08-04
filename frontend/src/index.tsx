@@ -24,6 +24,7 @@ const App = () => (
         <Route exact path="/" render={Home} />
         <Route exact path="/stats/:username" component={Stats} />
         <Route exact path="/stats/:username/artist/:artistId" component={Stats} />
+        <Route exact path="/stats/:username/genre/:genre" component={Stats} />
         <Route
           path="/connect"
           component={() => {
