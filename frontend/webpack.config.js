@@ -44,10 +44,12 @@ module.exports = {
           {
             loader: 'sass-loader',
             options: {
-              functions: {
-                'jsStyles()': () => sassUtils.castToSass(styles),
+              sassOptions: {
+                functions: {
+                  'jsStyles()': () => sassUtils.castToSass(styles),
+                },
+                includePaths: ['src/'],
               },
-              includePaths: ['src/'],
             },
           },
         ],

@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { Option } from 'funfix-core';
 import * as R from 'ramda';
-import { useOnChange } from 'ameo-utils/dist/util';
+import { useOnChange } from 'ameo-utils/dist/util/react';
 
 import { Treemap } from 'src/components/Charts';
 import { useSelector, actionCreators, dispatch } from 'src/store';
@@ -12,10 +12,11 @@ import { fetchGenreHistory } from 'src/api';
 const GenresTreemap: React.FC<{}> = () => {
   const username = useUsername();
 
-  useOnChange(username, async username => {
+  useOnChange(username, async (username: string | null) => {
     if (!username) {
       return;
     }
+
     const {
       timestamps,
       history_by_genre: popularityByGenre,

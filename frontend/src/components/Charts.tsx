@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import ReactDOMServer from 'react-dom/server';
 import ReactEchartsCore from 'echarts-for-react/lib/core';
 import * as echarts from 'echarts/lib/echarts';
@@ -152,6 +152,7 @@ export const Treemap: React.FC<{
       series: {
         type: 'treemap',
         data,
+        roam: false,
       },
     },
     otherConfig

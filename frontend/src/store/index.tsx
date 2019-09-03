@@ -42,7 +42,7 @@ const entityStore = {
   }),
 };
 
-interface UserStatsState {
+export interface UserStatsState {
   [username: string]: UserStats | undefined;
 }
 
@@ -72,10 +72,7 @@ const userStats = {
         popularityPerTimePeriod: [number | null, number | null, number | null];
       }[]
     ) => ({ type: 'SET_ARTIST_STATS', username, artistId, topTracks, popularityHistory }),
-    subReducer: (
-      state: UserStatsState,
-      { username, artistId, topTracks, popularityHistory }
-    ): UserStatsState => {
+    subReducer: (state: UserStatsState, { username, artistId, topTracks, popularityHistory }): UserStatsState => {
       const existingUserStats: UserStats = state[username] || {};
       const existingArtistStats = existingUserStats.artistStats || {};
 

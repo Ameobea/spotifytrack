@@ -17,12 +17,7 @@ interface ImageBoxProps {
   linkTo?: string;
 }
 
-const ImageBox: React.FunctionComponent<ImageBoxProps> = ({
-  imageSrc,
-  imgAlt,
-  children,
-  linkTo,
-}) => {
+const ImageBox: React.FC<ImageBoxProps> = ({ imageSrc, imgAlt, children, linkTo }) => {
   const image = <img alt={imgAlt} src={imageSrc} className="image-container" />;
 
   return (
@@ -58,15 +53,7 @@ const ArtistStatsLink: React.FC<{ artistId: string }> = ({ artistId, children })
   return <Link to={buildArtistStatsUrl(username, artistId)}>{children}</Link>;
 };
 
-export const Track: React.FunctionComponent<TrackProps> = ({
-  title,
-  artists,
-  previewUrl,
-  album,
-  imageSrc,
-  playing,
-  setPlaying,
-}) => {
+export const Track: React.FC<TrackProps> = ({ title, artists, previewUrl, album, imageSrc, playing, setPlaying }) => {
   const isPlaying = playing && playing === previewUrl;
   const audioTag = useRef<HTMLAudioElement | null>(null);
 
@@ -108,10 +95,7 @@ export const Track: React.FunctionComponent<TrackProps> = ({
         <audio preload="none" ref={audioTag} src={previewUrl} />
       </div>
 
-      <div
-        className="play-pause-button-wrapper"
-        onClick={() => setPlaying(isPlaying ? false : previewUrl)}
-      >
+      <div className="play-pause-button-wrapper" onClick={() => setPlaying(isPlaying ? false : previewUrl)}>
         {previewUrl ? <FontAwesomeIcon icon={isPlaying ? faPause : faPlay} /> : null}
       </div>
     </ImageBox>
@@ -144,13 +128,7 @@ const Genre = ({ genre }: { genre: string }) => {
   return <ANewTab to={to} text={genre} style={{ color: 'white', fontSize: 11 }} />;
 };
 
-export const Artist = ({
-  id,
-  name,
-  genres,
-  imageSrc,
-  preferredGenres = DEFAULT_PREFERRED_GENRES,
-}: ArtistProps) => {
+export const Artist = ({ id, name, genres, imageSrc, preferredGenres = DEFAULT_PREFERRED_GENRES }: ArtistProps) => {
   const username = useUsername();
   // Make sure that preferred genres show up and aren't trimmed off
   const [preferred, other] = R.partition(genre => preferredGenres.has(genre), genres);
@@ -193,10 +171,7 @@ interface TimeframeSelectorProps {
   setTimeframe: (newTimeframe: Timeframe) => void;
 }
 
-export const TimeframeSelector: React.FunctionComponent<TimeframeSelectorProps> = ({
-  timeframe,
-  setTimeframe,
-}) => (
+export const TimeframeSelector: React.FC<TimeframeSelectorProps> = ({ timeframe, setTimeframe }) => (
   <div className="timeframe-selector">
     Timeframe:{' '}
     {TIMEFRAMES.map((frame, i, frames) => (
@@ -227,7 +202,7 @@ interface ImageBoxGridProps {
   style?: React.CSSProperties;
 }
 
-export const ImageBoxGrid: React.FunctionComponent<ImageBoxGridProps> = ({
+export const ImageBoxGrid: React.FC<ImageBoxGridProps> = ({
   renderItem,
   getItemCount,
   initialItems,
@@ -249,11 +224,7 @@ export const ImageBoxGrid: React.FunctionComponent<ImageBoxGridProps> = ({
       {!disableHeader ? <h3 className="image-box-grid-title">{title}</h3> : null}
       <TimeframeSelector timeframe={timeframe} setTimeframe={setTimeframe} />
       <div className={`image-box-grid${horizontallyScrollable ? ' horizontally-scrollable' : ''}`}>
-        {hasItems ? (
-          R.times(R.identity, itemCount).map(i => renderItem(i, timeframe))
-        ) : (
-          <>No items for timeframe</>
-        )}
+        {hasItems ? R.times(R.identity, itemCount).map(i => renderItem(i, timeframe)) : <>No items for timeframe</>}
       </div>
 
       {!isExpanded && hasItems && !hideShowMore ? (

@@ -1,13 +1,13 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import * as R from 'ramda';
 import { Link } from 'react-router-dom';
 import { PropTypesOf } from 'ameo-utils/dist/util/react';
 
-import { ReactRouterRouteProps, UserStats, TimeFrames, Track, Artist } from 'src/types';
+import { ReactRouterRouteProps, UserStats, TimeFrames, Track, Artist, ValueOf } from 'src/types';
 import { useOnce } from 'src/util/hooks';
 import { fetchUserStats } from 'src/api';
 import { mapObj } from 'src/util';
-import { dispatch, actionCreators, useSelector } from 'src/store';
+import { dispatch, actionCreators, useSelector, UserStatsState } from 'src/store';
 import { ImageBoxGrid, Artist as ArtistCard, Track as TrackCard } from 'src/Cards';
 import ArtistStats from 'src/pages/ArtistStats';
 import GenreStats from 'src/pages/GenreStats';
@@ -67,7 +67,7 @@ export const ArtistCards: React.FC<
   );
 };
 
-const StatsDetails: React.FunctionComponent<{ stats: UserStats }> = ({ stats }) => {
+const StatsDetails: React.FC<{ stats: UserStats }> = ({ stats }) => {
   const { tracksCorpus } = useSelector(({ entityStore: { tracks, artists } }) => ({
     tracksCorpus: tracks,
     artistsCorpus: artists,
@@ -112,7 +112,19 @@ const StatsDetails: React.FunctionComponent<{ stats: UserStats }> = ({ stats }) 
   );
 };
 
-const Stats: React.FunctionComponent<ReactRouterRouteProps> = ({
+const StatsContent: React.FC<
+  { username: string; statsForUser: ValueOf<UserStatsState> } & Pick<ReactRouterRouteProps, 'match'>
+> = ({ match, username, statsForUser }) => {
+  if (match.params.artistId) {
+    return <ArtistStats match={match} />;
+  } else if (match.params.genre) {
+    return <GenreStats username={username} genre={match.params.genre} />;
+  } else {
+    return <StatsDetails stats={statsForUser!} />;
+  }
+};
+
+const Stats: React.FC<ReactRouterRouteProps> = ({
   match,
   match: {
     params: { username },
@@ -166,16 +178,6 @@ const Stats: React.FunctionComponent<ReactRouterRouteProps> = ({
     );
   });
 
-  const InnerContent = () => {
-    if (match.params.artistId) {
-      return <ArtistStats match={match} />;
-    } else if (match.params.genre) {
-      return <GenreStats username={username} genre={match.params.genre} />;
-    } else {
-      return <StatsDetails stats={statsForUser!} />;
-    }
-  };
-
   return (
     <main className="stats">
       <span className="headline">
@@ -186,7 +188,7 @@ const Stats: React.FunctionComponent<ReactRouterRouteProps> = ({
       </span>
 
       {statsForUser && statsForUser.tracks && statsForUser.artists ? (
-        <InnerContent />
+        <StatsContent username={username} match={match} statsForUser={statsForUser} />
       ) : (
         <>
           <br />
