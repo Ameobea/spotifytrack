@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import { Option } from 'funfix-core';
 import * as R from 'ramda';
 import { useOnChange } from 'ameo-utils/dist/util/react';

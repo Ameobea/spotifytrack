@@ -9,8 +9,8 @@ use rocket::response::status;
 use rocket::{response::Redirect, State};
 use rocket_contrib::json::Json;
 
+use crate::benchmarking::{mark, start};
 use crate::conf::CONF;
-
 use crate::db_util;
 use crate::models::{Artist, NewUser, OAuthTokenResponse, StatsSnapshot, Track, User};
 use crate::DbConn;
@@ -27,28 +27,32 @@ pub fn index() -> &'static str {
 #[get("/stats/<username>")]
 pub fn get_current_stats(
     conn: DbConn,
+    conn2: DbConn,
     username: String,
     token_data: State<Mutex<SpotifyTokenData>>,
 ) -> Result<Option<Json<StatsSnapshot>>, String> {
+    start();
     let user = match db_util::get_user_by_spotify_id(&conn, &username)? {
         Some(user) => user,
         None => {
             return Ok(None);
         }
     };
+    mark("Finished getting spotify user by id");
 
     let token_data = &mut *(&*token_data).lock().unwrap();
     let spotify_access_token = token_data.get()?;
+    mark("Got spotify access token");
 
-    // TODO: Parallelize, if possible.  We only have one connection and that's the bottleneck here...
-    let artist_stats = match db_util::get_artist_stats(&user, &conn, spotify_access_token)? {
-        Some(stats) => stats,
-        None => return Ok(None),
+    let (artist_stats, track_stats) = match rayon::join(
+        || db_util::get_artist_stats(&user, conn, spotify_access_token),
+        || db_util::get_track_stats(&user, conn2, spotify_access_token),
+    ) {
+        (Err(err), _) | (Ok(_), Err(err)) => return Err(err),
+        (Ok(None), _) | (_, Ok(None)) => return Ok(None),
+        (Ok(Some(artist_stats)), Ok(Some(track_stats))) => (artist_stats, track_stats),
     };
-    let track_stats = match db_util::get_track_stats(&user, &conn, spotify_access_token)? {
-        Some(stats) => stats,
-        None => return Ok(None),
-    };
+    mark("Fetched artist and track stats");
 
     let mut snapshot = StatsSnapshot::new(user.last_update_time);
 
@@ -59,6 +63,7 @@ pub fn get_current_stats(
     for (timeframe_id, track) in track_stats {
         snapshot.tracks.add_item_by_id(timeframe_id, track);
     }
+    mark("Constructed snapshot");
 
     Ok(Some(Json(snapshot)))
 }
@@ -74,43 +79,63 @@ pub struct ArtistStats {
 #[get("/stats/<username>/artist/<artist_id>")]
 pub fn get_artist_stats(
     conn: DbConn,
+    conn2: DbConn,
     token_data: State<Mutex<SpotifyTokenData>>,
     username: String,
     artist_id: String,
 ) -> Result<Option<Json<ArtistStats>>, String> {
+    start();
     let user = match db_util::get_user_by_spotify_id(&conn, &username)? {
         Some(user) => user,
         None => {
             return Ok(None);
         }
     };
+    mark("Finished getting spotify user by id");
+
     let token_data = &mut *(&*token_data).lock().unwrap();
     let spotify_access_token = token_data.get()?;
+    mark("Got spotify access token");
 
     // TODO: This is dumb inefficient; no need to fetch ALL artist metadata.  Need to improve once I
     // set up the alternative metadata mappings.
-    let (mut artists_by_id, artist_stats_history) =
-        match db_util::get_artist_stats_history(&user, &conn, spotify_access_token, None)? {
-            Some(res) => res,
-            None => return Ok(None),
-        };
+    let ((mut artists_by_id, popularity_history), (tracks_by_id, top_tracks)) = match rayon::join(
+        || {
+            let (artists_by_id, artist_stats_history) =
+                match db_util::get_artist_stats_history(&user, conn, spotify_access_token, None)? {
+                    Some(res) => res,
+                    None => return Ok(None),
+                };
 
-    let popularity_history =
-        crate::stats::get_artist_popularity_history(&artist_id, &artist_stats_history);
+            let popularity_history =
+                crate::stats::get_artist_popularity_history(&artist_id, &artist_stats_history);
 
-    let (mut tracks_by_id, track_history) =
-        match db_util::get_track_stats_history(&user, &conn, spotify_access_token)? {
-            Some(res) => res,
-            None => return Ok(None),
-        };
-    let top_tracks = crate::stats::get_tracks_for_artist(&artist_id, &tracks_by_id, &track_history);
-    // Only send track metadata for this artist's tracks
-    tracks_by_id.retain(|track_id, _| {
-        top_tracks
-            .iter()
-            .find(|(retained_track_id, _)| track_id == retained_track_id)
-            .is_some()
-    });
+            Ok(Some((artists_by_id, popularity_history)))
+        },
+        || {
+            let (mut tracks_by_id, track_history) =
+                match db_util::get_track_stats_history(&user, conn2, spotify_access_token)? {
+                    Some(res) => res,
+                    None => return Ok(None),
+                };
+            let top_tracks =
+                crate::stats::get_tracks_for_artist(&artist_id, &tracks_by_id, &track_history);
+            // Only send track metadata for this artist's tracks
+            tracks_by_id.retain(|track_id, _| {
+                top_tracks
+                    .iter()
+                    .find(|(retained_track_id, _)| track_id == retained_track_id)
+                    .is_some()
+            });
+
+            Ok(Some((tracks_by_id, top_tracks)))
+        },
+    ) {
+        (Err(err), _) | (Ok(_), Err(err)) => return Err(err),
+        (Ok(None), _) | (_, Ok(None)) => return Ok(None),
+        (Ok(Some(a)), Ok(Some(b))) => (a, b),
+    };
+    mark("Fetched artists stats and top tracks");
 
     let artist: Artist = match artists_by_id.remove(&artist_id) {
         Some(artist) => artist,
@@ -124,6 +149,7 @@ pub fn get_artist_stats(
             }
         }
     };
+    mark("Found matching artist to use");
 
     let stats = ArtistStats {
         artist,
@@ -157,7 +183,7 @@ pub fn get_genre_history(
 
     // Only include data from the "short" timeframe since we're producing a timeseries
     let (artists_by_id, artist_stats_history) =
-        match db_util::get_artist_stats_history(&user, &conn, spotify_access_token, Some(0))? {
+        match db_util::get_artist_stats_history(&user, conn, spotify_access_token, Some(0))? {
             Some(res) => res,
             None => return Ok(None),
         };

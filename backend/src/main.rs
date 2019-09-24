@@ -2,7 +2,6 @@
     proc_macro_hygiene,
     decl_macro,
     slice_patterns,
-    bind_by_move_pattern_guards,
     box_patterns,
     nll,
     try_trait
@@ -35,6 +34,7 @@ use std::sync::Mutex;
 
 use rocket_contrib::compression::Compression;
 
+pub mod benchmarking;
 pub mod cache;
 pub mod conf;
 pub mod cors;

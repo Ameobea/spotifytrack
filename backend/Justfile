@@ -1,12 +1,12 @@
-docker_build:
-  docker build -t ameo/spotify-homepage-backend .
+docker-build:
+  docker build -t gcr.io/free-tier-164405/spotifytrack-backend:latest .
 
-spawn_redis:
+spawn-redis:
   docker kill redis || true
   docker rm redis || true
   docker run --rm -d -p 6379:6379 --name redis redis
 
-docker_start:
+docker-start:
   docker rm spotifytrack-server || true
   echo "$SPOTIFY_CLIENT_ID"
   docker run -it --net host -p 3999:3999 --name spotifytrack-server \
@@ -18,4 +18,4 @@ docker_start:
     -e WEBSITE_URL="$WEBSITE_URL" \
     -e REDIS_URL="$REDIS_URL" \
     -e ADMIN_API_TOKEN="$ADMIN_API_TOKEN" \
-    ameo/spotify-homepage-backend
+    gcr.io/free-tier-164405/spotifytrack-backend:latest

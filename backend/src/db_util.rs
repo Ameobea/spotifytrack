@@ -2,6 +2,7 @@ use chrono::NaiveDateTime;
 use diesel::prelude::*;
 use hashbrown::{HashMap, HashSet};
 
+use crate::benchmarking::mark;
 use crate::models::{Artist, NewSpotifyIdMapping, SpotifyIdMapping, TimeFrames, Track, User};
 use crate::DbConn;
 
@@ -39,7 +40,7 @@ struct StatsQueryResultItem {
 
 pub fn get_artist_stats(
     user: &User,
-    conn: &DbConn,
+    conn: DbConn,
     spotify_access_token: &str,
 ) -> Result<Option<Vec<(u8, Artist)>>, String> {
     use crate::schema::artist_history::{self, dsl::*};
@@ -54,7 +55,7 @@ pub fn get_artist_stats(
             .select((artist_history::timeframe, spotify_id_mapping::spotify_id))
             .load::<StatsQueryResultItem>(&conn.0),
     )?;
-    // TODO: Debug this amazing query to see what's getting produced
+    mark("Got artist stats from database");
 
     let artist_stats = match artists_stats_opt {
         None => return Ok(None),
@@ -74,6 +75,7 @@ pub fn get_artist_stats(
                 (timeframe_id, artist)
             })
             .collect::<Vec<_>>();
+    mark("Got artist metadata");
     Ok(Some(fetched_artists))
 }
 
@@ -87,7 +89,7 @@ struct StatsHistoryQueryResItem {
 
 pub fn get_artist_stats_history(
     user: &User,
-    conn: &DbConn,
+    conn: DbConn,
     spotify_access_token: &str,
     restrict_to_timeframe_id: Option<u8>,
 ) -> Result<
@@ -171,7 +173,7 @@ pub fn get_artist_stats_history(
 /// of the tuple is the timeframe ID: short, medium, long.
 pub fn get_track_stats(
     user: &User,
-    conn: &DbConn,
+    conn: DbConn,
     spotify_access_token: &str,
 ) -> Result<Option<Vec<(u8, Track)>>, String> {
     use crate::schema::spotify_id_mapping::dsl::*;
@@ -215,7 +217,7 @@ pub fn get_track_stats(
 /// TODO: Deduplicate with `get_artist_stats_history` if you ever care enough
 pub fn get_track_stats_history(
     user: &User,
-    conn: &DbConn,
+    conn: DbConn,
     spotify_access_token: &str,
 ) -> Result<
     Option<(
