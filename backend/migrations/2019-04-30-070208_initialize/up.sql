@@ -12,6 +12,13 @@ START TRANSACTION;
   CREATE INDEX spotify_id_ix ON `spotify_homepage`.`users` (spotify_id);
   CREATE INDEX update_time_ix ON `spotify_homepage`.`users` (last_update_time);
 
+  CREATE TABLE `spotify_homepage`.`spotify_id_mapping` (
+    `id` INT NOT NULL AUTO_INCREMENT,
+    `spotify_id` VARCHAR(255) UNIQUE NOT NULL,
+    PRIMARY KEY (`id`)
+  );
+  CREATE INDEX spotify_id_ix ON `spotify_homepage`.`spotify_id_mapping` (spotify_id);
+
   CREATE TABLE `spotify_homepage`.`track_history` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
     `user_id` BIGINT NOT NULL,

@@ -1,9 +1,8 @@
-use std::collections::{HashMap, HashSet};
-
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
+use hashbrown::{HashMap, HashSet};
 
-use crate::models::{Artist, ArtistHistoryEntry, TimeFrames, Track, TrackHistoryEntry, User};
+use crate::models::{Artist, NewSpotifyIdMapping, SpotifyIdMapping, TimeFrames, Track, User};
 use crate::DbConn;
 
 pub fn get_user_by_spotify_id(
@@ -32,20 +31,30 @@ pub fn diesel_not_found_to_none<T>(
     }
 }
 
+#[derive(Queryable)]
+struct StatsQueryResultItem {
+    timeframe: u8,
+    spotify_id: String,
+}
+
 pub fn get_artist_stats(
     user: &User,
     conn: &DbConn,
     spotify_access_token: &str,
 ) -> Result<Option<Vec<(u8, Artist)>>, String> {
-    use crate::schema::artist_history::dsl::*;
+    use crate::schema::artist_history::{self, dsl::*};
+    use crate::schema::spotify_id_mapping::{self, dsl::*};
 
     let artists_stats_opt = diesel_not_found_to_none(
         artist_history
             .filter(user_id.eq(user.id))
             .filter(update_time.eq(user.last_update_time))
             .order_by(update_time)
-            .load::<ArtistHistoryEntry>(&conn.0),
+            .inner_join(spotify_id_mapping)
+            .select((artist_history::timeframe, spotify_id_mapping::spotify_id))
+            .load::<StatsQueryResultItem>(&conn.0),
     )?;
+    // TODO: Debug this amazing query to see what's getting produced
 
     let artist_stats = match artists_stats_opt {
         None => return Ok(None),
@@ -68,6 +77,14 @@ pub fn get_artist_stats(
     Ok(Some(fetched_artists))
 }
 
+#[derive(Queryable)]
+struct StatsHistoryQueryResItem {
+    spotify_id: String,
+    update_time: NaiveDateTime,
+    ranking: u16,
+    timeframe: u8,
+}
+
 pub fn get_artist_stats_history(
     user: &User,
     conn: &DbConn,
@@ -81,15 +98,20 @@ pub fn get_artist_stats_history(
     String,
 > {
     use crate::schema::artist_history::dsl::*;
+    use crate::schema::spotify_id_mapping::dsl::*;
 
     let mut query = artist_history.filter(user_id.eq(user.id)).into_boxed();
     if let Some(timeframe_id) = restrict_to_timeframe_id {
         query = query.filter(timeframe.eq(timeframe_id))
     }
-    let artists_stats_opt: Option<Vec<ArtistHistoryEntry>> =
-        diesel_not_found_to_none(query.load::<ArtistHistoryEntry>(&conn.0))?;
+    let query =
+        query
+            .inner_join(spotify_id_mapping)
+            .select((spotify_id, update_time, ranking, timeframe));
+    let artists_stats_opt: Option<Vec<StatsHistoryQueryResItem>> =
+        diesel_not_found_to_none(query.load::<StatsHistoryQueryResItem>(&conn.0))?;
 
-    let artist_stats: Vec<ArtistHistoryEntry> = match artists_stats_opt {
+    let artist_stats: Vec<StatsHistoryQueryResItem> = match artists_stats_opt {
         None => return Ok(None),
         Some(res) => res,
     };
@@ -110,8 +132,10 @@ pub fn get_artist_stats_history(
         });
 
     // Group the artist stats by their update timestamp
-    let mut artist_stats_by_update_timestamp: HashMap<NaiveDateTime, Vec<&ArtistHistoryEntry>> =
-        HashMap::new();
+    let mut artist_stats_by_update_timestamp: HashMap<
+        NaiveDateTime,
+        Vec<&StatsHistoryQueryResItem>,
+    > = HashMap::new();
     for history_entry in &artist_stats {
         let entries_for_update = artist_stats_by_update_timestamp
             .entry(history_entry.update_time.clone())
@@ -150,6 +174,7 @@ pub fn get_track_stats(
     conn: &DbConn,
     spotify_access_token: &str,
 ) -> Result<Option<Vec<(u8, Track)>>, String> {
+    use crate::schema::spotify_id_mapping::dsl::*;
     use crate::schema::track_history::dsl::*;
 
     let track_stats_opt = diesel_not_found_to_none(
@@ -158,7 +183,9 @@ pub fn get_track_stats(
             // Only include tracks from the most recent update
             .filter(update_time.eq(user.last_update_time))
             .order_by(update_time)
-            .load::<TrackHistoryEntry>(&conn.0),
+            .inner_join(spotify_id_mapping)
+            .select((timeframe, spotify_id))
+            .load::<StatsQueryResultItem>(&conn.0),
     )?;
 
     let track_stats = match track_stats_opt {
@@ -197,16 +224,19 @@ pub fn get_track_stats_history(
     )>,
     String,
 > {
+    use crate::schema::spotify_id_mapping::dsl::*;
     use crate::schema::track_history::dsl::*;
 
-    let track_stats_opt: Option<Vec<TrackHistoryEntry>> = diesel_not_found_to_none(
+    let track_stats_opt: Option<Vec<StatsHistoryQueryResItem>> = diesel_not_found_to_none(
         track_history
             .filter(user_id.eq(user.id))
             .order_by(update_time)
-            .load::<TrackHistoryEntry>(&conn.0),
+            .inner_join(spotify_id_mapping)
+            .select((spotify_id, update_time, ranking, timeframe))
+            .load::<StatsHistoryQueryResItem>(&conn.0),
     )?;
 
-    let track_stats: Vec<TrackHistoryEntry> = match track_stats_opt {
+    let track_stats: Vec<StatsHistoryQueryResItem> = match track_stats_opt {
         None => return Ok(None),
         Some(res) => res,
     };
@@ -227,8 +257,10 @@ pub fn get_track_stats_history(
         });
 
     // Group the track stats by their update timestamp
-    let mut track_stats_by_update_timestamp: HashMap<NaiveDateTime, Vec<&TrackHistoryEntry>> =
-        HashMap::new();
+    let mut track_stats_by_update_timestamp: HashMap<
+        NaiveDateTime,
+        Vec<&StatsHistoryQueryResItem>,
+    > = HashMap::new();
     for history_entry in &track_stats {
         let entries_for_update = track_stats_by_update_timestamp
             .entry(history_entry.update_time.clone())
@@ -257,4 +289,57 @@ pub fn get_track_stats_history(
         .collect();
 
     return Ok(Some((tracks_by_id, updates)));
+}
+
+/// Retrieves a list of the internal mapped Spotify ID for each of the provided spotify IDs,
+/// inserting new entries as needed and taking care of it all behind the scenes.
+pub fn retrieve_mapped_spotify_ids(
+    conn: &DbConn,
+    spotify_ids: &[String],
+) -> Result<Vec<i32>, String> {
+    use crate::schema::spotify_id_mapping::dsl::*;
+
+    let spotify_id_items: Vec<NewSpotifyIdMapping> = spotify_ids
+        .iter()
+        .map(|spotify_id_item| NewSpotifyIdMapping {
+            spotify_id: spotify_id_item,
+        })
+        .collect();
+
+    // Try to create new entries for all included spotify IDs, ignoring failures due to unique
+    // constraint violations
+    diesel::insert_or_ignore_into(spotify_id_mapping)
+        .values(spotify_id_items)
+        .execute(&conn.0)
+        .map_err(|err| -> String {
+            error!("Error inserting spotify ids into mapping table: {:?}", err);
+            "Error inserting spotify ids into mapping table".into()
+        })?;
+
+    // Retrieve the mapped spotify ids, including any inserted ones
+    let mapped_ids: Vec<SpotifyIdMapping> = spotify_id_mapping
+        .filter(spotify_id.eq_any(spotify_ids))
+        .load(&conn.0)
+        .map_err(|err| -> String {
+            error!("Error retrieving mapped spotify ids: {:?}", err);
+            "Error retrieving mapped spotify ids".into()
+        })?;
+    let mapped_ids_count = mapped_ids.len();
+
+    // Match up the orderings to that the mapped ids are in the same ordering as the provided ids
+    let mut mapped_ids_mapping: HashMap<String, i32> = HashMap::new();
+    for mapping in mapped_ids {
+        mapped_ids_mapping.insert(mapping.spotify_id, mapping.id);
+    }
+
+    let mut mapped_ids = Vec::with_capacity(mapped_ids_count);
+    for spotify_id_item in spotify_ids {
+        mapped_ids.push(
+            *mapped_ids_mapping
+                .get(spotify_id_item)
+                .expect("Mapping didn't have an entry for one of the provided spotify ids"),
+        );
+    }
+
+    Ok(mapped_ids)
 }

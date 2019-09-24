@@ -3,7 +3,7 @@ table! {
         id -> Bigint,
         user_id -> Bigint,
         update_time -> Datetime,
-        spotify_id -> Varchar,
+        mapped_spotify_id -> Integer,
         timeframe -> Unsigned<Tinyint>,
         ranking -> Unsigned<Smallint>,
     }
@@ -20,11 +20,18 @@ table! {
 }
 
 table! {
+    spotify_id_mapping (id) {
+        id -> Integer,
+        spotify_id -> Varchar,
+    }
+}
+
+table! {
     track_history (id) {
         id -> Bigint,
         user_id -> Bigint,
         update_time -> Datetime,
-        spotify_id -> Varchar,
+        mapped_spotify_id -> Integer,
         timeframe -> Unsigned<Tinyint>,
         ranking -> Unsigned<Smallint>,
     }
@@ -51,12 +58,15 @@ table! {
     }
 }
 
+joinable!(artist_history -> spotify_id_mapping (mapped_spotify_id));
 joinable!(artist_history -> users (user_id));
+joinable!(track_history -> spotify_id_mapping (mapped_spotify_id));
 joinable!(track_history -> users (user_id));
 
 allow_tables_to_appear_in_same_query!(
     artist_history,
     artist_stats_history,
+    spotify_id_mapping,
     track_history,
     track_stats_history,
     users,

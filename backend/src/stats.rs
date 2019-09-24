@@ -1,7 +1,7 @@
 use std::cmp::Reverse;
-use std::collections::{HashMap, HashSet};
 
 use chrono::NaiveDateTime;
+use hashbrown::{HashMap, HashSet};
 
 use crate::models::{Artist, TimeFrames, Track};
 

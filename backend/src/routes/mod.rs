@@ -1,9 +1,9 @@
-use std::collections::HashMap;
 use std::io::Read;
 use std::sync::Mutex;
 
 use chrono::{NaiveDateTime, Utc};
 use diesel::{self, prelude::*};
+use hashbrown::HashMap;
 use rocket::http::{RawStr, Status};
 use rocket::response::status;
 use rocket::{response::Redirect, State};
@@ -194,11 +194,12 @@ pub fn oauth_cb(conn: DbConn, error: Option<&RawStr>, code: &RawStr) -> Result<R
         return Err("An error occured while authenticating with Spotify.".into());
     }
 
+    let oauth_cb_url = crate::conf::CONF.get_absolute_oauth_cb_uri();
+
     // Shoot the code back to Spotify and get an API token for the user in return
     let mut params = HashMap::new();
     params.insert("grant_type", "authorization_code");
     params.insert("code", code.as_str());
-    let oauth_cb_url = crate::conf::CONF.get_absolute_oauth_cb_uri();
     params.insert("redirect_uri", oauth_cb_url.as_str());
     params.insert("client_id", CONF.client_id.as_str());
     params.insert("client_secret", CONF.client_secret.as_str());
@@ -255,7 +256,7 @@ pub fn oauth_cb(conn: DbConn, error: Option<&RawStr>, code: &RawStr) -> Result<R
         refresh_token,
     };
 
-    let res = match diesel::insert_into(crate::schema::users::table)
+    match diesel::insert_into(crate::schema::users::table)
         .values(&user)
         .execute(&conn.0)
     {
@@ -267,7 +268,7 @@ pub fn oauth_cb(conn: DbConn, error: Option<&RawStr>, code: &RawStr) -> Result<R
             error!("Error inserting row: {:?}", err);
             return Err("Error inserting user into database".into());
         }
-        Ok(res) => {
+        Ok(_) => {
             // Retrieve the inserted user row
             let user = crate::db_util::get_user_by_spotify_id(&conn, &user_spotify_id)?
                 .expect("Failed to load just inserted user from database");

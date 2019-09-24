@@ -1,12 +1,12 @@
-use std::collections::HashMap;
 use std::default::Default;
 use std::vec;
 
-use chrono::{NaiveDateTime, Utc};
+use chrono::NaiveDateTime;
+use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::schema::{artist_history, track_history, users};
+use crate::schema::{artist_history, spotify_id_mapping, track_history, users};
 
 #[derive(Insertable)]
 #[table_name = "users"]
@@ -35,20 +35,8 @@ pub struct User {
 #[table_name = "track_history"]
 pub struct NewTrackHistoryEntry {
     pub user_id: i64,
-    pub spotify_id: String,
+    pub mapped_spotify_id: i32,
     pub update_time: NaiveDateTime,
-    pub timeframe: u8,
-    pub ranking: u16,
-}
-
-#[derive(Serialize, Queryable, Associations)]
-#[belongs_to(User)]
-#[table_name = "track_history"]
-pub struct TrackHistoryEntry {
-    pub id: i64,
-    pub user_id: i64,
-    pub update_time: NaiveDateTime,
-    pub spotify_id: String,
     pub timeframe: u8,
     pub ranking: u16,
 }
@@ -58,35 +46,23 @@ pub struct TrackHistoryEntry {
 #[table_name = "artist_history"]
 pub struct NewArtistHistoryEntry {
     pub user_id: i64,
-    pub spotify_id: String,
+    pub mapped_spotify_id: i32,
     pub update_time: NaiveDateTime,
     pub timeframe: u8,
     pub ranking: u16,
 }
 
-#[derive(Serialize, Queryable, Associations, Debug)]
-#[belongs_to(User)]
-#[table_name = "artist_history"]
-pub struct ArtistHistoryEntry {
-    pub id: i64,
-    pub user_id: i64,
-    pub update_time: NaiveDateTime,
+#[derive(Serialize, Associations, Debug, Queryable)]
+#[table_name = "spotify_id_mapping"]
+pub struct SpotifyIdMapping {
+    pub id: i32,
     pub spotify_id: String,
-    pub timeframe: u8,
-    pub ranking: u16,
 }
 
-impl Default for ArtistHistoryEntry {
-    fn default() -> Self {
-        ArtistHistoryEntry {
-            id: 0,
-            user_id: 0,
-            update_time: Utc::now().naive_utc(),
-            spotify_id: "".into(),
-            timeframe: 0,
-            ranking: 0,
-        }
-    }
+#[derive(Serialize, Insertable)]
+#[table_name = "spotify_id_mapping"]
+pub struct NewSpotifyIdMapping<'a> {
+    pub spotify_id: &'a str,
 }
 
 #[derive(Serialize)]

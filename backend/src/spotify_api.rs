@@ -1,10 +1,10 @@
-use std::collections::HashMap;
 use std::ops::Try;
 use std::thread;
 
 use chrono::Utc;
 use crossbeam::channel;
 use diesel::prelude::*;
+use hashbrown::HashMap;
 use reqwest;
 use serde::{Deserialize, Serialize};
 
@@ -187,20 +187,42 @@ pub fn store_stats_snapshot(
 
     let update_time = stats.last_update_time;
 
+    let artist_spotify_ids: Vec<String> = stats
+        .artists
+        .iter()
+        .flat_map(|(_artist_timeframe, artists)| artists.iter().map(|artist| artist.id.clone()))
+        .collect::<Vec<_>>();
+    let mapped_artist_spotify_ids =
+        crate::db_util::retrieve_mapped_spotify_ids(conn, &artist_spotify_ids)?;
+
     let artist_entries: Vec<NewArtistHistoryEntry> = stats
         .artists
         .into_iter()
-        .flat_map(|(artist_timeframe, artists)| {
+        .enumerate()
+        .flat_map(|(i, (artist_timeframe, artists))| {
             artists
                 .into_iter()
                 .enumerate()
-                .map(move |(artist_ranking, artist)| NewArtistHistoryEntry {
-                    user_id: user.id,
-                    spotify_id: artist.id,
-                    update_time,
-                    timeframe: map_timeframe_to_timeframe_id(&artist_timeframe),
-                    ranking: artist_ranking as u16,
+                .map(move |(artist_ranking, _artist)| {
+                    let mapped_artist_spotify_id_ix = i + artist_ranking;
+                    (
+                        artist_timeframe,
+                        mapped_artist_spotify_id_ix,
+                        artist_ranking,
+                    )
                 })
+                .map(
+                    |(artist_timeframe, mapped_artist_spotify_id_ix, artist_ranking)| {
+                        NewArtistHistoryEntry {
+                            user_id: user.id,
+                            mapped_spotify_id: mapped_artist_spotify_ids
+                                [mapped_artist_spotify_id_ix],
+                            update_time,
+                            timeframe: map_timeframe_to_timeframe_id(&artist_timeframe),
+                            ranking: artist_ranking as u16,
+                        }
+                    },
+                )
         })
         .collect();
 
@@ -212,20 +234,37 @@ pub fn store_stats_snapshot(
             "Error inserting user into database".into()
         })?;
 
+    let track_spotify_ids: Vec<String> = stats
+        .tracks
+        .iter()
+        .flat_map(|(_artist_timeframe, tracks)| tracks.iter().map(|track| track.id.clone()))
+        .collect::<Vec<_>>();
+    let mapped_track_spotify_ids: Vec<i32> =
+        crate::db_util::retrieve_mapped_spotify_ids(conn, &track_spotify_ids)?;
+
     let track_entries: Vec<NewTrackHistoryEntry> = stats
         .tracks
         .into_iter()
-        .flat_map(|(track_timeframe, tracks)| {
+        .enumerate()
+        .flat_map(|(i, (track_timeframe, tracks))| {
             tracks
                 .into_iter()
                 .enumerate()
-                .map(move |(track_ranking, track)| NewTrackHistoryEntry {
-                    user_id: user.id,
-                    spotify_id: track.id,
-                    update_time,
-                    timeframe: map_timeframe_to_timeframe_id(&track_timeframe),
-                    ranking: track_ranking as u16,
+                .map(move |(track_ranking, _track)| {
+                    let mapped_track_spotify_id_ix = i + track_ranking;
+                    (track_timeframe, mapped_track_spotify_id_ix, track_ranking)
                 })
+                .map(
+                    |(track_timeframe, mapped_track_spotify_id_ix, track_ranking)| {
+                        NewTrackHistoryEntry {
+                            user_id: user.id,
+                            mapped_spotify_id: mapped_track_spotify_ids[mapped_track_spotify_id_ix],
+                            update_time,
+                            timeframe: map_timeframe_to_timeframe_id(&track_timeframe),
+                            ranking: track_ranking as u16,
+                        }
+                    },
+                )
         })
         .collect();
 
