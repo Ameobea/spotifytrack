@@ -100,13 +100,15 @@ pub fn get_artist_stats(
     let (artist_popularity_history, (tracks_by_id, top_tracks)) = match rayon::join(
         || crate::db_util::get_artist_rank_history_single_artist(&user, conn, &artist_id),
         || -> Result<Option<(HashMap<String, Track>, Vec<(String, usize)>)>, String> {
-            // TODO: This is dumb inefficient; no need to fetch ALL artist metadata.  Need to improve once I
-            // set up the alternative metadata mappings.
-            let (mut tracks_by_id, track_history) =
-                match db_util::get_track_stats_history(&user, conn2, spotify_access_token)? {
-                    Some(res) => res,
-                    None => return Ok(None),
-                };
+            let (mut tracks_by_id, track_history) = match db_util::get_track_stats_history(
+                &user,
+                conn2,
+                spotify_access_token,
+                &artist_id,
+            )? {
+                Some(res) => res,
+                None => return Ok(None),
+            };
             let top_tracks =
                 crate::stats::get_tracks_for_artist(&artist_id, &tracks_by_id, &track_history);
             // Only send track metadata for this artist's tracks
@@ -306,6 +308,20 @@ pub fn oauth_cb(conn: DbConn, error: Option<&RawStr>, code: &RawStr) -> Result<R
     )))
 }
 
+/// Returns `true` if the token is valid, false if it's not
+fn validate_api_token(api_token_data: rocket::data::Data) -> Result<bool, String> {
+    let mut api_token: String = String::new();
+    api_token_data
+        .open()
+        .take(1024 * 1024)
+        .read_to_string(&mut api_token)
+        .map_err(|err| {
+            error!("Error reading provided admin API token: {:?}", err);
+            String::from("Error reading post data body")
+        })
+        .map(|_| api_token == CONF.admin_api_token)
+}
+
 /// This route is internal and hit by the cron job that is called to periodically update the stats
 /// for the least recently updated user.
 #[post("/update_user", data = "<api_token_data>")]
@@ -315,17 +331,7 @@ pub fn update_user(
 ) -> Result<status::Custom<String>, String> {
     use crate::schema::users::dsl::*;
 
-    let mut api_token: String = String::new();
-    api_token_data
-        .open()
-        .take(1024 * 1024)
-        .read_to_string(&mut api_token)
-        .map_err(|err| {
-            error!("Error reading provided admin API token: {:?}", err);
-            String::from("Error reading post data body")
-        })?;
-
-    if api_token != CONF.admin_api_token {
+    if !validate_api_token(api_token_data)? {
         return Ok(status::Custom(
             Status::Unauthorized,
             "Invalid API token supplied".into(),
@@ -357,14 +363,14 @@ pub fn update_user(
     let min_update_interval_seconds = crate::conf::CONF.min_update_interval;
     let now = chrono::Utc::now().naive_utc();
     let diff = now - user.last_update_time;
-    if diff < min_update_interval_seconds {
-        let msg = format!(
-            "{} since last update; not updating anything right now.",
-            diff
-        );
-        info!("{}", msg);
-        return Ok(status::Custom(Status::Ok, msg));
-    }
+    // if diff < min_update_interval_seconds {
+    //     let msg = format!(
+    //         "{} since last update; not updating anything right now.",
+    //         diff
+    //     );
+    //     info!("{}", msg);
+    //     return Ok(status::Custom(Status::Ok, msg));
+    // }
     info!("{} since last update; proceeding with update.", diff);
 
     let stats = match crate::spotify_api::fetch_cur_stats(&user)? {
@@ -383,5 +389,29 @@ pub fn update_user(
     Ok(status::Custom(
         Status::Ok,
         format!("Successfully updated user {}", user.username),
+    ))
+}
+
+#[post("/populate_mapping_table", data = "<api_token_data>")]
+pub fn populate_mapping_table(
+    conn: DbConn,
+    api_token_data: rocket::data::Data,
+    token_data: State<Mutex<SpotifyTokenData>>,
+) -> Result<status::Custom<String>, String> {
+    if !validate_api_token(api_token_data)? {
+        return Ok(status::Custom(
+            Status::Unauthorized,
+            "Invalid API token supplied".into(),
+        ));
+    }
+
+    let token_data = &mut *(&*token_data).lock().unwrap();
+    let spotify_access_token = token_data.get()?;
+
+    crate::db_util::populate_track_artist_mapping_table(&conn, &spotify_access_token)?;
+
+    Ok(status::Custom(
+        Status::Ok,
+        "Sucessfully populated mapping table".into(),
     ))
 }

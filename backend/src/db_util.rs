@@ -3,7 +3,9 @@ use diesel::prelude::*;
 use hashbrown::{HashMap, HashSet};
 
 use crate::benchmarking::mark;
-use crate::models::{Artist, NewSpotifyIdMapping, SpotifyIdMapping, TimeFrames, Track, User};
+use crate::models::{
+    Artist, NewSpotifyIdMapping, SpotifyIdMapping, TimeFrames, Track, TrackArtistPair, User,
+};
 use crate::DbConn;
 
 pub fn get_user_by_spotify_id(
@@ -272,6 +274,7 @@ pub fn get_track_stats_history(
     user: &User,
     conn: DbConn,
     spotify_access_token: &str,
+    parent_artist_id: &str,
 ) -> Result<
     Option<(
         HashMap<String, Track>,
@@ -279,17 +282,36 @@ pub fn get_track_stats_history(
     )>,
     String,
 > {
-    use crate::schema::spotify_id_mapping::dsl::*;
-    use crate::schema::track_history::dsl::*;
+    use crate::schema::spotify_id_mapping::{self, dsl::*};
+    use crate::schema::track_artist_mapping::{self, dsl::*};
+    use crate::schema::track_history::{self, dsl::*};
 
-    let track_stats_opt: Option<Vec<StatsHistoryQueryResItem>> = diesel_not_found_to_none(
-        track_history
-            .filter(user_id.eq(user.id))
-            .order_by(update_time)
-            .inner_join(spotify_id_mapping)
-            .select((spotify_id, update_time, ranking, timeframe))
-            .load::<StatsHistoryQueryResItem>(&conn.0),
-    )?;
+    let artist_inner_id: i32 = spotify_id_mapping
+        .filter(spotify_id_mapping::spotify_id.eq(parent_artist_id))
+        .select(spotify_id_mapping::id)
+        .first(&conn.0)
+        .map_err(|err| -> String {
+            error!(
+                "Error querying inner id of artist with spotify id {:?}: {:?}",
+                parent_artist_id, err
+            );
+            "Error looking up parent artist".into()
+        })?;
+
+    let query = track_artist_mapping
+        .filter(track_artist_mapping::artist_id.eq(artist_inner_id))
+        .inner_join(
+            track_history.on(track_history::mapped_spotify_id.eq(track_artist_mapping::track_id)),
+        )
+        .filter(user_id.eq(user.id))
+        .inner_join(
+            spotify_id_mapping.on(track_artist_mapping::track_id.eq(spotify_id_mapping::id)),
+        )
+        .order_by(update_time)
+        .select((spotify_id, update_time, ranking, timeframe));
+    info!("{}", diesel::debug_query::<diesel::mysql::Mysql, _>(&query));
+    let track_stats_opt: Option<Vec<StatsHistoryQueryResItem>> =
+        diesel_not_found_to_none(query.load::<StatsHistoryQueryResItem>(&conn.0))?;
 
     let track_stats: Vec<StatsHistoryQueryResItem> = match track_stats_opt {
         None => return Ok(None),
@@ -348,14 +370,14 @@ pub fn get_track_stats_history(
 
 /// Retrieves a list of the internal mapped Spotify ID for each of the provided spotify IDs,
 /// inserting new entries as needed and taking care of it all behind the scenes.
-pub fn retrieve_mapped_spotify_ids(
+pub fn retrieve_mapped_spotify_ids<'a, T: Iterator<Item = &'a String> + Clone>(
     conn: &DbConn,
-    spotify_ids: &[String],
-) -> Result<Vec<i32>, String> {
+    spotify_ids: T,
+) -> Result<HashMap<String, i32>, String> {
     use crate::schema::spotify_id_mapping::dsl::*;
 
     let spotify_id_items: Vec<NewSpotifyIdMapping> = spotify_ids
-        .iter()
+        .clone()
         .map(|spotify_id_item| NewSpotifyIdMapping {
             spotify_id: spotify_id_item,
         })
@@ -379,7 +401,6 @@ pub fn retrieve_mapped_spotify_ids(
             error!("Error retrieving mapped spotify ids: {:?}", err);
             "Error retrieving mapped spotify ids".into()
         })?;
-    let mapped_ids_count = mapped_ids.len();
 
     // Match up the orderings to that the mapped ids are in the same ordering as the provided ids
     let mut mapped_ids_mapping: HashMap<String, i32> = HashMap::new();
@@ -387,14 +408,84 @@ pub fn retrieve_mapped_spotify_ids(
         mapped_ids_mapping.insert(mapping.spotify_id, mapping.id);
     }
 
-    let mut mapped_ids = Vec::with_capacity(mapped_ids_count);
-    for spotify_id_item in spotify_ids {
-        mapped_ids.push(
-            *mapped_ids_mapping
-                .get(spotify_id_item)
-                .expect("Mapping didn't have an entry for one of the provided spotify ids"),
-        );
+    Ok(mapped_ids_mapping)
+}
+
+/// Using the list of all stored track spotify IDs, retrieves fresh track metadata for all of them and populates
+/// the mapping table with artist-track pairs for all of them
+pub fn populate_track_artist_mapping_table(
+    conn: &DbConn,
+    spotify_access_token: &str,
+) -> Result<(), String> {
+    use crate::schema::spotify_id_mapping::dsl::*;
+    use crate::schema::track_artist_mapping::dsl::*;
+    use crate::schema::track_history::{self, dsl::*};
+
+    #[derive(Queryable)]
+    struct Ids {
+        pub track_id: i32,
+        pub spotify_id: String,
     }
 
-    Ok(mapped_ids)
+    // Get all unique track ids in the database mapped to their corresponding spotify IDs
+    let all_track_spotify_ids: Vec<Ids> = track_history
+        .inner_join(spotify_id_mapping)
+        .select((track_history::mapped_spotify_id, spotify_id))
+        .distinct()
+        .load::<Ids>(&conn.0)
+        .map_err(|err| -> String {
+            error!(
+                "Unable to query distinct track spotify IDs from database: {:?}",
+                err
+            );
+            "Unable to query distinct track spotify IDs from database".into()
+        })?;
+    let all_track_spotify_ids_refs = all_track_spotify_ids
+        .iter()
+        .map(|track_spotify_id| track_spotify_id.spotify_id.as_str())
+        .collect::<Vec<&str>>();
+
+    let mut track_spotify_id_to_internal_id_mapping = HashMap::new();
+    for ids in &all_track_spotify_ids {
+        track_spotify_id_to_internal_id_mapping.insert(ids.spotify_id.clone(), ids.track_id);
+    }
+
+    // Fetch track metadata for each of them
+    let tracks =
+        crate::spotify_api::fetch_tracks(spotify_access_token, &all_track_spotify_ids_refs)?;
+
+    // Map returned artist spotify ids to internal artist ids
+    let artist_spotify_ids: Vec<String> = tracks
+        .iter()
+        .flat_map(|track| track.artists.iter().map(|artist| artist.id.clone()))
+        .collect();
+    let artist_internal_id_mapping = retrieve_mapped_spotify_ids(conn, artist_spotify_ids.iter())?;
+
+    // Insert mapping items for each of the (track, artist) pairs
+    let pairs: Vec<TrackArtistPair> = tracks
+        .iter()
+        .flat_map(|track| {
+            let track_internal_id = track_spotify_id_to_internal_id_mapping[&track.id];
+
+            track
+                .artists
+                .iter()
+                .map(|artist| artist_internal_id_mapping[&artist.id])
+                .map(move |artist_internal_id| TrackArtistPair {
+                    artist_id: artist_internal_id,
+                    track_id: track_internal_id,
+                })
+        })
+        .collect();
+    diesel::insert_or_ignore_into(track_artist_mapping)
+        .values(&pairs)
+        .execute(&conn.0)
+        .map_err(|err| -> String {
+            error!(
+                "Error inserting artist/track pairs into mapping table: {:?}",
+                err
+            );
+            "Error inserting artist/track pairs into mapping table".into()
+        })
+        .map(|_| ())
 }

@@ -80,7 +80,6 @@ pub fn get_tracks_for_artist(
             let track_ids_by_artist = track_ids.iter().enumerate().filter(|(_i, track_id)| {
                 let track: &Track = tracks_by_id.get(track_id.clone()).unwrap();
                 track
-                    .album
                     .artists
                     .iter()
                     .find(|artist| artist.id == artist_id)

@@ -15,7 +15,7 @@ chrono = { version = "0.4.6", features = ["serde"] }
 
 crossbeam = "0.7.1"
 
-diesel = { version = "1.4.2", features = ["chrono"] }
+diesel = { version = "1.4.2", features = ["chrono", "mysql"] }
 
 dotenv = "0.14.0"
 

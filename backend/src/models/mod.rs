@@ -6,7 +6,9 @@ use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::schema::{artist_history, spotify_id_mapping, track_history, users};
+use crate::schema::{
+    artist_history, spotify_id_mapping, track_artist_mapping, track_history, users,
+};
 
 #[derive(Insertable)]
 #[table_name = "users"]
@@ -63,6 +65,13 @@ pub struct SpotifyIdMapping {
 #[table_name = "spotify_id_mapping"]
 pub struct NewSpotifyIdMapping<'a> {
     pub spotify_id: &'a str,
+}
+
+#[derive(Insertable)]
+#[table_name = "track_artist_mapping"]
+pub struct TrackArtistPair {
+    pub track_id: i32,
+    pub artist_id: i32,
 }
 
 #[derive(Serialize)]
@@ -200,6 +209,7 @@ pub struct TopTracksResponse {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Track {
     pub album: Album,
+    pub artists: Vec<Artist>,
     pub available_markets: Vec<String>,
     pub disc_number: usize,
     pub duration_ms: usize,

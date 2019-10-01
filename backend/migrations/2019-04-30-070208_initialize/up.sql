@@ -12,6 +12,25 @@ START TRANSACTION;
   CREATE INDEX spotify_id_ix ON `spotify_homepage`.`users` (spotify_id);
   CREATE INDEX update_time_ix ON `spotify_homepage`.`users` (last_update_time);
 
+  -- Table for mapping between spotify IDs and internal IDs
+  CREATE TABLE `spotify_homepage`.`spotify_id_mapping` (
+    `id` INT NOT NULL AUTO_INCREMENT,
+    `spotify_id` VARCHAR(255) UNIQUE NOT NULL,
+    PRIMARY KEY (`id`)
+  );
+  CREATE INDEX spotify_id_ix ON `spotify_homepage`.`spotify_id_mapping` (spotify_id);
+
+  -- Table for parent/child relationships between tracks and artists.  Tracks can have multiple parents.
+  CREATE TABLE `spotify_homepage`.`track_artist_mapping` (
+    `id` INT NOT NULL AUTO_INCREMENT,
+    `track_id` INT NOT NULL,
+    `artist_id` INT NOT NULL,
+    PRIMARY KEY (`id`),
+    FOREIGN KEY (track_id) REFERENCES spotify_id_mapping(id) ON DELETE CASCADE,
+    FOREIGN KEY (artist_id) REFERENCES spotify_id_mapping(id) ON DELETE CASCADE
+  );
+  ALTER TABLE `spotify_homepage`.`track_artist_mapping` ADD UNIQUE `unique_index`(`track_id`, `artist_id`);
+
   CREATE TABLE `spotify_homepage`.`spotify_id_mapping` (
     `id` INT NOT NULL AUTO_INCREMENT,
     `spotify_id` VARCHAR(255) UNIQUE NOT NULL,

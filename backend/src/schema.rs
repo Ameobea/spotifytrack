@@ -27,6 +27,14 @@ table! {
 }
 
 table! {
+    track_artist_mapping (id) {
+        id -> Integer,
+        track_id -> Integer,
+        artist_id -> Integer,
+    }
+}
+
+table! {
     track_history (id) {
         id -> Bigint,
         user_id -> Bigint,
@@ -67,6 +75,7 @@ allow_tables_to_appear_in_same_query!(
     artist_history,
     artist_stats_history,
     spotify_id_mapping,
+    track_artist_mapping,
     track_history,
     track_stats_history,
     users,

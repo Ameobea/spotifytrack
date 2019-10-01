@@ -4,7 +4,7 @@ use std::thread;
 use chrono::Utc;
 use crossbeam::channel;
 use diesel::prelude::*;
-use hashbrown::HashMap;
+use hashbrown::{HashMap, HashSet};
 use reqwest;
 use serde::{Deserialize, Serialize};
 
@@ -12,7 +12,7 @@ use crate::conf::CONF;
 use crate::models::{
     AccessTokenResponse, Artist, NewArtistHistoryEntry, NewTrackHistoryEntry,
     SpotifyBatchArtistsResponse, SpotifyBatchTracksResponse, SpotifyResponse, StatsSnapshot,
-    TopArtistsResponse, TopTracksResponse, Track, User, UserProfile,
+    TopArtistsResponse, TopTracksResponse, Track, TrackArtistPair, User, UserProfile,
 };
 use crate::DbConn;
 
@@ -187,51 +187,37 @@ pub fn store_stats_snapshot(
 
     let update_time = stats.last_update_time;
 
-    let artist_spotify_ids: Vec<String> = stats
+    let artist_spotify_ids: HashSet<String> = stats
         .artists
         .iter()
         .flat_map(|(_artist_timeframe, artists)| artists.iter().map(|artist| artist.id.clone()))
-        .collect::<Vec<_>>();
+        // Also include all other artists included in track metadata
+        .chain(stats.tracks.iter().flat_map(|(_track_timeframe, tracks)| {
+            tracks
+                .iter()
+                .flat_map(|track| track.artists.iter().map(|artist| artist.id.clone()))
+        }))
+        .collect::<HashSet<_>>();
     let mapped_artist_spotify_ids =
-        crate::db_util::retrieve_mapped_spotify_ids(conn, &artist_spotify_ids)?;
-
-    let artist_count_per_time_period: [usize; 3] = [
-        stats.artists.short.len(),
-        stats.artists.medium.len(),
-        stats.artists.long.len(),
-    ];
+        crate::db_util::retrieve_mapped_spotify_ids(conn, artist_spotify_ids.iter())?;
 
     let artist_entries: Vec<NewArtistHistoryEntry> = stats
         .artists
         .into_iter()
-        .enumerate()
-        .flat_map(|(i, (artist_timeframe, artists))| {
+        .flat_map(|(artist_timeframe, artists)| {
             artists
                 .into_iter()
                 .enumerate()
-                .map(move |(artist_ranking, _artist)| {
-                    let mapped_artist_spotify_id_ix: usize = (0..i)
-                        .map(|i| artist_count_per_time_period[i])
-                        .sum::<usize>()
-                        + artist_ranking;
-                    (
-                        artist_timeframe,
-                        mapped_artist_spotify_id_ix,
-                        artist_ranking,
-                    )
+                .map(move |(artist_ranking, artist)| (artist_timeframe, artist_ranking, artist.id))
+                .map(|(artist_timeframe, artist_ranking, artist_spotify_id)| {
+                    NewArtistHistoryEntry {
+                        user_id: user.id,
+                        mapped_spotify_id: mapped_artist_spotify_ids[&artist_spotify_id],
+                        update_time,
+                        timeframe: map_timeframe_to_timeframe_id(&artist_timeframe),
+                        ranking: artist_ranking as u16,
+                    }
                 })
-                .map(
-                    |(artist_timeframe, mapped_artist_spotify_id_ix, artist_ranking)| {
-                        NewArtistHistoryEntry {
-                            user_id: user.id,
-                            mapped_spotify_id: mapped_artist_spotify_ids
-                                [mapped_artist_spotify_id_ix],
-                            update_time,
-                            timeframe: map_timeframe_to_timeframe_id(&artist_timeframe),
-                            ranking: artist_ranking as u16,
-                        }
-                    },
-                )
         })
         .collect();
 
@@ -248,39 +234,51 @@ pub fn store_stats_snapshot(
         .iter()
         .flat_map(|(_artist_timeframe, tracks)| tracks.iter().map(|track| track.id.clone()))
         .collect::<Vec<_>>();
-    let mapped_track_spotify_ids: Vec<i32> =
-        crate::db_util::retrieve_mapped_spotify_ids(conn, &track_spotify_ids)?;
+    let mapped_track_spotify_ids =
+        crate::db_util::retrieve_mapped_spotify_ids(conn, track_spotify_ids.iter())?;
 
-    let track_count_per_time_period: [usize; 3] = [
-        stats.tracks.short.len(),
-        stats.tracks.medium.len(),
-        stats.tracks.long.len(),
-    ];
+    // Create track/artist mapping entries for each (track, artist) pair
+    let track_artist_pairs: Vec<(TrackArtistPair)> = stats
+        .tracks
+        .iter()
+        .flat_map(|(_artist_timeframe, tracks)| {
+            tracks.iter().flat_map(|track| {
+                let track_internal_id = mapped_track_spotify_ids[&track.id];
+
+                track
+                    .artists
+                    .iter()
+                    .map(|artist| mapped_artist_spotify_ids[&artist.id])
+                    .map(move |artist_internal_id| TrackArtistPair {
+                        track_id: track_internal_id,
+                        artist_id: artist_internal_id,
+                    })
+            })
+        })
+        .collect();
+    diesel::insert_or_ignore_into(crate::schema::track_artist_mapping::table)
+        .values(&track_artist_pairs)
+        .execute(&conn.0)
+        .map_err(|err| -> String {
+            error!("Error inserting track/artist mappings: {:?}", err);
+            "Error inserting track/artist metadata into database".into()
+        })?;
 
     let track_entries: Vec<NewTrackHistoryEntry> = stats
         .tracks
         .into_iter()
-        .enumerate()
-        .flat_map(|(i, (track_timeframe, tracks))| {
+        .flat_map(|(track_timeframe, tracks)| {
             tracks
                 .into_iter()
                 .enumerate()
-                .map(move |(track_ranking, _track)| {
-                    let mapped_track_spotify_id_ix = (0..i)
-                        .map(|i| track_count_per_time_period[i])
-                        .sum::<usize>()
-                        + track_ranking;
-                    (track_timeframe, mapped_track_spotify_id_ix, track_ranking)
-                })
+                .map(move |(track_ranking, track)| (track_timeframe, track_ranking, track.id))
                 .map(
-                    |(track_timeframe, mapped_track_spotify_id_ix, track_ranking)| {
-                        NewTrackHistoryEntry {
-                            user_id: user.id,
-                            mapped_spotify_id: mapped_track_spotify_ids[mapped_track_spotify_id_ix],
-                            update_time,
-                            timeframe: map_timeframe_to_timeframe_id(&track_timeframe),
-                            ranking: track_ranking as u16,
-                        }
+                    |(track_timeframe, track_ranking, track_spotify_id)| NewTrackHistoryEntry {
+                        user_id: user.id,
+                        mapped_spotify_id: mapped_track_spotify_ids[&track_spotify_id],
+                        update_time,
+                        timeframe: map_timeframe_to_timeframe_id(&track_timeframe),
+                        ranking: track_ranking as u16,
                     },
                 )
         })
