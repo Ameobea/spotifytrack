@@ -62,27 +62,6 @@ pub fn get_top_genres_by_artists(
     (all_timestamps, counts_by_genre)
 }
 
-/// For each timeframe update in a user's update history, computes the artists popularity in each
-/// of them and retuns the results as an array of popularities for each update.
-pub fn get_artist_popularity_history(
-    artist_id: &str,
-    artist_history: &[(NaiveDateTime, TimeFrames<String>)],
-) -> Vec<(NaiveDateTime, [Option<usize>; 3])> {
-    let mut artist_popularity_history = Vec::with_capacity(artist_history.len());
-
-    for (update_timestamp, update) in artist_history {
-        let mut popularities_for_update: [Option<usize>; 3] = [None; 3];
-        for (i, (_timeframe, artists)) in update.iter().enumerate() {
-            let popularity = artists.iter().position(|id| id == artist_id);
-            popularities_for_update[i] = popularity;
-        }
-
-        artist_popularity_history.push((update_timestamp.clone(), popularities_for_update));
-    }
-
-    artist_popularity_history
-}
-
 /// Gets a list of all tracks for a given artist that a user has ever had in their top tracks for
 /// any time period, sorted by their frequency of appearance and ranking when appeared.
 ///

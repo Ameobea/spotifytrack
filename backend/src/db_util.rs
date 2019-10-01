@@ -38,6 +38,7 @@ struct StatsQueryResultItem {
     spotify_id: String,
 }
 
+/// Returns the top artists for the last update for the given user.  Items are returned as `(timeframe_id, artist)`.
 pub fn get_artist_stats(
     user: &User,
     conn: DbConn,
@@ -85,6 +86,53 @@ struct StatsHistoryQueryResItem {
     update_time: NaiveDateTime,
     ranking: u16,
     timeframe: u8,
+}
+
+#[derive(Queryable)]
+struct ArtistRankHistoryResItem {
+    update_time: NaiveDateTime,
+    ranking: u16,
+    timeframe: u8,
+}
+
+pub fn get_artist_rank_history_single_artist(
+    user: &User,
+    conn: DbConn,
+    artist_spotify_id: &str,
+) -> Result<Option<Vec<(NaiveDateTime, [Option<u16>; 3])>>, String> {
+    use crate::schema::artist_history::dsl::*;
+    use crate::schema::spotify_id_mapping::dsl::*;
+
+    let query = artist_history
+        .filter(user_id.eq(user.id))
+        .inner_join(spotify_id_mapping)
+        .filter(spotify_id.eq(artist_spotify_id))
+        .order_by(update_time.asc())
+        .select((update_time, ranking, timeframe));
+    let res = match diesel_not_found_to_none(query.load::<ArtistRankHistoryResItem>(&conn.0))? {
+        Some(res) => res,
+        None => return Ok(None),
+    };
+    if res.is_empty() {
+        return Ok(None);
+    }
+
+    let mut output: Vec<(NaiveDateTime, [Option<u16>; 3])> = Vec::new();
+
+    let mut cur_update: (NaiveDateTime, [Option<u16>; 3]) =
+        (res.first().unwrap().update_time.clone(), [None; 3]);
+    for update in res {
+        if update.update_time != cur_update.0 {
+            output.push(std::mem::replace(
+                &mut cur_update,
+                (update.update_time.clone(), [None; 3]),
+            ));
+        }
+
+        cur_update.1[update.timeframe as usize] = Some(update.ranking);
+    }
+
+    Ok(Some(output))
 }
 
 pub fn get_artist_stats_history(

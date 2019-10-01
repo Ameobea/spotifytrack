@@ -72,7 +72,7 @@ pub fn get_current_stats(
 pub struct ArtistStats {
     pub artist: Artist,
     pub tracks_by_id: HashMap<String, Track>,
-    pub popularity_history: Vec<(NaiveDateTime, [Option<usize>; 3])>,
+    pub popularity_history: Vec<(NaiveDateTime, [Option<u16>; 3])>,
     pub top_tracks: Vec<(String, usize)>,
 }
 
@@ -97,22 +97,11 @@ pub fn get_artist_stats(
     let spotify_access_token = token_data.get()?;
     mark("Got spotify access token");
 
-    // TODO: This is dumb inefficient; no need to fetch ALL artist metadata.  Need to improve once I
-    // set up the alternative metadata mappings.
-    let ((mut artists_by_id, popularity_history), (tracks_by_id, top_tracks)) = match rayon::join(
-        || {
-            let (artists_by_id, artist_stats_history) =
-                match db_util::get_artist_stats_history(&user, conn, spotify_access_token, None)? {
-                    Some(res) => res,
-                    None => return Ok(None),
-                };
-
-            let popularity_history =
-                crate::stats::get_artist_popularity_history(&artist_id, &artist_stats_history);
-
-            Ok(Some((artists_by_id, popularity_history)))
-        },
-        || {
+    let (artist_popularity_history, (tracks_by_id, top_tracks)) = match rayon::join(
+        || crate::db_util::get_artist_rank_history_single_artist(&user, conn, &artist_id),
+        || -> Result<Option<(HashMap<String, Track>, Vec<(String, usize)>)>, String> {
+            // TODO: This is dumb inefficient; no need to fetch ALL artist metadata.  Need to improve once I
+            // set up the alternative metadata mappings.
             let (mut tracks_by_id, track_history) =
                 match db_util::get_track_stats_history(&user, conn2, spotify_access_token)? {
                     Some(res) => res,
@@ -137,24 +126,19 @@ pub fn get_artist_stats(
     };
     mark("Fetched artists stats and top tracks");
 
-    let artist: Artist = match artists_by_id.remove(&artist_id) {
+    let artist = match crate::spotify_api::fetch_artists(spotify_access_token, &[&artist_id])?
+        .drain(..)
+        .next()
+    {
         Some(artist) => artist,
-        None => {
-            let mut artists: Vec<Artist> =
-                crate::spotify_api::fetch_artists(spotify_access_token, &[&artist_id])?;
-            match artists.pop() {
-                Some(artist) => artist,
-                // Artist no longer exists on Spotify's end
-                None => return Ok(None),
-            }
-        }
+        None => return Ok(None),
     };
     mark("Found matching artist to use");
 
     let stats = ArtistStats {
         artist,
         tracks_by_id,
-        popularity_history,
+        popularity_history: artist_popularity_history,
         top_tracks,
     };
     Ok(Some(Json(stats)))
