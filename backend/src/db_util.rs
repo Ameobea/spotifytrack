@@ -109,6 +109,10 @@ pub fn get_artist_rank_history_single_artist(
         .filter(spotify_id.eq(artist_spotify_id))
         .order_by(update_time.asc())
         .select((update_time, ranking, timeframe));
+    // debug!(
+    //     "{:?}",
+    //     diesel::debug_query::<diesel::mysql::Mysql, _>(&query)
+    // );
     let res = match diesel_not_found_to_none(query.load::<ArtistRankHistoryResItem>(&conn.0))? {
         Some(res) => res,
         None => return Ok(None),
@@ -131,6 +135,7 @@ pub fn get_artist_rank_history_single_artist(
 
         cur_update.1[update.timeframe as usize] = Some(update.ranking);
     }
+    output.push(cur_update);
 
     Ok(Some(output))
 }

@@ -195,6 +195,12 @@ pub fn store_stats_snapshot(
     let mapped_artist_spotify_ids =
         crate::db_util::retrieve_mapped_spotify_ids(conn, &artist_spotify_ids)?;
 
+    let artist_count_per_time_period: [usize; 3] = [
+        stats.artists.short.len(),
+        stats.artists.medium.len(),
+        stats.artists.long.len(),
+    ];
+
     let artist_entries: Vec<NewArtistHistoryEntry> = stats
         .artists
         .into_iter()
@@ -204,7 +210,10 @@ pub fn store_stats_snapshot(
                 .into_iter()
                 .enumerate()
                 .map(move |(artist_ranking, _artist)| {
-                    let mapped_artist_spotify_id_ix = i + artist_ranking;
+                    let mapped_artist_spotify_id_ix: usize = (0..i)
+                        .map(|i| artist_count_per_time_period[i])
+                        .sum::<usize>()
+                        + artist_ranking;
                     (
                         artist_timeframe,
                         mapped_artist_spotify_id_ix,
@@ -242,6 +251,12 @@ pub fn store_stats_snapshot(
     let mapped_track_spotify_ids: Vec<i32> =
         crate::db_util::retrieve_mapped_spotify_ids(conn, &track_spotify_ids)?;
 
+    let track_count_per_time_period: [usize; 3] = [
+        stats.tracks.short.len(),
+        stats.tracks.medium.len(),
+        stats.tracks.long.len(),
+    ];
+
     let track_entries: Vec<NewTrackHistoryEntry> = stats
         .tracks
         .into_iter()
@@ -251,7 +266,10 @@ pub fn store_stats_snapshot(
                 .into_iter()
                 .enumerate()
                 .map(move |(track_ranking, _track)| {
-                    let mapped_track_spotify_id_ix = i + track_ranking;
+                    let mapped_track_spotify_id_ix = (0..i)
+                        .map(|i| track_count_per_time_period[i])
+                        .sum::<usize>()
+                        + track_ranking;
                     (track_timeframe, mapped_track_spotify_id_ix, track_ranking)
                 })
                 .map(
