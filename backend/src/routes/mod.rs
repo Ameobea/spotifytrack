@@ -363,14 +363,14 @@ pub fn update_user(
     let min_update_interval_seconds = crate::conf::CONF.min_update_interval;
     let now = chrono::Utc::now().naive_utc();
     let diff = now - user.last_update_time;
-    // if diff < min_update_interval_seconds {
-    //     let msg = format!(
-    //         "{} since last update; not updating anything right now.",
-    //         diff
-    //     );
-    //     info!("{}", msg);
-    //     return Ok(status::Custom(Status::Ok, msg));
-    // }
+    if diff < min_update_interval_seconds {
+        let msg = format!(
+            "{} since last update; not updating anything right now.",
+            diff
+        );
+        info!("{}", msg);
+        return Ok(status::Custom(Status::Ok, msg));
+    }
     info!("{} since last update; proceeding with update.", diff);
 
     let stats = match crate::spotify_api::fetch_cur_stats(&user)? {
