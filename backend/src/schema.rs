@@ -1,5 +1,5 @@
 table! {
-    artist_history (id) {
+    artist_rank_snapshots (id) {
         id -> Bigint,
         user_id -> Bigint,
         update_time -> Datetime,
@@ -10,24 +10,14 @@ table! {
 }
 
 table! {
-    artist_stats_history (id) {
-        id -> Bigint,
-        spotify_id -> Varchar,
-        followers -> Unsigned<Bigint>,
-        popularity -> Unsigned<Bigint>,
-        uri -> Text,
-    }
-}
-
-table! {
-    spotify_id_mapping (id) {
+    spotify_items (id) {
         id -> Integer,
         spotify_id -> Varchar,
     }
 }
 
 table! {
-    track_artist_mapping (id) {
+    tracks_artists (id) {
         id -> Integer,
         track_id -> Integer,
         artist_id -> Integer,
@@ -35,22 +25,13 @@ table! {
 }
 
 table! {
-    track_history (id) {
+    track_rank_snapshots (id) {
         id -> Bigint,
         user_id -> Bigint,
         update_time -> Datetime,
         mapped_spotify_id -> Integer,
         timeframe -> Unsigned<Tinyint>,
         ranking -> Unsigned<Smallint>,
-    }
-}
-
-table! {
-    track_stats_history (id) {
-        id -> Bigint,
-        followers -> Unsigned<Bigint>,
-        popularity -> Unsigned<Bigint>,
-        playcount -> Nullable<Unsigned<Bigint>>,
     }
 }
 
@@ -66,17 +47,15 @@ table! {
     }
 }
 
-joinable!(artist_history -> spotify_id_mapping (mapped_spotify_id));
-joinable!(artist_history -> users (user_id));
-joinable!(track_history -> spotify_id_mapping (mapped_spotify_id));
-joinable!(track_history -> users (user_id));
+joinable!(artist_rank_snapshots -> spotify_items (mapped_spotify_id));
+joinable!(artist_rank_snapshots -> users (user_id));
+joinable!(track_rank_snapshots -> spotify_items (mapped_spotify_id));
+joinable!(track_rank_snapshots -> users (user_id));
 
 allow_tables_to_appear_in_same_query!(
-    artist_history,
-    artist_stats_history,
-    spotify_id_mapping,
-    track_artist_mapping,
-    track_history,
-    track_stats_history,
+    artist_rank_snapshots,
+    spotify_items,
+    tracks_artists,
+    track_rank_snapshots,
     users,
 );

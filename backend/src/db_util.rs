@@ -46,16 +46,16 @@ pub fn get_artist_stats(
     conn: DbConn,
     spotify_access_token: &str,
 ) -> Result<Option<Vec<(u8, Artist)>>, String> {
-    use crate::schema::artist_history::{self, dsl::*};
-    use crate::schema::spotify_id_mapping::{self, dsl::*};
+    use crate::schema::artist_rank_snapshots::{self, dsl::*};
+    use crate::schema::spotify_items::{self, dsl::*};
 
     let artists_stats_opt = diesel_not_found_to_none(
-        artist_history
+        artist_rank_snapshots
             .filter(user_id.eq(user.id))
             .filter(update_time.eq(user.last_update_time))
             .order_by(update_time)
-            .inner_join(spotify_id_mapping)
-            .select((artist_history::timeframe, spotify_id_mapping::spotify_id))
+            .inner_join(spotify_items)
+            .select((artist_rank_snapshots::timeframe, spotify_items::spotify_id))
             .load::<StatsQueryResultItem>(&conn.0),
     )?;
     mark("Got artist stats from database");
@@ -102,12 +102,12 @@ pub fn get_artist_rank_history_single_artist(
     conn: DbConn,
     artist_spotify_id: &str,
 ) -> Result<Option<Vec<(NaiveDateTime, [Option<u16>; 3])>>, String> {
-    use crate::schema::artist_history::dsl::*;
-    use crate::schema::spotify_id_mapping::dsl::*;
+    use crate::schema::artist_rank_snapshots::dsl::*;
+    use crate::schema::spotify_items::dsl::*;
 
-    let query = artist_history
+    let query = artist_rank_snapshots
         .filter(user_id.eq(user.id))
-        .inner_join(spotify_id_mapping)
+        .inner_join(spotify_items)
         .filter(spotify_id.eq(artist_spotify_id))
         .order_by(update_time.asc())
         .select((update_time, ranking, timeframe));
@@ -154,16 +154,18 @@ pub fn get_artist_stats_history(
     )>,
     String,
 > {
-    use crate::schema::artist_history::dsl::*;
-    use crate::schema::spotify_id_mapping::dsl::*;
+    use crate::schema::artist_rank_snapshots::dsl::*;
+    use crate::schema::spotify_items::dsl::*;
 
-    let mut query = artist_history.filter(user_id.eq(user.id)).into_boxed();
+    let mut query = artist_rank_snapshots
+        .filter(user_id.eq(user.id))
+        .into_boxed();
     if let Some(timeframe_id) = restrict_to_timeframe_id {
         query = query.filter(timeframe.eq(timeframe_id))
     }
     let query =
         query
-            .inner_join(spotify_id_mapping)
+            .inner_join(spotify_items)
             .select((spotify_id, update_time, ranking, timeframe));
     let artists_stats_opt: Option<Vec<StatsHistoryQueryResItem>> =
         diesel_not_found_to_none(query.load::<StatsHistoryQueryResItem>(&conn.0))?;
@@ -203,15 +205,19 @@ pub fn get_artist_stats_history(
     let mut updates: Vec<(NaiveDateTime, TimeFrames<String>)> = artist_stats_by_update_timestamp
         .into_iter()
         .map(|(update_timestamp, mut entries_for_update)| {
-            entries_for_update
-                .sort_unstable_by_key(|artist_history_entry| artist_history_entry.ranking);
+            entries_for_update.sort_unstable_by_key(|artist_rank_snapshots_entry| {
+                artist_rank_snapshots_entry.ranking
+            });
 
             let stats_for_update = entries_for_update.into_iter().fold(
                 TimeFrames::default(),
-                |mut acc, artist_history_entry| {
-                    let timeframe_id = artist_history_entry.timeframe;
+                |mut acc, artist_rank_snapshots_entry| {
+                    let timeframe_id = artist_rank_snapshots_entry.timeframe;
 
-                    acc.add_item_by_id(timeframe_id, artist_history_entry.spotify_id.clone());
+                    acc.add_item_by_id(
+                        timeframe_id,
+                        artist_rank_snapshots_entry.spotify_id.clone(),
+                    );
                     acc
                 },
             );
@@ -231,16 +237,16 @@ pub fn get_track_stats(
     conn: DbConn,
     spotify_access_token: &str,
 ) -> Result<Option<Vec<(u8, Track)>>, String> {
-    use crate::schema::spotify_id_mapping::dsl::*;
-    use crate::schema::track_history::dsl::*;
+    use crate::schema::spotify_items::dsl::*;
+    use crate::schema::track_rank_snapshots::dsl::*;
 
     let track_stats_opt = diesel_not_found_to_none(
-        track_history
+        track_rank_snapshots
             .filter(user_id.eq(user.id))
             // Only include tracks from the most recent update
             .filter(update_time.eq(user.last_update_time))
             .order_by(update_time)
-            .inner_join(spotify_id_mapping)
+            .inner_join(spotify_items)
             .select((timeframe, spotify_id))
             .load::<StatsQueryResultItem>(&conn.0),
     )?;
@@ -282,13 +288,13 @@ pub fn get_track_stats_history(
     )>,
     String,
 > {
-    use crate::schema::spotify_id_mapping::{self, dsl::*};
-    use crate::schema::track_artist_mapping::{self, dsl::*};
-    use crate::schema::track_history::{self, dsl::*};
+    use crate::schema::spotify_items::{self, dsl::*};
+    use crate::schema::track_rank_snapshots::{self, dsl::*};
+    use crate::schema::tracks_artists::{self, dsl::*};
 
-    let artist_inner_id: i32 = spotify_id_mapping
-        .filter(spotify_id_mapping::spotify_id.eq(parent_artist_id))
-        .select(spotify_id_mapping::id)
+    let artist_inner_id: i32 = spotify_items
+        .filter(spotify_items::spotify_id.eq(parent_artist_id))
+        .select(spotify_items::id)
         .first(&conn.0)
         .map_err(|err| -> String {
             error!(
@@ -298,15 +304,14 @@ pub fn get_track_stats_history(
             "Error looking up parent artist".into()
         })?;
 
-    let query = track_artist_mapping
-        .filter(track_artist_mapping::artist_id.eq(artist_inner_id))
+    let query = tracks_artists
+        .filter(tracks_artists::artist_id.eq(artist_inner_id))
         .inner_join(
-            track_history.on(track_history::mapped_spotify_id.eq(track_artist_mapping::track_id)),
+            track_rank_snapshots
+                .on(track_rank_snapshots::mapped_spotify_id.eq(tracks_artists::track_id)),
         )
         .filter(user_id.eq(user.id))
-        .inner_join(
-            spotify_id_mapping.on(track_artist_mapping::track_id.eq(spotify_id_mapping::id)),
-        )
+        .inner_join(spotify_items.on(tracks_artists::track_id.eq(spotify_items::id)))
         .order_by(update_time)
         .select((spotify_id, update_time, ranking, timeframe));
     info!("{}", diesel::debug_query::<diesel::mysql::Mysql, _>(&query));
@@ -348,15 +353,16 @@ pub fn get_track_stats_history(
     let updates: Vec<(NaiveDateTime, TimeFrames<String>)> = track_stats_by_update_timestamp
         .into_iter()
         .map(|(update_timestamp, mut entries_for_update)| {
-            entries_for_update
-                .sort_unstable_by_key(|track_history_entry| track_history_entry.ranking);
+            entries_for_update.sort_unstable_by_key(|track_rank_snapshots_entry| {
+                track_rank_snapshots_entry.ranking
+            });
 
             let stats_for_update = entries_for_update.into_iter().enumerate().fold(
                 TimeFrames::default(),
-                |mut acc, (i, track_history_entry)| {
+                |mut acc, (i, track_rank_snapshots_entry)| {
                     let timeframe_id = track_stats[i].timeframe;
 
-                    acc.add_item_by_id(timeframe_id, track_history_entry.spotify_id.clone());
+                    acc.add_item_by_id(timeframe_id, track_rank_snapshots_entry.spotify_id.clone());
                     acc
                 },
             );
@@ -374,7 +380,7 @@ pub fn retrieve_mapped_spotify_ids<'a, T: Iterator<Item = &'a String> + Clone>(
     conn: &DbConn,
     spotify_ids: T,
 ) -> Result<HashMap<String, i32>, String> {
-    use crate::schema::spotify_id_mapping::dsl::*;
+    use crate::schema::spotify_items::dsl::*;
 
     let spotify_id_items: Vec<NewSpotifyIdMapping> = spotify_ids
         .clone()
@@ -385,7 +391,7 @@ pub fn retrieve_mapped_spotify_ids<'a, T: Iterator<Item = &'a String> + Clone>(
 
     // Try to create new entries for all included spotify IDs, ignoring failures due to unique
     // constraint violations
-    diesel::insert_or_ignore_into(spotify_id_mapping)
+    diesel::insert_or_ignore_into(spotify_items)
         .values(spotify_id_items)
         .execute(&conn.0)
         .map_err(|err| -> String {
@@ -394,7 +400,7 @@ pub fn retrieve_mapped_spotify_ids<'a, T: Iterator<Item = &'a String> + Clone>(
         })?;
 
     // Retrieve the mapped spotify ids, including any inserted ones
-    let mapped_ids: Vec<SpotifyIdMapping> = spotify_id_mapping
+    let mapped_ids: Vec<SpotifyIdMapping> = spotify_items
         .filter(spotify_id.eq_any(spotify_ids))
         .load(&conn.0)
         .map_err(|err| -> String {
@@ -413,13 +419,13 @@ pub fn retrieve_mapped_spotify_ids<'a, T: Iterator<Item = &'a String> + Clone>(
 
 /// Using the list of all stored track spotify IDs, retrieves fresh track metadata for all of them and populates
 /// the mapping table with artist-track pairs for all of them
-pub fn populate_track_artist_mapping_table(
+pub fn populate_tracks_artists_table(
     conn: &DbConn,
     spotify_access_token: &str,
 ) -> Result<(), String> {
-    use crate::schema::spotify_id_mapping::dsl::*;
-    use crate::schema::track_artist_mapping::dsl::*;
-    use crate::schema::track_history::{self, dsl::*};
+    use crate::schema::spotify_items::dsl::*;
+    use crate::schema::track_rank_snapshots::{self, dsl::*};
+    use crate::schema::tracks_artists::dsl::*;
 
     #[derive(Queryable)]
     struct Ids {
@@ -428,9 +434,9 @@ pub fn populate_track_artist_mapping_table(
     }
 
     // Get all unique track ids in the database mapped to their corresponding spotify IDs
-    let all_track_spotify_ids: Vec<Ids> = track_history
-        .inner_join(spotify_id_mapping)
-        .select((track_history::mapped_spotify_id, spotify_id))
+    let all_track_spotify_ids: Vec<Ids> = track_rank_snapshots
+        .inner_join(spotify_items)
+        .select((track_rank_snapshots::mapped_spotify_id, spotify_id))
         .distinct()
         .load::<Ids>(&conn.0)
         .map_err(|err| -> String {
@@ -477,7 +483,7 @@ pub fn populate_track_artist_mapping_table(
                 })
         })
         .collect();
-    diesel::insert_or_ignore_into(track_artist_mapping)
+    diesel::insert_or_ignore_into(tracks_artists)
         .values(&pairs)
         .execute(&conn.0)
         .map_err(|err| -> String {

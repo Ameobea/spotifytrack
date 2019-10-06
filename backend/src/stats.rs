@@ -69,11 +69,11 @@ pub fn get_top_genres_by_artists(
 pub fn get_tracks_for_artist(
     artist_id: &str,
     tracks_by_id: &HashMap<String, Track>,
-    track_history: &[(NaiveDateTime, TimeFrames<String>)],
+    track_rank_snapshots: &[(NaiveDateTime, TimeFrames<String>)],
 ) -> Vec<(String, usize)> {
     let mut track_scores: HashMap<String, usize> = HashMap::new();
 
-    for (_update_timestamp, track_stats_for_update) in track_history {
+    for (_update_timestamp, track_stats_for_update) in track_rank_snapshots {
         for (_timeframe, track_ids) in track_stats_for_update.iter() {
             let track_count = track_ids.len();
 

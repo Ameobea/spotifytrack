@@ -100,7 +100,7 @@ pub fn get_artist_stats(
     let (artist_popularity_history, (tracks_by_id, top_tracks)) = match rayon::join(
         || crate::db_util::get_artist_rank_history_single_artist(&user, conn, &artist_id),
         || -> Result<Option<(HashMap<String, Track>, Vec<(String, usize)>)>, String> {
-            let (mut tracks_by_id, track_history) = match db_util::get_track_stats_history(
+            let (mut tracks_by_id, track_rank_snapshots) = match db_util::get_track_stats_history(
                 &user,
                 conn2,
                 spotify_access_token,
@@ -109,8 +109,11 @@ pub fn get_artist_stats(
                 Some(res) => res,
                 None => return Ok(None),
             };
-            let top_tracks =
-                crate::stats::get_tracks_for_artist(&artist_id, &tracks_by_id, &track_history);
+            let top_tracks = crate::stats::get_tracks_for_artist(
+                &artist_id,
+                &tracks_by_id,
+                &track_rank_snapshots,
+            );
             // Only send track metadata for this artist's tracks
             tracks_by_id.retain(|track_id, _| {
                 top_tracks
@@ -408,7 +411,7 @@ pub fn populate_mapping_table(
     let token_data = &mut *(&*token_data).lock().unwrap();
     let spotify_access_token = token_data.get()?;
 
-    crate::db_util::populate_track_artist_mapping_table(&conn, &spotify_access_token)?;
+    crate::db_util::populate_tracks_artists_table(&conn, &spotify_access_token)?;
 
     Ok(status::Custom(
         Status::Ok,

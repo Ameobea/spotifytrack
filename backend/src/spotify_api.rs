@@ -176,7 +176,7 @@ fn map_timeframe_to_timeframe_id(timeframe: &str) -> u8 {
     }
 }
 
-/// For each track and artist timeframe, store a row in the `track_history` and `artist_history`
+/// For each track and artist timeframe, store a row in the `track_rank_snapshots` and `artist_rank_snapshots`
 /// tables respectively
 pub fn store_stats_snapshot(
     conn: &DbConn,
@@ -221,7 +221,7 @@ pub fn store_stats_snapshot(
         })
         .collect();
 
-    diesel::insert_into(crate::schema::artist_history::table)
+    diesel::insert_into(crate::schema::artist_rank_snapshots::table)
         .values(&artist_entries)
         .execute(&conn.0)
         .map_err(|err| -> String {
@@ -256,7 +256,7 @@ pub fn store_stats_snapshot(
             })
         })
         .collect();
-    diesel::insert_or_ignore_into(crate::schema::track_artist_mapping::table)
+    diesel::insert_or_ignore_into(crate::schema::tracks_artists::table)
         .values(&track_artist_pairs)
         .execute(&conn.0)
         .map_err(|err| -> String {
@@ -284,7 +284,7 @@ pub fn store_stats_snapshot(
         })
         .collect();
 
-    diesel::insert_into(crate::schema::track_history::table)
+    diesel::insert_into(crate::schema::track_rank_snapshots::table)
         .values(&track_entries)
         .execute(&conn.0)
         .map_err(|err| -> String {

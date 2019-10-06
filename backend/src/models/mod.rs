@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::schema::{
-    artist_history, spotify_id_mapping, track_artist_mapping, track_history, users,
+    artist_rank_snapshots, spotify_items, track_rank_snapshots, tracks_artists, users,
 };
 
 #[derive(Insertable)]
@@ -34,7 +34,7 @@ pub struct User {
 
 #[derive(Serialize, Insertable, Associations)]
 #[belongs_to(User)]
-#[table_name = "track_history"]
+#[table_name = "track_rank_snapshots"]
 pub struct NewTrackHistoryEntry {
     pub user_id: i64,
     pub mapped_spotify_id: i32,
@@ -45,7 +45,7 @@ pub struct NewTrackHistoryEntry {
 
 #[derive(Serialize, Insertable, Associations)]
 #[belongs_to(User)]
-#[table_name = "artist_history"]
+#[table_name = "artist_rank_snapshots"]
 pub struct NewArtistHistoryEntry {
     pub user_id: i64,
     pub mapped_spotify_id: i32,
@@ -55,20 +55,20 @@ pub struct NewArtistHistoryEntry {
 }
 
 #[derive(Serialize, Associations, Debug, Queryable)]
-#[table_name = "spotify_id_mapping"]
+#[table_name = "spotify_items"]
 pub struct SpotifyIdMapping {
     pub id: i32,
     pub spotify_id: String,
 }
 
 #[derive(Serialize, Insertable)]
-#[table_name = "spotify_id_mapping"]
+#[table_name = "spotify_items"]
 pub struct NewSpotifyIdMapping<'a> {
     pub spotify_id: &'a str,
 }
 
 #[derive(Insertable)]
-#[table_name = "track_artist_mapping"]
+#[table_name = "tracks_artists"]
 pub struct TrackArtistPair {
     pub track_id: i32,
     pub artist_id: i32,
