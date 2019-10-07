@@ -42,12 +42,10 @@ const ArtistStats: React.FC<ReactRouterRouteProps> = ({ match }) => {
       artistStats
         ? ['Short', 'Medium', 'Long'].map((name, i) => ({
             name,
-            data: artistStats.popularityHistory.map(
-              ({ timestamp, popularityPerTimePeriod }): [Date, number | null] => [
-                timestamp,
-                popularityPerTimePeriod[i],
-              ]
-            ),
+            data: artistStats.popularityHistory.map(({ timestamp, popularityPerTimePeriod }): [
+              Date,
+              number | null
+            ] => [timestamp, popularityPerTimePeriod[i]]),
           }))
         : null,
     [artistStats]
@@ -92,7 +90,7 @@ const ArtistStats: React.FC<ReactRouterRouteProps> = ({ match }) => {
   return (
     <div className="artist-stats">
       {!artistStats || !artist || !series ? (
-        <Loading style={{ height: 300 + 85 }} />
+        <Loading style={{ height: 521 }} />
       ) : (
         <>
           <h1>
@@ -137,7 +135,7 @@ const ArtistStats: React.FC<ReactRouterRouteProps> = ({ match }) => {
       <ArtistCards
         disableHeader
         hideShowMore
-        style={{ width: '80vw', paddingTop: 30, paddingBottom: 30 }}
+        style={{ width: '100%', paddingTop: 30, paddingBottom: 30 }}
         initialItems={100}
         horizontallyScrollable
       />
@@ -150,7 +148,10 @@ const ArtistStats: React.FC<ReactRouterRouteProps> = ({ match }) => {
             <BarChart
               data={artistStats.topTracks.map(R.prop('score'))}
               categories={artistStats.topTracks.map(({ trackId }) => topTracksCorpus[trackId].name)}
-              style={{ height: 400 }}
+              style={{
+                height: 400,
+                width: '100%',
+              }}
               otherConfig={{
                 xAxis: {
                   axisLabel: {
