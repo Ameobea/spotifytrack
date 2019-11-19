@@ -66,6 +66,7 @@ pub fn spotify_server_api_request<T: for<'de> Deserialize<'de> + std::fmt::Debug
 ) -> Result<T, String> {
     let client = reqwest::Client::new();
 
+    info!("Hitting Spotify API at URL {}, params: {:?}", url, params);
     let mut res = client
         .post(url)
         .header("Authorization", CONF.get_authorization_header_content())
@@ -76,9 +77,18 @@ pub fn spotify_server_api_request<T: for<'de> Deserialize<'de> + std::fmt::Debug
             "Error communicating with from the Spotify API".into()
         })?;
 
+    if res.status() != reqwest::StatusCode::OK {
+        error!("Got bad status code of {} from Spotify API", res.status());
+        return Err("Got bad response from Spotify API".into());
+    }
+
     res.json::<SpotifyResponse<T>>()
         .map_err(|err| -> String {
-            error!("Error decoding response from Spotify API: {:?}", err);
+            error!(
+                "Error decoding response from Spotify API: {:?}.  Got response: {:?}",
+                err,
+                res.text()
+            );
             "Error decoding response from Spotify API".into()
         })?
         .into_result()
@@ -183,8 +193,6 @@ pub fn store_stats_snapshot(
     user: &User,
     stats: StatsSnapshot,
 ) -> Result<(), String> {
-    use crate::schema::users::dsl::*;
-
     let update_time = stats.last_update_time;
 
     let artist_spotify_ids: HashSet<String> = stats
@@ -238,7 +246,7 @@ pub fn store_stats_snapshot(
         crate::db_util::retrieve_mapped_spotify_ids(conn, track_spotify_ids.iter())?;
 
     // Create track/artist mapping entries for each (track, artist) pair
-    let track_artist_pairs: Vec<(TrackArtistPair)> = stats
+    let track_artist_pairs: Vec<TrackArtistPair> = stats
         .tracks
         .iter()
         .flat_map(|(_artist_timeframe, tracks)| {
@@ -293,13 +301,7 @@ pub fn store_stats_snapshot(
         })?;
 
     // Update the user to have a last update time that matches all of the new updates
-    let updated_row_count = diesel::update(users.filter(id.eq(user.id)))
-        .set(last_update_time.eq(update_time))
-        .execute(&conn.0)
-        .map_err(|err| -> String {
-            error!("Error updating user's last update time: {:?}", err);
-            "Error updating user's last update time.".into()
-        })?;
+    let updated_row_count = crate::db_util::update_user_last_updated(&user, &conn, update_time)?;
 
     if updated_row_count != 1 {
         error!(
@@ -332,7 +334,6 @@ fn fetch_batch_entities<T: for<'de> Deserialize<'de>>(
         })
 }
 
-// TODO: Enforce API page size limitations and recursively call (or whatever) until all is fetched
 fn fetch_with_cache<
     ResponseType: for<'de> Deserialize<'de>,
     T: Clone + Serialize + for<'de> Deserialize<'de>,

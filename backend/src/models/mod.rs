@@ -206,6 +206,21 @@ pub struct TopTracksResponse {
     pub items: Vec<Track>,
 }
 
+#[derive(Queryable)]
+pub struct StatsHistoryQueryResItem {
+    pub spotify_id: String,
+    pub update_time: NaiveDateTime,
+    pub ranking: u16,
+    pub timeframe: u8,
+}
+
+#[derive(Queryable)]
+pub struct ArtistRankHistoryResItem {
+    pub update_time: NaiveDateTime,
+    pub ranking: u16,
+    pub timeframe: u8,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Track {
     pub album: Album,
@@ -329,4 +344,20 @@ pub struct AccessTokenResponse {
     pub access_token: String,
     pub token_type: String,
     pub expires_in: usize,
+}
+
+pub trait HasSpotifyId {
+    fn get_spotify_id(&self) -> &str;
+}
+
+impl HasSpotifyId for Artist {
+    fn get_spotify_id(&self) -> &str {
+        &self.id
+    }
+}
+
+impl HasSpotifyId for Track {
+    fn get_spotify_id(&self) -> &str {
+        &self.id
+    }
 }

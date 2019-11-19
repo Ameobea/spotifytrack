@@ -3,11 +3,13 @@ use std::cmp::Reverse;
 use chrono::NaiveDateTime;
 use hashbrown::{HashMap, HashSet};
 
-use crate::models::{Artist, TimeFrames, Track};
+use crate::models::{Artist, TimeFrames};
 
-fn weight_data_point(total_items: usize, i: usize) -> usize {
-    (((total_items - i) as f32).powf(2.7 * ((total_items - i) as f32 / total_items as f32)))
-        as usize
+/// This is a pretty arbitrary algorithm with the goal of assigning a score to an item based on how many total items
+/// there are and the item's rank in the collection.  It is used to construct the genres treemap on the frontend.
+fn weight_data_point(total_items: usize, ranking: usize) -> usize {
+    (((total_items - ranking) as f32)
+        .powf(2.7 * ((total_items - ranking) as f32 / total_items as f32))) as usize
 }
 
 /// Give an array of top artists, extrapolates the most listened-to genres for each update.
@@ -64,12 +66,8 @@ pub fn get_top_genres_by_artists(
 
 /// Gets a list of all tracks for a given artist that a user has ever had in their top tracks for
 /// any time period, sorted by their frequency of appearance and ranking when appeared.
-///
-/// TODO: Set up some kind of caching mechanism that maps artists to the list of tracks by that artist.
-pub fn get_tracks_for_artist(
-    artist_id: &str,
-    tracks_by_id: &HashMap<String, Track>,
-    track_rank_snapshots: &[(NaiveDateTime, TimeFrames<String>)],
+pub fn compute_track_popularity_scores(
+    track_history: &[(NaiveDateTime, TimeFrames<String>)],
 ) -> Vec<(String, usize)> {
     let mut track_scores: HashMap<String, usize> = HashMap::new();
 
@@ -77,16 +75,7 @@ pub fn get_tracks_for_artist(
         for (_timeframe, track_ids) in track_stats_for_update.iter() {
             let track_count = track_ids.len();
 
-            let track_ids_by_artist = track_ids.iter().enumerate().filter(|(_i, track_id)| {
-                let track: &Track = tracks_by_id.get(track_id.clone()).unwrap();
-                track
-                    .artists
-                    .iter()
-                    .find(|artist| artist.id == artist_id)
-                    .is_some()
-            });
-
-            for (i, track_id) in track_ids_by_artist {
+            for (i, track_id) in track_ids.iter().enumerate() {
                 let score_sum = track_scores.entry(track_id.clone()).or_insert(0);
                 *score_sum += track_count - i;
             }

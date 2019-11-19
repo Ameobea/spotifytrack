@@ -1,10 +1,16 @@
 use chrono::NaiveDateTime;
-use diesel::prelude::*;
+use diesel::{
+    mysql::{Mysql, MysqlConnection},
+    prelude::*,
+    query_builder::{Query, QueryFragment, QueryId},
+    sql_types::HasSqlType,
+};
 use hashbrown::{HashMap, HashSet};
 
 use crate::benchmarking::mark;
 use crate::models::{
-    Artist, NewSpotifyIdMapping, SpotifyIdMapping, TimeFrames, Track, TrackArtistPair, User,
+    Artist, ArtistRankHistoryResItem, HasSpotifyId, NewSpotifyIdMapping, SpotifyIdMapping,
+    StatsHistoryQueryResItem, TimeFrames, Track, TrackArtistPair, User,
 };
 use crate::DbConn;
 
@@ -82,21 +88,6 @@ pub fn get_artist_stats(
     Ok(Some(fetched_artists))
 }
 
-#[derive(Queryable)]
-struct StatsHistoryQueryResItem {
-    spotify_id: String,
-    update_time: NaiveDateTime,
-    ranking: u16,
-    timeframe: u8,
-}
-
-#[derive(Queryable)]
-struct ArtistRankHistoryResItem {
-    update_time: NaiveDateTime,
-    ranking: u16,
-    timeframe: u8,
-}
-
 pub fn get_artist_rank_history_single_artist(
     user: &User,
     conn: DbConn,
@@ -142,6 +133,87 @@ pub fn get_artist_rank_history_single_artist(
     Ok(Some(output))
 }
 
+/// Generic function that handles executing a given SQL query to fetch metrics for a set of entities of some type.
+/// Once the metrics are fetched, it also fetches entity metadata for all of the fetched updates and returns them as a
+/// mapping from spotify id to entity along with the sorted + grouped metrics.
+///
+/// The data returned by this function is useful for generating graphs on the frontend showing how the rankings of
+/// different entities changes over time.
+fn get_entity_stats_history<
+    T: HasSpotifyId,
+    Q: RunQueryDsl<MysqlConnection> + QueryFragment<Mysql> + Query + QueryId,
+>(
+    conn: DbConn,
+    query: Q,
+    spotify_access_token: &str,
+    fetch_entities: fn(
+        spotify_access_token: &str,
+        entity_spotify_ids: &[&str],
+    ) -> Result<Vec<T>, String>,
+) -> Result<Option<(HashMap<String, T>, Vec<(NaiveDateTime, TimeFrames<String>)>)>, String>
+where
+    (String, NaiveDateTime, u16, u8): Queryable<<Q as Query>::SqlType, Mysql>,
+    Mysql: HasSqlType<<Q as Query>::SqlType>,
+{
+    info!("{}", diesel::debug_query::<diesel::mysql::Mysql, _>(&query));
+    let entity_stats_opt: Option<Vec<StatsHistoryQueryResItem>> =
+        diesel_not_found_to_none(query.load::<StatsHistoryQueryResItem>(&conn.0))?;
+
+    let entity_stats: Vec<StatsHistoryQueryResItem> = match entity_stats_opt {
+        None => return Ok(None),
+        Some(res) => res,
+    };
+
+    let entity_spotify_ids: HashSet<&str> = entity_stats
+        .iter()
+        .map(|entry| entry.spotify_id.as_str())
+        .collect();
+    let entity_spotify_ids: Vec<&str> = entity_spotify_ids.into_iter().collect();
+
+    let fetched_tracks = fetch_entities(spotify_access_token, &entity_spotify_ids)?;
+    let entities_by_id = fetched_tracks
+        .into_iter()
+        .fold(HashMap::new(), |mut acc, track| {
+            acc.insert(track.get_spotify_id().to_string(), track);
+            acc
+        });
+
+    // Group the entity stats by their update timestamp
+    let mut entity_stats_by_update_timestamp: HashMap<
+        NaiveDateTime,
+        Vec<&StatsHistoryQueryResItem>,
+    > = HashMap::new();
+    for history_entry in &entity_stats {
+        let entries_for_update = entity_stats_by_update_timestamp
+            .entry(history_entry.update_time.clone())
+            .or_insert_with(Vec::new);
+        entries_for_update.push(history_entry);
+    }
+
+    let mut updates: Vec<(NaiveDateTime, TimeFrames<String>)> = entity_stats_by_update_timestamp
+        .into_iter()
+        .map(|(update_timestamp, mut entries_for_update)| {
+            entries_for_update
+                .sort_unstable_by_key(|track_history_entry| track_history_entry.ranking);
+
+            let stats_for_update = entries_for_update.into_iter().enumerate().fold(
+                TimeFrames::default(),
+                |mut acc, (i, track_history_entry)| {
+                    let timeframe_id = entity_stats[i].timeframe;
+
+                    acc.add_item_by_id(timeframe_id, track_history_entry.spotify_id.clone());
+                    acc
+                },
+            );
+
+            (update_timestamp, stats_for_update)
+        })
+        .collect();
+    updates.sort_unstable_by_key(|update| update.0);
+
+    return Ok(Some((entities_by_id, updates)));
+}
+
 pub fn get_artist_stats_history(
     user: &User,
     conn: DbConn,
@@ -154,80 +226,24 @@ pub fn get_artist_stats_history(
     )>,
     String,
 > {
-    use crate::schema::artist_rank_snapshots::dsl::*;
-    use crate::schema::spotify_items::dsl::*;
+    use crate::schema::artist_history::dsl::*;
+    use crate::schema::spotify_id_mapping::dsl::*;
 
-    let mut query = artist_rank_snapshots
-        .filter(user_id.eq(user.id))
-        .into_boxed();
+    let mut query = artist_history.filter(user_id.eq(user.id)).into_boxed();
     if let Some(timeframe_id) = restrict_to_timeframe_id {
         query = query.filter(timeframe.eq(timeframe_id))
     }
     let query =
         query
-            .inner_join(spotify_items)
+            .inner_join(spotify_id_mapping)
             .select((spotify_id, update_time, ranking, timeframe));
-    let artists_stats_opt: Option<Vec<StatsHistoryQueryResItem>> =
-        diesel_not_found_to_none(query.load::<StatsHistoryQueryResItem>(&conn.0))?;
 
-    let artist_stats: Vec<StatsHistoryQueryResItem> = match artists_stats_opt {
-        None => return Ok(None),
-        Some(res) => res,
-    };
-
-    let artist_spotify_ids: HashSet<&str> = artist_stats
-        .iter()
-        .map(|entry| entry.spotify_id.as_str())
-        .collect();
-    let artist_spotify_ids: Vec<&str> = artist_spotify_ids.into_iter().collect();
-
-    let fetched_artists =
-        crate::spotify_api::fetch_artists(spotify_access_token, &artist_spotify_ids)?;
-    let artists_by_id = fetched_artists
-        .into_iter()
-        .fold(HashMap::new(), |mut acc, artist| {
-            acc.insert(artist.id.clone(), artist);
-            acc
-        });
-
-    // Group the artist stats by their update timestamp
-    let mut artist_stats_by_update_timestamp: HashMap<
-        NaiveDateTime,
-        Vec<&StatsHistoryQueryResItem>,
-    > = HashMap::new();
-    for history_entry in &artist_stats {
-        let entries_for_update = artist_stats_by_update_timestamp
-            .entry(history_entry.update_time.clone())
-            .or_insert_with(Vec::new);
-        entries_for_update.push(history_entry);
-    }
-
-    let mut updates: Vec<(NaiveDateTime, TimeFrames<String>)> = artist_stats_by_update_timestamp
-        .into_iter()
-        .map(|(update_timestamp, mut entries_for_update)| {
-            entries_for_update.sort_unstable_by_key(|artist_rank_snapshots_entry| {
-                artist_rank_snapshots_entry.ranking
-            });
-
-            let stats_for_update = entries_for_update.into_iter().fold(
-                TimeFrames::default(),
-                |mut acc, artist_rank_snapshots_entry| {
-                    let timeframe_id = artist_rank_snapshots_entry.timeframe;
-
-                    acc.add_item_by_id(
-                        timeframe_id,
-                        artist_rank_snapshots_entry.spotify_id.clone(),
-                    );
-                    acc
-                },
-            );
-
-            (update_timestamp, stats_for_update)
-        })
-        .collect();
-    updates.sort_unstable_by_key(|update| update.0);
-
-    return Ok(Some((artists_by_id, updates)));
+    get_entity_stats_history(
+        conn,
+        query,
+        spotify_access_token,
+        crate::spotify_api::fetch_artists,
+    )
 }
 
 /// Returns a list of track data items for each of the top tracks for the user's most recent update.  The first item
@@ -274,8 +290,6 @@ pub fn get_track_stats(
 
 /// Retrieves the top tracks for all timeframes for each update for a given user.  Rather than duplicating track metadata,
 /// each timeframe simply stores the track ID and a `HashMap` is returned which serves as a local lookup tool for the track metadata.
-///
-/// TODO: Deduplicate with `get_artist_stats_history` if you ever care enough
 pub fn get_track_stats_history(
     user: &User,
     conn: DbConn,
@@ -314,64 +328,13 @@ pub fn get_track_stats_history(
         .inner_join(spotify_items.on(tracks_artists::track_id.eq(spotify_items::id)))
         .order_by(update_time)
         .select((spotify_id, update_time, ranking, timeframe));
-    info!("{}", diesel::debug_query::<diesel::mysql::Mysql, _>(&query));
-    let track_stats_opt: Option<Vec<StatsHistoryQueryResItem>> =
-        diesel_not_found_to_none(query.load::<StatsHistoryQueryResItem>(&conn.0))?;
 
-    let track_stats: Vec<StatsHistoryQueryResItem> = match track_stats_opt {
-        None => return Ok(None),
-        Some(res) => res,
-    };
-
-    let track_spotify_ids: HashSet<&str> = track_stats
-        .iter()
-        .map(|entry| entry.spotify_id.as_str())
-        .collect();
-    let track_spotify_ids: Vec<&str> = track_spotify_ids.into_iter().collect();
-
-    let fetched_tracks =
-        crate::spotify_api::fetch_tracks(spotify_access_token, &track_spotify_ids)?;
-    let tracks_by_id = fetched_tracks
-        .into_iter()
-        .fold(HashMap::new(), |mut acc, track| {
-            acc.insert(track.id.clone(), track);
-            acc
-        });
-
-    // Group the track stats by their update timestamp
-    let mut track_stats_by_update_timestamp: HashMap<
-        NaiveDateTime,
-        Vec<&StatsHistoryQueryResItem>,
-    > = HashMap::new();
-    for history_entry in &track_stats {
-        let entries_for_update = track_stats_by_update_timestamp
-            .entry(history_entry.update_time.clone())
-            .or_insert_with(Vec::new);
-        entries_for_update.push(history_entry);
-    }
-
-    let updates: Vec<(NaiveDateTime, TimeFrames<String>)> = track_stats_by_update_timestamp
-        .into_iter()
-        .map(|(update_timestamp, mut entries_for_update)| {
-            entries_for_update.sort_unstable_by_key(|track_rank_snapshots_entry| {
-                track_rank_snapshots_entry.ranking
-            });
-
-            let stats_for_update = entries_for_update.into_iter().enumerate().fold(
-                TimeFrames::default(),
-                |mut acc, (i, track_rank_snapshots_entry)| {
-                    let timeframe_id = track_stats[i].timeframe;
-
-                    acc.add_item_by_id(timeframe_id, track_rank_snapshots_entry.spotify_id.clone());
-                    acc
-                },
-            );
-
-            (update_timestamp, stats_for_update)
-        })
-        .collect();
-
-    return Ok(Some((tracks_by_id, updates)));
+    get_entity_stats_history(
+        conn,
+        query,
+        spotify_access_token,
+        crate::spotify_api::fetch_tracks,
+    )
 }
 
 /// Retrieves a list of the internal mapped Spotify ID for each of the provided spotify IDs,
@@ -494,4 +457,22 @@ pub fn populate_tracks_artists_table(
             "Error inserting artist/track pairs into mapping table".into()
         })
         .map(|_| ())
+}
+
+/// Sets the `last_updated_time` column for the provided user to the provided `update_time`.  Returns the number
+/// of rows updated or an error message.
+pub fn update_user_last_updated(
+    user: &User,
+    conn: &DbConn,
+    update_time: NaiveDateTime,
+) -> Result<usize, String> {
+    use crate::schema::users::dsl::*;
+
+    diesel::update(users.filter(id.eq(user.id)))
+        .set(last_update_time.eq(update_time))
+        .execute(&conn.0)
+        .map_err(|err| -> String {
+            error!("Error updating user's last update time: {:?}", err);
+            "Error updating user's last update time.".into()
+        })
 }

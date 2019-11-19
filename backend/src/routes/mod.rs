@@ -97,10 +97,10 @@ pub fn get_artist_stats(
     let spotify_access_token = token_data.get()?;
     mark("Got spotify access token");
 
-    let (artist_popularity_history, (tracks_by_id, top_tracks)) = match rayon::join(
+    let (artist_popularity_history, (tracks_by_id, top_track_scores)) = match rayon::join(
         || crate::db_util::get_artist_rank_history_single_artist(&user, conn, &artist_id),
         || -> Result<Option<(HashMap<String, Track>, Vec<(String, usize)>)>, String> {
-            let (mut tracks_by_id, track_rank_snapshots) = match db_util::get_track_stats_history(
+            let (tracks_by_id, track_history) = match db_util::get_track_stats_history(
                 &user,
                 conn2,
                 spotify_access_token,
@@ -109,20 +109,9 @@ pub fn get_artist_stats(
                 Some(res) => res,
                 None => return Ok(None),
             };
-            let top_tracks = crate::stats::get_tracks_for_artist(
-                &artist_id,
-                &tracks_by_id,
-                &track_rank_snapshots,
-            );
-            // Only send track metadata for this artist's tracks
-            tracks_by_id.retain(|track_id, _| {
-                top_tracks
-                    .iter()
-                    .find(|(retained_track_id, _)| track_id == retained_track_id)
-                    .is_some()
-            });
+            let top_track_scores = crate::stats::compute_track_popularity_scores(&track_history);
 
-            Ok(Some((tracks_by_id, top_tracks)))
+            Ok(Some((tracks_by_id, top_track_scores)))
         },
     ) {
         (Err(err), _) | (Ok(_), Err(err)) => return Err(err),
@@ -144,7 +133,7 @@ pub fn get_artist_stats(
         artist,
         tracks_by_id,
         popularity_history: artist_popularity_history,
-        top_tracks,
+        top_tracks: top_track_scores,
     };
     Ok(Some(Json(stats)))
 }
@@ -352,7 +341,17 @@ pub fn update_user(
             })?;
 
     // Update the access token for that user using the refresh token
-    let updated_access_token = crate::spotify_api::refresh_user_token(&user.refresh_token)?;
+    let updated_access_token = match crate::spotify_api::refresh_user_token(&user.refresh_token) {
+        Ok(updated_access_token) => updated_access_token,
+        Err(_) => {
+            db_util::update_user_last_updated(&user, &conn, Utc::now().naive_utc())?;
+
+            // TODO: Disable auto-updates for the user that has removed their permission grant to prevent wasted updates in the future
+            let msg = format!("Failed to refresh user token for user {}; updating last updated timestamp and not updating.", user.username);
+            info!("{}", msg);
+            return Ok(status::Custom(Status::Unauthorized, msg));
+        }
+    };
     diesel::update(users.filter(id.eq(user.id)))
         .set(token.eq(&updated_access_token))
         .execute(&conn.0)

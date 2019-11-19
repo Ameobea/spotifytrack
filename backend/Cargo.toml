@@ -4,6 +4,9 @@ edition = "2018"
 name = "spotify-homepage-backend"
 version = "0.1.0"
 
+[profile.release]
+debug = true
+
 [[bin]]
 name = "spotify-homepage-backend"
 path = "src/main.rs"
