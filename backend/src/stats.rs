@@ -67,7 +67,7 @@ pub fn get_top_genres_by_artists(
 /// Gets a list of all tracks for a given artist that a user has ever had in their top tracks for
 /// any time period, sorted by their frequency of appearance and ranking when appeared.
 pub fn compute_track_popularity_scores(
-    track_history: &[(NaiveDateTime, TimeFrames<String>)],
+    track_rank_snapshots: &[(NaiveDateTime, TimeFrames<String>)],
 ) -> Vec<(String, usize)> {
     let mut track_scores: HashMap<String, usize> = HashMap::new();
 

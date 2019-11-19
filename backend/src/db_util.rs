@@ -102,10 +102,10 @@ pub fn get_artist_rank_history_single_artist(
         .filter(spotify_id.eq(artist_spotify_id))
         .order_by(update_time.asc())
         .select((update_time, ranking, timeframe));
-    // debug!(
-    //     "{:?}",
-    //     diesel::debug_query::<diesel::mysql::Mysql, _>(&query)
-    // );
+    debug!(
+        "{:?}",
+        diesel::debug_query::<diesel::mysql::Mysql, _>(&query)
+    );
     let res = match diesel_not_found_to_none(query.load::<ArtistRankHistoryResItem>(&conn.0))? {
         Some(res) => res,
         None => return Ok(None),
@@ -155,7 +155,7 @@ where
     (String, NaiveDateTime, u16, u8): Queryable<<Q as Query>::SqlType, Mysql>,
     Mysql: HasSqlType<<Q as Query>::SqlType>,
 {
-    info!("{}", diesel::debug_query::<diesel::mysql::Mysql, _>(&query));
+    debug!("{}", diesel::debug_query::<diesel::mysql::Mysql, _>(&query));
     let entity_stats_opt: Option<Vec<StatsHistoryQueryResItem>> =
         diesel_not_found_to_none(query.load::<StatsHistoryQueryResItem>(&conn.0))?;
 
@@ -226,16 +226,18 @@ pub fn get_artist_stats_history(
     )>,
     String,
 > {
-    use crate::schema::artist_history::dsl::*;
-    use crate::schema::spotify_id_mapping::dsl::*;
+    use crate::schema::artist_rank_snapshots::dsl::*;
+    use crate::schema::spotify_items::dsl::*;
 
-    let mut query = artist_history.filter(user_id.eq(user.id)).into_boxed();
+    let mut query = artist_rank_snapshots
+        .filter(user_id.eq(user.id))
+        .into_boxed();
     if let Some(timeframe_id) = restrict_to_timeframe_id {
         query = query.filter(timeframe.eq(timeframe_id))
     }
     let query =
         query
-            .inner_join(spotify_id_mapping)
+            .inner_join(spotify_items)
             .select((spotify_id, update_time, ranking, timeframe));
 
     get_entity_stats_history(
