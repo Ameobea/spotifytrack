@@ -56,14 +56,14 @@ pub fn get_hash_items<T: for<'de> Deserialize<'de>>(
         return Ok(Vec::new());
     }
 
-    let conn = get_conn()?;
+    let mut conn = get_conn()?;
 
     let mut cmd = redis::cmd("HMGET");
     let cmd = keys
         .iter()
         .fold(cmd.arg(hash_name), |acc, key| acc.arg(*key));
 
-    cmd.query::<Vec<Option<String>>>(&*conn)
+    cmd.query::<Vec<Option<String>>>(&mut *conn)
         .map_err(|err| -> String {
             error!("Error pulling data from Redis cache: {:?}", err);
             "Error pulling data from Redis cache".into()

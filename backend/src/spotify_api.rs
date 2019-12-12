@@ -35,8 +35,8 @@ pub fn spotify_user_api_request<T: for<'de> Deserialize<'de> + std::fmt::Debug +
     url: &str,
     token: &str,
 ) -> Result<T, String> {
-    let client = reqwest::Client::new();
-    let mut res = client
+    let client = reqwest::blocking::Client::new();
+    let res = client
         .get(url)
         .bearer_auth(token)
         .send()
@@ -64,10 +64,10 @@ pub fn spotify_server_api_request<T: for<'de> Deserialize<'de> + std::fmt::Debug
     url: &str,
     params: HashMap<&str, &str>,
 ) -> Result<T, String> {
-    let client = reqwest::Client::new();
+    let client = reqwest::blocking::Client::new();
 
     info!("Hitting Spotify API at URL {}, params: {:?}", url, params);
-    let mut res = client
+    let res = client
         .post(url)
         .header("Authorization", CONF.get_authorization_header_content())
         .form(&params)
@@ -84,11 +84,7 @@ pub fn spotify_server_api_request<T: for<'de> Deserialize<'de> + std::fmt::Debug
 
     res.json::<SpotifyResponse<T>>()
         .map_err(|err| -> String {
-            error!(
-                "Error decoding response from Spotify API: {:?}.  Got response: {:?}",
-                err,
-                res.text()
-            );
+            error!("Error decoding response from Spotify API: {:?}.", err,);
             "Error decoding response from Spotify API".into()
         })?
         .into_result()
@@ -115,7 +111,7 @@ pub fn fetch_cur_stats(user: &User) -> Result<Option<StatsSnapshot>, String> {
     let (tx, rx) = channel::unbounded::<(
         &'static str,
         &'static str,
-        Result<reqwest::Response, String>,
+        Result<reqwest::blocking::Response, String>,
     )>();
 
     // Create threads for each of the inner requests (we have to make 6; one for each of the three
@@ -127,8 +123,8 @@ pub fn fetch_cur_stats(user: &User) -> Result<Option<StatsSnapshot>, String> {
             let tx = tx.clone();
 
             thread::spawn(move || {
-                let client = reqwest::Client::new();
-                let res: Result<reqwest::Response, String> = client
+                let client = reqwest::blocking::Client::new();
+                let res: Result<reqwest::blocking::Response, String> = client
                     .get(&get_top_entities_url(entity_type, timeframe))
                     .bearer_auth(token)
                     .send()
@@ -321,7 +317,7 @@ fn fetch_batch_entities<T: for<'de> Deserialize<'de>>(
     spotify_entity_ids: &[&str],
 ) -> Result<T, String> {
     let url = format!("{}?ids={}", base_url, spotify_entity_ids.join(","));
-    let client = reqwest::Client::new();
+    let client = reqwest::blocking::Client::new();
     client
         .get(&url)
         .bearer_auth(token)

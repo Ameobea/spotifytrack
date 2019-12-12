@@ -208,9 +208,9 @@ pub fn oauth_cb(conn: DbConn, error: Option<&RawStr>, code: &RawStr) -> Result<R
     params.insert("client_id", CONF.client_id.as_str());
     params.insert("client_secret", CONF.client_secret.as_str());
 
-    let client = reqwest::Client::new();
+    let client = reqwest::blocking::Client::new();
     info!("Making request to fetch user token from OAuth CB response...");
-    let mut res = client
+    let res = client
         .post(SPOTIFY_TOKEN_FETCH_URL)
         .form(&params)
         .send()
