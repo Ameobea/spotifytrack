@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::conf::CONF;
 use crate::models::{
-    AccessTokenResponse, Artist, NewArtistHistoryEntry, NewTrackHistoryEntry,
+    AccessTokenResponse, Artist, ArtistGenrePair, NewArtistHistoryEntry, NewTrackHistoryEntry,
     SpotifyBatchArtistsResponse, SpotifyBatchTracksResponse, SpotifyResponse, StatsSnapshot,
     TopArtistsResponse, TopTracksResponse, Track, TrackArtistPair, User, UserProfile,
 };
@@ -191,19 +191,23 @@ pub fn store_stats_snapshot(
 ) -> Result<(), String> {
     let update_time = stats.last_update_time;
 
-    let artist_spotify_ids: HashSet<String> = stats
+    let genres_by_artist_id: HashMap<String, Vec<String>> = stats
         .artists
         .iter()
-        .flat_map(|(_artist_timeframe, artists)| artists.iter().map(|artist| artist.id.clone()))
+        .flat_map(|(_artist_timeframe, artists)| artists.iter())
         // Also include all other artists included in track metadata
         .chain(stats.tracks.iter().flat_map(|(_track_timeframe, tracks)| {
-            tracks
-                .iter()
-                .flat_map(|track| track.artists.iter().map(|artist| artist.id.clone()))
+            tracks.iter().flat_map(|track| track.artists.iter())
         }))
-        .collect::<HashSet<_>>();
+        .fold(HashMap::new(), |mut acc, artist| {
+            acc.insert(
+                artist.id.clone(),
+                artist.genres.clone().unwrap_or_else(Vec::new),
+            );
+            acc
+        });
     let mapped_artist_spotify_ids =
-        crate::db_util::retrieve_mapped_spotify_ids(conn, artist_spotify_ids.iter())?;
+        crate::db_util::retrieve_mapped_spotify_ids(conn, genres_by_artist_id.keys())?;
 
     let artist_entries: Vec<NewArtistHistoryEntry> = stats
         .artists
@@ -267,6 +271,20 @@ pub fn store_stats_snapshot(
             error!("Error inserting track/artist mappings: {:?}", err);
             "Error inserting track/artist metadata into database".into()
         })?;
+
+    // Create artist/genre mapping entries for each (artist, genre) pair
+    let artist_genre_pairs: Vec<ArtistGenrePair> = genres_by_artist_id
+        .into_iter()
+        .flat_map(|(artist_id, genres)| {
+            let artist_id: i32 = *mapped_artist_spotify_ids
+                .get(&artist_id)
+                .expect("No entry in artist id mapping");
+
+            genres
+                .into_iter()
+                .map(move |genre| ArtistGenrePair { artist_id, genre })
+        })
+        .collect();
 
     let track_entries: Vec<NewTrackHistoryEntry> = stats
         .tracks

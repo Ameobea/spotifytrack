@@ -20,7 +20,7 @@ START TRANSACTION;
   );
   CREATE INDEX spotify_id_ix ON `spotify_homepage`.`spotify_items` (spotify_id);
 
-  -- Table for parent/child relationships between tracks and artists.  Tracks can have multiple parents.
+  -- Table for parent/child relationships between artists and tracks.  Tracks can have multiple parents.
   CREATE TABLE `spotify_homepage`.`tracks_artists` (
     `id` INT NOT NULL AUTO_INCREMENT,
     `track_id` INT NOT NULL,
@@ -30,6 +30,16 @@ START TRANSACTION;
     FOREIGN KEY (artist_id) REFERENCES spotify_items(id) ON DELETE CASCADE
   );
   ALTER TABLE `spotify_homepage`.`tracks_artists` ADD UNIQUE `unique_index`(`track_id`, `artist_id`);
+
+   -- Table for parent/child relationships between genres and artists.  Artists can have multiple parents.
+  CREATE TABLE `spotify_homepage`.`artists_genres` (
+    `id` INT NOT NULL AUTO_INCREMENT,
+    `artist_id` INT NOT NULL,
+    `genre` VARCHAR(191) NOT NULL,
+    PRIMARY KEY (`id`),
+    FOREIGN KEY (artist_id) REFERENCES spotify_items(id) ON DELETE CASCADE
+  );
+  ALTER TABLE `spotify_homepage`.`artists_genres` ADD UNIQUE `unique_index`(`genre`, `artist_id`);
 
   CREATE TABLE `spotify_homepage`.`track_rank_snapshots` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,
