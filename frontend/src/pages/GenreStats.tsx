@@ -9,6 +9,7 @@ import Loading from 'src/components/Loading';
 import { ImageBoxGrid, Artist as ArtistCard } from 'src/Cards';
 import { useDispatch } from 'react-redux';
 import { actionCreators } from 'src/store';
+import { ANewTab } from 'src/util';
 
 interface GenreStats {
   artists_by_id: { [artistId: string]: Artist };
@@ -20,6 +21,11 @@ interface GenreStats {
   timestamps: string[];
   popularity_history: TimeFrames<number>;
 }
+
+const EveryNoiseLink = ({ genre }: { genre: string }) => {
+  const to = `http://everynoise.com/engenremap-${genre.replace(/ /g, '')}.html`;
+  return <ANewTab to={to} text={genre} style={{ color: 'white', fontSize: 11 }} />;
+};
 
 const fetchGenreStats = async (username: string, genre: string) =>
   getJsonEndpoint<GenreStats>(getUrl(`/stats/${username}/genre/${genre}`));
@@ -91,7 +97,7 @@ const GenreStats: React.FC<{ username: string; genre: string } & ReturnType<
               fontSize: 14,
             },
           },
-          tooltip: { trigger: 'axis' },
+          tooltip: { trigger: 'axis', show: false, formatter: undefined },
         }}
       />
 

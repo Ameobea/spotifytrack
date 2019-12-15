@@ -134,18 +134,17 @@ interface ArtistProps {
   preferredGenres?: Set<string>;
 }
 
-const Genre = ({ genre }: { genre: string }) => {
-  const to = `http://everynoise.com/engenremap-${genre.replace(/ /g, '')}.html`;
-  return <ANewTab to={to} text={genre} style={{ color: 'white', fontSize: 11 }} />;
-};
+const Genre: React.FC<{ username: string; genre: string }> = ({ username, genre }) => (
+  <Link to={`/stats/${username}/genre/${genre}/`}>{genre}</Link>
+);
 
-export const Artist = ({
+export const Artist: React.FC<ArtistProps> = ({
   id,
   name,
   genres,
   imageSrc,
   preferredGenres = DEFAULT_PREFERRED_GENRES,
-}: ArtistProps) => {
+}) => {
   const username = useUsername();
   // Make sure that preferred genres show up and aren't trimmed off
   const [preferred, other] = R.partition(genre => preferredGenres.has(genre), genres);
@@ -161,21 +160,14 @@ export const Artist = ({
         <div>
           <ArtistStatsLink artistId={id}>{name}</ArtistStatsLink>
         </div>
-        <HTMLEllipsis
-          maxLine={3}
-          basedOn="words"
-          trimRight={false}
-          unsafeHTML={ReactDOMServer.renderToString(
-            <div style={{ lineHeight: '1em' }}>
-              {trimmedGenres.map((genre, i) => (
-                <Fragment key={genre}>
-                  <Genre genre={genre} />
-                  {i !== trimmedGenres.length - 1 ? ', ' : null}
-                </Fragment>
-              ))}
-            </div>
-          )}
-        />
+        <div style={{ lineHeight: '1em' }}>
+          {trimmedGenres.map((genre, i) => (
+            <Fragment key={genre}>
+              <Genre username={username!} genre={genre} />
+              {i !== trimmedGenres.length - 1 ? ', ' : null}
+            </Fragment>
+          ))}
+        </div>
       </div>
     </ImageBox>
   );
