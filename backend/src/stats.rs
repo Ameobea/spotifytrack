@@ -87,3 +87,22 @@ pub fn compute_track_popularity_scores(
     top_tracks.sort_by_key(|(_track_id, score)| Reverse(*score));
     top_tracks
 }
+
+pub fn compute_genre_ranking_history(
+    updates: Vec<(NaiveDateTime, TimeFrames<crate::db_util::GenreUpdateItem>)>,
+) -> (Vec<NaiveDateTime>, TimeFrames<usize>) {
+    let timestamps: Vec<NaiveDateTime> = updates.iter().map(|(ts, _)| ts.clone()).collect();
+
+    let rankings = TimeFrames::flat_map(
+        updates.into_iter().map(|(_, timeframes)| timeframes),
+        |items: Vec<crate::db_util::GenreUpdateItem>| -> usize {
+            let item_count = items.len();
+            items
+                .into_iter()
+                .map(|item| weight_data_point(50, item.ranking as usize))
+                .sum()
+        },
+    );
+
+    (timestamps, rankings)
+}

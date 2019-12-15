@@ -111,6 +111,27 @@ impl<T: Serialize> TimeFrames<T> {
 
         collection.push(item);
     }
+
+    pub fn flat_map<U: Serialize, I: Iterator<Item = TimeFrames<T>>>(
+        timeframes: I,
+        pred: fn(items: Vec<T>) -> U,
+    ) -> TimeFrames<U> {
+        let mut short = Vec::new();
+        let mut medium = Vec::new();
+        let mut long = Vec::new();
+
+        for timeframe in timeframes {
+            short.push(pred(timeframe.short));
+            medium.push(pred(timeframe.medium));
+            long.push(pred(timeframe.long));
+        }
+
+        TimeFrames {
+            short,
+            medium,
+            long,
+        }
+    }
 }
 
 impl<T: Serialize> Default for TimeFrames<T> {

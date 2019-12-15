@@ -6,6 +6,7 @@ use diesel::{
     sql_types::HasSqlType,
 };
 use hashbrown::{HashMap, HashSet};
+use serde::Serialize;
 
 use crate::benchmarking::mark;
 use crate::models::{
@@ -133,6 +134,22 @@ pub fn get_artist_rank_history_single_artist(
     Ok(Some(output))
 }
 
+pub fn group_updates_by_timestamp<T>(
+    get_timestamp: fn(update: &T) -> NaiveDateTime,
+    updates: &[T],
+) -> HashMap<NaiveDateTime, Vec<&T>> {
+    let mut entity_stats_by_update_timestamp: HashMap<NaiveDateTime, Vec<&T>> = HashMap::new();
+    for update in updates {
+        let timestamp = get_timestamp(update);
+        let entries_for_update = entity_stats_by_update_timestamp
+            .entry(timestamp.clone())
+            .or_insert_with(Vec::new);
+        entries_for_update.push(update);
+    }
+
+    entity_stats_by_update_timestamp
+}
+
 /// Generic function that handles executing a given SQL query to fetch metrics for a set of entities of some type.
 /// Once the metrics are fetched, it also fetches entity metadata for all of the fetched updates and returns them as a
 /// mapping from spotify id to entity along with the sorted + grouped metrics.
@@ -142,6 +159,7 @@ pub fn get_artist_rank_history_single_artist(
 fn get_entity_stats_history<
     T: HasSpotifyId,
     Q: RunQueryDsl<MysqlConnection> + QueryFragment<Mysql> + Query + QueryId,
+    U: Serialize,
 >(
     conn: DbConn,
     query: Q,
@@ -150,7 +168,8 @@ fn get_entity_stats_history<
         spotify_access_token: &str,
         entity_spotify_ids: &[&str],
     ) -> Result<Vec<T>, String>,
-) -> Result<Option<(HashMap<String, T>, Vec<(NaiveDateTime, TimeFrames<String>)>)>, String>
+    get_update_item: fn(&StatsHistoryQueryResItem) -> U,
+) -> Result<Option<(HashMap<String, T>, Vec<(NaiveDateTime, TimeFrames<U>)>)>, String>
 where
     (String, NaiveDateTime, u16, u8): Queryable<<Q as Query>::SqlType, Mysql>,
     Mysql: HasSqlType<<Q as Query>::SqlType>,
@@ -179,18 +198,12 @@ where
         });
 
     // Group the entity stats by their update timestamp
-    let mut entity_stats_by_update_timestamp: HashMap<
-        NaiveDateTime,
-        Vec<&StatsHistoryQueryResItem>,
-    > = HashMap::new();
-    for history_entry in &entity_stats {
-        let entries_for_update = entity_stats_by_update_timestamp
-            .entry(history_entry.update_time.clone())
-            .or_insert_with(Vec::new);
-        entries_for_update.push(history_entry);
-    }
+    let entity_stats_by_update_timestamp = group_updates_by_timestamp(
+        |update: &StatsHistoryQueryResItem| -> NaiveDateTime { update.update_time.clone() },
+        &entity_stats,
+    );
 
-    let mut updates: Vec<(NaiveDateTime, TimeFrames<String>)> = entity_stats_by_update_timestamp
+    let mut updates: Vec<(NaiveDateTime, TimeFrames<U>)> = entity_stats_by_update_timestamp
         .into_iter()
         .map(|(update_timestamp, mut entries_for_update)| {
             entries_for_update
@@ -201,7 +214,7 @@ where
                 |mut acc, (i, track_history_entry)| {
                     let timeframe_id = entity_stats[i].timeframe;
 
-                    acc.add_item_by_id(timeframe_id, track_history_entry.spotify_id.clone());
+                    acc.add_item_by_id(timeframe_id, get_update_item(track_history_entry));
                     acc
                 },
             );
@@ -245,6 +258,51 @@ pub fn get_artist_stats_history(
         query,
         spotify_access_token,
         crate::spotify_api::fetch_artists,
+        |update: &StatsHistoryQueryResItem| update.spotify_id.clone(),
+    )
+}
+
+#[derive(Serialize)]
+pub struct GenreUpdateItem {
+    pub artist_spotify_id: String,
+    pub ranking: u16,
+}
+
+pub fn get_genre_stats_history(
+    user: &User,
+    conn: DbConn,
+    spotify_access_token: &str,
+    target_genre: &str,
+) -> Result<
+    Option<(
+        HashMap<String, Artist>,
+        Vec<(NaiveDateTime, TimeFrames<GenreUpdateItem>)>,
+    )>,
+    String,
+> {
+    use crate::schema::artist_rank_snapshots::{self, dsl::*};
+    use crate::schema::artists_genres::{self, dsl::*};
+    use crate::schema::spotify_items::dsl::*;
+
+    let query =
+        artists_genres
+            .filter(genre.eq(target_genre))
+            .filter(user_id.eq(user.id))
+            .inner_join(artist_rank_snapshots.on(
+                artist_rank_snapshots::dsl::mapped_spotify_id.eq(artists_genres::dsl::artist_id),
+            ))
+            .inner_join(spotify_items)
+            .select((spotify_id, update_time, ranking, timeframe));
+
+    get_entity_stats_history(
+        conn,
+        query,
+        spotify_access_token,
+        crate::spotify_api::fetch_artists,
+        |update: &StatsHistoryQueryResItem| GenreUpdateItem {
+            artist_spotify_id: update.spotify_id.clone(),
+            ranking: update.ranking,
+        },
     )
 }
 
@@ -336,6 +394,7 @@ pub fn get_track_stats_history(
         query,
         spotify_access_token,
         crate::spotify_api::fetch_tracks,
+        |update: &StatsHistoryQueryResItem| update.spotify_id.clone(),
     )
 }
 

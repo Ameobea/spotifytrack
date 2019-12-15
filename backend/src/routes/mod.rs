@@ -12,7 +12,7 @@ use rocket_contrib::json::Json;
 use crate::benchmarking::{mark, start};
 use crate::conf::CONF;
 use crate::db_util;
-use crate::models::{Artist, NewUser, OAuthTokenResponse, StatsSnapshot, Track, User};
+use crate::models::{Artist, NewUser, OAuthTokenResponse, StatsSnapshot, TimeFrames, Track, User};
 use crate::DbConn;
 use crate::SpotifyTokenData;
 
@@ -40,13 +40,15 @@ pub fn get_current_stats(
     };
     mark("Finished getting spotify user by id");
 
-    let token_data = &mut *(&*token_data).lock().unwrap();
-    let spotify_access_token = token_data.get()?;
+    let spotify_access_token = {
+        let token_data = &mut *(&*token_data).lock().unwrap();
+        token_data.get()
+    }?;
     mark("Got spotify access token");
 
     let (artist_stats, track_stats) = match rayon::join(
-        || db_util::get_artist_stats(&user, conn, spotify_access_token),
-        || db_util::get_track_stats(&user, conn2, spotify_access_token),
+        || db_util::get_artist_stats(&user, conn, &spotify_access_token),
+        || db_util::get_track_stats(&user, conn2, &spotify_access_token),
     ) {
         (Err(err), _) | (Ok(_), Err(err)) => return Err(err),
         (Ok(None), _) | (_, Ok(None)) => return Ok(None),
@@ -93,8 +95,10 @@ pub fn get_artist_stats(
     };
     mark("Finished getting spotify user by id");
 
-    let token_data = &mut *(&*token_data).lock().unwrap();
-    let spotify_access_token = token_data.get()?;
+    let spotify_access_token = {
+        let token_data = &mut *(&*token_data).lock().unwrap();
+        token_data.get()
+    }?;
     mark("Got spotify access token");
 
     let (artist_popularity_history, (tracks_by_id, top_track_scores)) = match rayon::join(
@@ -103,7 +107,7 @@ pub fn get_artist_stats(
             let (tracks_by_id, track_history) = match db_util::get_track_stats_history(
                 &user,
                 conn2,
-                spotify_access_token,
+                &spotify_access_token,
                 &artist_id,
             )? {
                 Some(res) => res,
@@ -120,7 +124,7 @@ pub fn get_artist_stats(
     };
     mark("Fetched artists stats and top tracks");
 
-    let artist = match crate::spotify_api::fetch_artists(spotify_access_token, &[&artist_id])?
+    let artist = match crate::spotify_api::fetch_artists(&spotify_access_token, &[&artist_id])?
         .drain(..)
         .next()
     {
@@ -156,12 +160,14 @@ pub fn get_genre_history(
             return Ok(None);
         }
     };
-    let token_data = &mut *(&*token_data).lock().unwrap();
-    let spotify_access_token = token_data.get()?;
+    let spotify_access_token = {
+        let token_data = &mut *(&*token_data).lock().unwrap();
+        token_data.get()
+    }?;
 
     // Only include data from the "short" timeframe since we're producing a timeseries
     let (artists_by_id, artist_stats_history) =
-        match db_util::get_artist_stats_history(&user, conn, spotify_access_token, Some(0))? {
+        match db_util::get_artist_stats_history(&user, conn, &spotify_access_token, Some(0))? {
             Some(res) => res,
             None => return Ok(None),
         };
@@ -171,6 +177,51 @@ pub fn get_genre_history(
     Ok(Some(Json(GenresHistory {
         timestamps,
         history_by_genre,
+    })))
+}
+
+#[derive(Serialize)]
+pub struct GenreStats {
+    pub artists_by_id: HashMap<String, Artist>,
+    pub top_artists: Vec<(usize, String)>,
+    pub timestamps: Vec<NaiveDateTime>,
+    pub popularity_history: TimeFrames<usize>,
+}
+
+#[get("/stats/<username>/genre/<genre>")]
+pub fn get_genre_stats(
+    conn: DbConn,
+    conn2: DbConn,
+    token_data: State<Mutex<SpotifyTokenData>>,
+    username: String,
+    genre: String,
+) -> Result<Option<Json<GenreStats>>, String> {
+    let user = match db_util::get_user_by_spotify_id(&conn, &username)? {
+        Some(user) => user,
+        None => {
+            return Ok(None);
+        }
+    };
+    let spotify_access_token = {
+        let token_data = &mut *(&*token_data).lock().unwrap();
+        token_data.get()
+    }?;
+
+    let (artists_by_id, genre_stats_history) =
+        match db_util::get_genre_stats_history(&user, conn, &spotify_access_token, &genre)? {
+            Some(res) => res,
+            None => return Ok(None),
+        };
+
+    // Compute ranking scores for each of the update items
+    let (timestamps, popularity_history) =
+        crate::stats::compute_genre_ranking_history(genre_stats_history);
+
+    Ok(Some(Json(GenreStats {
+        artists_by_id,
+        top_artists: Vec::new(), // TODO: Construct artist rankings for the current update.
+        popularity_history,
+        timestamps,
     })))
 }
 
@@ -407,8 +458,10 @@ pub fn populate_tracks_artists_mapping_table(
         ));
     }
 
-    let token_data = &mut *(&*token_data).lock().unwrap();
-    let spotify_access_token = token_data.get()?;
+    let spotify_access_token = {
+        let token_data = &mut *(&*token_data).lock().unwrap();
+        token_data.get()
+    }?;
 
     crate::db_util::populate_tracks_artists_table(&conn, &spotify_access_token)?;
 
@@ -431,8 +484,10 @@ pub fn populate_artists_genres_mapping_table(
         ));
     }
 
-    let token_data = &mut *(&*token_data).lock().unwrap();
-    let spotify_access_token = token_data.get()?;
+    let spotify_access_token = {
+        let token_data = &mut *(&*token_data).lock().unwrap();
+        token_data.get()
+    }?;
 
     crate::db_util::populate_artists_genres_table(&conn, &spotify_access_token)?;
 

@@ -33,7 +33,7 @@ impl SpotifyTokenData {
         Ok(())
     }
 
-    pub fn get(&mut self) -> Result<&str, String> {
+    pub fn get(&mut self) -> Result<String, String> {
         let now = chrono::Local::now();
         if now > self.expiry {
             info!(
@@ -46,6 +46,6 @@ impl SpotifyTokenData {
             "Current token doesn't expire until {} and is still valid.",
             self.expiry
         );
-        Ok(&self.token)
+        Ok(self.token.clone())
     }
 }
