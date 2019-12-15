@@ -10,6 +10,7 @@ const LazyHome = import('src/pages/Home');
 const LazyStats = import('src/pages/Stats');
 import { history, store } from 'src/store';
 import './index.scss';
+import { ReactQueryConfigProvider } from 'react-query';
 
 const [Home, Stats] = [LazyHome, LazyStats].map(LazyPage => {
   const Comp = React.lazy(() => LazyPage);
@@ -39,7 +40,9 @@ const App = () => (
 
 ReactDOM.render(
   <Provider store={store}>
-    <App />
+    <ReactQueryConfigProvider config={{ refetchAllOnWindowFocus: false }}>
+      <App />
+    </ReactQueryConfigProvider>
   </Provider>,
   document.getElementById('root')!
 );

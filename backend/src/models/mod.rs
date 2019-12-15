@@ -1,4 +1,5 @@
 use std::default::Default;
+use std::fmt::Debug;
 use std::vec;
 
 use chrono::NaiveDateTime;
@@ -155,6 +156,19 @@ impl<T: Serialize> IntoIterator for TimeFrames<T> {
             ("long", self.long),
         ]
         .into_iter()
+    }
+}
+
+impl<T: Serialize> Debug for TimeFrames<T>
+where
+    T: Debug,
+{
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        fmt.debug_struct("Foo")
+            .field("short", &self.short)
+            .field("medium", &self.medium)
+            .field("long", &self.long)
+            .finish()
     }
 }
 

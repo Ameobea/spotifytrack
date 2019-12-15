@@ -64,6 +64,7 @@
     "react-d3-library": "^1.1.8",
     "react-dom": "16.12.0",
     "react-lines-ellipsis": "^0.14.1",
+    "react-query": "^0.3.23",
     "react-redux": "=7.1.3",
     "react-router": "^5.1.2",
     "react-router-dom": "^5.1.2",

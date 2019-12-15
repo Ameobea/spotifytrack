@@ -183,7 +183,7 @@ pub fn get_genre_history(
 #[derive(Serialize)]
 pub struct GenreStats {
     pub artists_by_id: HashMap<String, Artist>,
-    pub top_artists: Vec<(usize, String)>,
+    pub top_artists: HashMap<&'static str, Vec<(String, f32)>>,
     pub timestamps: Vec<NaiveDateTime>,
     pub popularity_history: TimeFrames<usize>,
 }
@@ -191,7 +191,6 @@ pub struct GenreStats {
 #[get("/stats/<username>/genre/<genre>")]
 pub fn get_genre_stats(
     conn: DbConn,
-    conn2: DbConn,
     token_data: State<Mutex<SpotifyTokenData>>,
     username: String,
     genre: String,
@@ -214,12 +213,12 @@ pub fn get_genre_stats(
         };
 
     // Compute ranking scores for each of the update items
-    let (timestamps, popularity_history) =
+    let (timestamps, ranking_by_artist_spotify_id_by_timeframe, popularity_history) =
         crate::stats::compute_genre_ranking_history(genre_stats_history);
 
     Ok(Some(Json(GenreStats {
         artists_by_id,
-        top_artists: Vec::new(), // TODO: Construct artist rankings for the current update.
+        top_artists: ranking_by_artist_spotify_id_by_timeframe,
         popularity_history,
         timestamps,
     })))

@@ -2,9 +2,9 @@ import { API_BASE_URL } from 'src/conf';
 
 export const getUrl = (path: string) => `${API_BASE_URL}${path}`;
 
-const getJsonEndpoint = (url: string) =>
+export const getJsonEndpoint = <T = any>(url: string) =>
   fetch(url)
-    .then(res => res.json())
+    .then(res => res.json() as Promise<T>)
     .catch(err => {
       console.error(`Error fetching API endpoint: ${url}: `, err);
       throw err;

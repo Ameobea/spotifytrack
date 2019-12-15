@@ -1,10 +1,128 @@
-import React from 'react';
+import React, { useMemo } from 'react';
+import { connect } from 'react-redux';
+import { useQuery } from 'react-query';
 
-const GenreStats: React.FC<{ username: string; genre: string }> = ({ username, genre }) => (
-  <div>
-    <h1>{username}</h1>
-    {genre}
-  </div>
-);
+import { getUrl, getJsonEndpoint } from 'src/api';
+import { Artist, TimeFrames, ReduxStore } from 'src/types';
+import { LineChart } from 'src/components/Charts';
+import Loading from 'src/components/Loading';
+import { ImageBoxGrid, Artist as ArtistCard } from 'src/Cards';
+import { useDispatch } from 'react-redux';
+import { actionCreators } from 'src/store';
 
-export default GenreStats;
+interface GenreStats {
+  artists_by_id: { [artistId: string]: Artist };
+  top_artists: {
+    short: [string, number][];
+    medium: [string, number][];
+    long: [string, number][];
+  };
+  timestamps: string[];
+  popularity_history: TimeFrames<number>;
+}
+
+const fetchGenreStats = async (username: string, genre: string) =>
+  getJsonEndpoint<GenreStats>(getUrl(`/stats/${username}/genre/${genre}`));
+
+const mapStateToProps = (state: ReduxStore) => ({ artistsCorpus: state.entityStore.artists });
+
+const GenreStats: React.FC<{ username: string; genre: string } & ReturnType<
+  typeof mapStateToProps
+>> = ({ username, genre, artistsCorpus }) => {
+  const dispatch = useDispatch();
+
+  const { data: genreStats, isLoading, error } = useQuery([genre, { username, genre }], () =>
+    fetchGenreStats(username, genre).then(res => {
+      dispatch(actionCreators.entityStore.ADD_ARTISTS(res.artists_by_id));
+      return res;
+    })
+  );
+
+  const series = useMemo(() => {
+    if (!genreStats) {
+      return null;
+    }
+
+    const dates = genreStats.timestamps.map(date => new Date(date));
+
+    return ['short' as const, 'medium' as const, 'long' as const].map((name, i) => ({
+      name,
+      data: genreStats.popularity_history[name].map((popularity, i): [Date, number | null] => [
+        dates[i],
+        popularity,
+      ]),
+    }));
+  }, [genreStats]);
+
+  if (isLoading || !genreStats || !series) {
+    return (
+      <div>
+        <h1>{genre}</h1>
+        <Loading />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <h1>{genre}</h1>
+      <LineChart
+        style={{ height: 300 }}
+        series={series}
+        otherConfig={{
+          title: { text: `Popularity History for ${genre}` },
+          xAxis: {
+            type: 'time',
+            name: 'Update Time',
+            nameLocation: 'center',
+            nameTextStyle: {
+              color: '#ccc',
+              fontSize: 14,
+              padding: 12,
+            },
+          },
+          yAxis: {
+            type: 'value',
+            name: 'Popularity Ranking',
+            nameLocation: 'middle',
+            nameGap: 50,
+            nameTextStyle: {
+              color: '#ccc',
+              fontSize: 14,
+            },
+          },
+          tooltip: { trigger: 'axis' },
+        }}
+      />
+
+      <ImageBoxGrid
+        renderItem={(i, timeframe) => {
+          const [artistId] = genreStats.top_artists[timeframe][i];
+          if (!artistId) {
+            return null;
+          }
+          const artist = artistsCorpus[artistId];
+          if (!artist) {
+            console.error(`No artist metadata for artist ${artistId}`);
+            return null;
+          }
+
+          return (
+            <ArtistCard
+              name={artist.name}
+              genres={artist.genres}
+              imageSrc={artist.images[0].url}
+              uri={artist.uri}
+              id={artist.id}
+            />
+          );
+        }}
+        getItemCount={timeframe => genreStats.top_artists[timeframe].length}
+        initialItems={10}
+        title="Artists"
+      />
+    </div>
+  );
+};
+
+export default connect(mapStateToProps)(GenreStats);

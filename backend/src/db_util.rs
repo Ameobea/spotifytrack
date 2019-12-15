@@ -209,12 +209,13 @@ where
             entries_for_update
                 .sort_unstable_by_key(|track_history_entry| track_history_entry.ranking);
 
-            let stats_for_update = entries_for_update.into_iter().enumerate().fold(
+            let stats_for_update = entries_for_update.into_iter().fold(
                 TimeFrames::default(),
-                |mut acc, (i, track_history_entry)| {
-                    let timeframe_id = entity_stats[i].timeframe;
-
-                    acc.add_item_by_id(timeframe_id, get_update_item(track_history_entry));
+                |mut acc, track_history_entry| {
+                    acc.add_item_by_id(
+                        track_history_entry.timeframe,
+                        get_update_item(track_history_entry),
+                    );
                     acc
                 },
             );
@@ -262,7 +263,7 @@ pub fn get_artist_stats_history(
     )
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct GenreUpdateItem {
     pub artist_spotify_id: String,
     pub ranking: u16,
