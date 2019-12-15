@@ -9,8 +9,8 @@ use hashbrown::{HashMap, HashSet};
 
 use crate::benchmarking::mark;
 use crate::models::{
-    Artist, ArtistRankHistoryResItem, HasSpotifyId, NewSpotifyIdMapping, SpotifyIdMapping,
-    StatsHistoryQueryResItem, TimeFrames, Track, TrackArtistPair, User,
+    Artist, ArtistGenrePair, ArtistRankHistoryResItem, HasSpotifyId, NewSpotifyIdMapping,
+    SpotifyIdMapping, StatsHistoryQueryResItem, TimeFrames, Track, TrackArtistPair, User,
 };
 use crate::DbConn;
 
@@ -457,6 +457,86 @@ pub fn populate_tracks_artists_table(
                 err
             );
             "Error inserting artist/track pairs into mapping table".into()
+        })
+        .map(|_| ())
+}
+
+pub fn populate_artists_genres_table(
+    conn: &DbConn,
+    spotify_access_token: &str,
+) -> Result<(), String> {
+    use crate::schema::artist_rank_snapshots::{self, dsl::*};
+    use crate::schema::artists_genres::dsl::*;
+    use crate::schema::spotify_items::dsl::*;
+
+    #[derive(Queryable)]
+    struct Ids {
+        pub artist_id: i32,
+        pub spotify_id: String,
+    }
+
+    // Get the full set of unique artist Spotify IDs for all stored updates
+    let all_artist_ids = artist_rank_snapshots
+        .inner_join(spotify_items)
+        .select((artist_rank_snapshots::mapped_spotify_id, spotify_id))
+        .distinct()
+        .load::<Ids>(&conn.0)
+        .map_err(|err| -> String {
+            error!("Error fetching all artist ids from database: {:?}", err);
+            "Error fetching all artist ids from database".into()
+        })?;
+
+    let all_artist_spotify_ids = all_artist_ids
+        .iter()
+        .map(|ids| ids.spotify_id.as_str())
+        .collect::<Vec<&str>>();
+
+    let mut artist_internal_id_by_spotify_id: HashMap<String, i32> = HashMap::new();
+    for ids in &all_artist_ids {
+        artist_internal_id_by_spotify_id.insert(ids.spotify_id.clone(), ids.artist_id);
+    }
+
+    // Fetch track metadata for each of them
+    let artists = crate::spotify_api::fetch_artists(spotify_access_token, &all_artist_spotify_ids)?;
+
+    let pairs: Vec<ArtistGenrePair> = artists
+        .into_iter()
+        .flat_map(|artist| {
+            let artist_internal_id: i32 = *artist_internal_id_by_spotify_id.get(&artist.id).expect(
+                format!(
+                    "No internal artist ID in mapping for artist with spotify id {}",
+                    artist.id
+                )
+                .as_str(),
+            );
+
+            artist
+                .genres
+                .unwrap_or_else(Vec::new)
+                .into_iter()
+                .map(move |genre_item| ArtistGenrePair {
+                    artist_id: artist_internal_id,
+                    genre: genre_item,
+                })
+        })
+        .collect();
+
+    conn.0
+        .transaction::<_, diesel::result::Error, _>(|| {
+            // Clear all existing artist/genre mapping entries
+            diesel::delete(artists_genres).execute(&conn.0)?;
+
+            // Re-fill the table with the new ones we've created
+            diesel::insert_into(artists_genres)
+                .values(&pairs)
+                .execute(&conn.0)
+        })
+        .map_err(|err| -> String {
+            error!(
+                "Error clearing + refreshing artists/genres mapping table: {:?}",
+                err
+            );
+            "Error clearing + refreshing artists/genres mapping table".into()
         })
         .map(|_| ())
 }

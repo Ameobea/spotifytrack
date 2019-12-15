@@ -65,7 +65,8 @@ fn main() {
                 routes::update_user,
                 routes::get_artist_stats,
                 routes::get_genre_history,
-                routes::populate_mapping_table
+                routes::populate_tracks_artists_mapping_table,
+                routes::populate_artists_genres_mapping_table
             ],
         )
         .attach(DbConn::fairing())

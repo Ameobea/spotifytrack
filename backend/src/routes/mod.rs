@@ -394,8 +394,8 @@ pub fn update_user(
     ))
 }
 
-#[post("/populate_mapping_table", data = "<api_token_data>")]
-pub fn populate_mapping_table(
+#[post("/populate_tracks_artists_mapping_table", data = "<api_token_data>")]
+pub fn populate_tracks_artists_mapping_table(
     conn: DbConn,
     api_token_data: rocket::data::Data,
     token_data: State<Mutex<SpotifyTokenData>>,
@@ -411,6 +411,30 @@ pub fn populate_mapping_table(
     let spotify_access_token = token_data.get()?;
 
     crate::db_util::populate_tracks_artists_table(&conn, &spotify_access_token)?;
+
+    Ok(status::Custom(
+        Status::Ok,
+        "Sucessfully populated mapping table".into(),
+    ))
+}
+
+#[post("/populate_artists_genres_mapping_table", data = "<api_token_data>")]
+pub fn populate_artists_genres_mapping_table(
+    conn: DbConn,
+    api_token_data: rocket::data::Data,
+    token_data: State<Mutex<SpotifyTokenData>>,
+) -> Result<status::Custom<String>, String> {
+    if !validate_api_token(api_token_data)? {
+        return Ok(status::Custom(
+            Status::Unauthorized,
+            "Invalid API token supplied".into(),
+        ));
+    }
+
+    let token_data = &mut *(&*token_data).lock().unwrap();
+    let spotify_access_token = token_data.get()?;
+
+    crate::db_util::populate_artists_genres_table(&conn, &spotify_access_token)?;
 
     Ok(status::Custom(
         Status::Ok,

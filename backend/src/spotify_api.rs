@@ -4,7 +4,7 @@ use std::thread;
 use chrono::Utc;
 use crossbeam::channel;
 use diesel::prelude::*;
-use hashbrown::{HashMap, HashSet};
+use hashbrown::HashMap;
 use reqwest;
 use serde::{Deserialize, Serialize};
 
@@ -285,6 +285,25 @@ pub fn store_stats_snapshot(
                 .map(move |genre| ArtistGenrePair { artist_id, genre })
         })
         .collect();
+
+    // Delete all old artist/genre entries for the artists we have here and insert the new ones, making sure that the entries we have are all valid and up-to-date
+    conn.0
+        .transaction::<_, diesel::result::Error, _>(|| {
+            use crate::schema::artists_genres::dsl::*;
+
+            diesel::delete(
+                artists_genres.filter(artist_id.eq_any(mapped_artist_spotify_ids.values())),
+            )
+            .execute(&conn.0)?;
+
+            diesel::insert_into(artists_genres)
+                .values(&artist_genre_pairs)
+                .execute(&conn.0)
+        })
+        .map_err(|err| -> String {
+            error!("Error inserting artist/genre mappings: {:?}", err);
+            "Error inserting artist/genre mappings into database".into()
+        })?;
 
     let track_entries: Vec<NewTrackHistoryEntry> = stats
         .tracks
