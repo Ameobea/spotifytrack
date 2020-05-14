@@ -89,10 +89,10 @@ pub fn compute_track_popularity_scores(
 }
 
 pub fn compute_genre_ranking_history(
-    updates: Vec<(NaiveDateTime, TimeFrames<crate::db_util::GenreUpdateItem>)>,
+    updates: Vec<(NaiveDateTime, TimeFrames<crate::db_util::ArtistRanking>)>,
 ) -> (
     Vec<NaiveDateTime>,
-    HashMap<&'static str, Vec<(String, f32)>>,
+    Vec<(String, f32)>,
     TimeFrames<usize>,
 ) {
     let timestamps: Vec<NaiveDateTime> = updates.iter().map(|(ts, _)| ts.clone()).collect();
@@ -101,31 +101,27 @@ pub fn compute_genre_ranking_history(
     // off of ranking, scaling back linearly as updates get older.  We may want to re-think this
     // ranking strategy in the future.
     let update_count = updates.len();
-    let mut ranking_by_artist_spotify_id_by_timeframe: HashMap<&'static str, Vec<(String, f32)>> =
-        HashMap::new();
+    let mut rankings_by_artist_spotify_id: HashMap<String, f32> = HashMap::new();
     for (i, (_ts, timeframes)) in updates.iter().enumerate() {
-        for (timeframe, updates) in timeframes.iter() {
-            let mut ranking_by_artist_spotify_id = HashMap::new();
-
-            for update in updates {
+        for (_timeframe, rankings) in timeframes.iter() {
+            for ranking in rankings {
                 let recency_factor = ((i + 1) as f32) / (update_count as f32);
-                let score = weight_data_point(50, update.ranking as usize) as f32 * recency_factor;
+                let score = weight_data_point(50, ranking.ranking as usize) as f32 * recency_factor;
 
-                let entry = ranking_by_artist_spotify_id
-                    .entry(update.artist_spotify_id.clone())
+                let entry = rankings_by_artist_spotify_id
+                    .entry(ranking.artist_spotify_id.clone())
                     .or_insert(0.0);
                 *entry += score;
             }
-
-            let mut rankings = ranking_by_artist_spotify_id.into_iter().collect::<Vec<_>>();
-            rankings.sort_unstable_by_key(|ranking| Reverse((ranking.1 * 10000.0) as usize));
-            ranking_by_artist_spotify_id_by_timeframe.insert(timeframe, rankings);
         }
     }
 
-    let rankings = TimeFrames::flat_map(
+    let mut artist_rankings = rankings_by_artist_spotify_id.into_iter().collect::<Vec<_>>();
+    artist_rankings.sort_unstable_by_key(|ranking| Reverse((ranking.1 * 10000.0) as usize));
+
+    let popularity_history = TimeFrames::flat_map(
         updates.into_iter().map(|(_, timeframes)| timeframes),
-        |items: Vec<crate::db_util::GenreUpdateItem>| {
+        |items: Vec<crate::db_util::ArtistRanking>| {
             items
                 .into_iter()
                 .map(|item| weight_data_point(50, item.ranking as usize))
@@ -135,7 +131,7 @@ pub fn compute_genre_ranking_history(
 
     (
         timestamps,
-        ranking_by_artist_spotify_id_by_timeframe,
-        rankings,
+        artist_rankings,
+        popularity_history,
     )
 }

@@ -13,11 +13,7 @@ import { ANewTab } from 'src/util';
 
 interface GenreStats {
   artists_by_id: { [artistId: string]: Artist };
-  top_artists: {
-    short: [string, number][];
-    medium: [string, number][];
-    long: [string, number][];
-  };
+  top_artists: [string, number][];
   timestamps: string[];
   popularity_history: TimeFrames<number>;
 }
@@ -32,13 +28,13 @@ const fetchGenreStats = async (username: string, genre: string) =>
 
 const mapStateToProps = (state: ReduxStore) => ({ artistsCorpus: state.entityStore.artists });
 
-const GenreStats: React.FC<{ username: string; genre: string } & ReturnType<
-  typeof mapStateToProps
->> = ({ username, genre, artistsCorpus }) => {
+const GenreStats: React.FC<
+  { username: string; genre: string } & ReturnType<typeof mapStateToProps>
+> = ({ username, genre, artistsCorpus }) => {
   const dispatch = useDispatch();
 
-  const { data: genreStats, isLoading, error } = useQuery([genre, { username, genre }], () =>
-    fetchGenreStats(username, genre).then(res => {
+  const { data: genreStats, status } = useQuery([genre, { username, genre }], () =>
+    fetchGenreStats(username, genre).then((res) => {
       dispatch(actionCreators.entityStore.ADD_ARTISTS(res.artists_by_id));
       return res;
     })
@@ -49,7 +45,7 @@ const GenreStats: React.FC<{ username: string; genre: string } & ReturnType<
       return null;
     }
 
-    const dates = genreStats.timestamps.map(date => new Date(date));
+    const dates = genreStats.timestamps.map((date) => new Date(date));
 
     return ['short' as const, 'medium' as const, 'long' as const].map((name, i) => ({
       name,
@@ -60,7 +56,7 @@ const GenreStats: React.FC<{ username: string; genre: string } & ReturnType<
     }));
   }, [genreStats]);
 
-  if (isLoading || !genreStats || !series) {
+  if (status === 'loading' || !genreStats || !series) {
     return (
       <div>
         <h1>{genre}</h1>
@@ -102,8 +98,8 @@ const GenreStats: React.FC<{ username: string; genre: string } & ReturnType<
       />
 
       <ImageBoxGrid
-        renderItem={(i, timeframe) => {
-          const [artistId] = genreStats.top_artists[timeframe][i];
+        renderItem={(i) => {
+          const [artistId] = genreStats.top_artists[i];
           if (!artistId) {
             return null;
           }
@@ -123,9 +119,10 @@ const GenreStats: React.FC<{ username: string; genre: string } & ReturnType<
             />
           );
         }}
-        getItemCount={timeframe => genreStats.top_artists[timeframe].length}
-        initialItems={10}
+        getItemCount={() => genreStats.top_artists.length}
+        initialItems={40}
         title="Artists"
+        disableTimeframes
       />
     </div>
   );

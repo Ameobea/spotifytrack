@@ -183,7 +183,7 @@ pub fn get_genre_history(
 #[derive(Serialize)]
 pub struct GenreStats {
     pub artists_by_id: HashMap<String, Artist>,
-    pub top_artists: HashMap<&'static str, Vec<(String, f32)>>,
+    pub top_artists: Vec<(String, f32)>,
     pub timestamps: Vec<NaiveDateTime>,
     pub popularity_history: TimeFrames<usize>,
 }

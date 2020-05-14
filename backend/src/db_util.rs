@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use chrono::NaiveDateTime;
 use diesel::{
     mysql::{Mysql, MysqlConnection},
@@ -157,9 +159,9 @@ pub fn group_updates_by_timestamp<T>(
 /// The data returned by this function is useful for generating graphs on the frontend showing how the rankings of
 /// different entities changes over time.
 fn get_entity_stats_history<
-    T: HasSpotifyId,
+    T: HasSpotifyId + Debug,
     Q: RunQueryDsl<MysqlConnection> + QueryFragment<Mysql> + Query + QueryId,
-    U: Serialize,
+    U: Serialize+Debug,
 >(
     conn: DbConn,
     query: Q,
@@ -264,7 +266,7 @@ pub fn get_artist_stats_history(
 }
 
 #[derive(Debug, Serialize)]
-pub struct GenreUpdateItem {
+pub struct ArtistRanking {
     pub artist_spotify_id: String,
     pub ranking: u16,
 }
@@ -277,7 +279,7 @@ pub fn get_genre_stats_history(
 ) -> Result<
     Option<(
         HashMap<String, Artist>,
-        Vec<(NaiveDateTime, TimeFrames<GenreUpdateItem>)>,
+        Vec<(NaiveDateTime, TimeFrames<ArtistRanking>)>,
     )>,
     String,
 > {
@@ -300,7 +302,7 @@ pub fn get_genre_stats_history(
         query,
         spotify_access_token,
         crate::spotify_api::fetch_artists,
-        |update: &StatsHistoryQueryResItem| GenreUpdateItem {
+        |update: &StatsHistoryQueryResItem| ArtistRanking {
             artist_spotify_id: update.spotify_id.clone(),
             ranking: update.ranking,
         },

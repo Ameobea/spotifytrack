@@ -147,14 +147,14 @@ export const Artist: React.FC<ArtistProps> = ({
 }) => {
   const username = useUsername();
   // Make sure that preferred genres show up and aren't trimmed off
-  const [preferred, other] = R.partition(genre => preferredGenres.has(genre), genres);
+  const [preferred, other] = R.partition((genre) => preferredGenres.has(genre), genres);
   const trimmedGenres = [...preferred, ...other].slice(0, 6);
 
   return (
     <ImageBox
       imgAlt={name}
       imageSrc={imageSrc}
-      linkTo={map(username, username => buildArtistStatsUrl(username, id)) || undefined}
+      linkTo={map(username, (username) => buildArtistStatsUrl(username, id)) || undefined}
     >
       <div className="card-data">
         <div>
@@ -211,6 +211,7 @@ interface ImageBoxGridProps {
   horizontallyScrollable?: boolean;
   disableHeader?: boolean;
   hideShowMore?: boolean;
+  disableTimeframes?: boolean;
   style?: React.CSSProperties;
 }
 
@@ -221,6 +222,7 @@ export const ImageBoxGrid: React.FC<ImageBoxGridProps> = ({
   title,
   horizontallyScrollable,
   disableHeader,
+  disableTimeframes,
   hideShowMore,
   style,
 }) => {
@@ -234,10 +236,12 @@ export const ImageBoxGrid: React.FC<ImageBoxGridProps> = ({
   return (
     <div style={style}>
       {!disableHeader ? <h3 className="image-box-grid-title">{title}</h3> : null}
-      <TimeframeSelector timeframe={timeframe} setTimeframe={setTimeframe} />
+      {!disableTimeframes ? (
+        <TimeframeSelector timeframe={timeframe} setTimeframe={setTimeframe} />
+      ) : null}
       <div className={`image-box-grid${horizontallyScrollable ? ' horizontally-scrollable' : ''}`}>
         {hasItems ? (
-          R.times(R.identity, itemCount).map(i => renderItem(i, timeframe))
+          R.times(R.identity, itemCount).map((i) => renderItem(i, timeframe))
         ) : (
           <>No items for timeframe</>
         )}

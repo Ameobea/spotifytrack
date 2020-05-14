@@ -102,6 +102,17 @@ impl<T: Serialize> TimeFrames<T> {
         collection.push(item);
     }
 
+    pub fn set(&mut self, timeframe: &str, items: Vec<T>) {
+        let collection = match timeframe {
+            "short" => &mut self.short,
+            "medium" => &mut self.medium,
+            "long" => &mut self.long,
+            _ => panic!("Invalid timeframe passed to `TimeFrames::add_item`"),
+        };
+
+        *collection = items;
+    }
+
     pub fn add_item_by_id(&mut self, timeframe_id: u8, item: T) {
         let collection = match timeframe_id {
             0 => &mut self.short,
@@ -111,6 +122,14 @@ impl<T: Serialize> TimeFrames<T> {
         };
 
         collection.push(item);
+    }
+
+    pub fn map<U: Serialize>(self, pred: fn(val: T) -> U) -> TimeFrames<U> {
+        TimeFrames {
+            short: self.short.into_iter().map(pred).collect(),
+            medium: self.medium.into_iter().map(pred).collect(),
+            long: self.long.into_iter().map(pred).collect(),
+        }
     }
 
     pub fn flat_map<U: Serialize, I: Iterator<Item = TimeFrames<T>>>(
@@ -164,7 +183,7 @@ where
     T: Debug,
 {
     fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
-        fmt.debug_struct("Foo")
+        fmt.debug_struct("TimeFrames")
             .field("short", &self.short)
             .field("medium", &self.medium)
             .field("long", &self.long)

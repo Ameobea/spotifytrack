@@ -1,7 +1,6 @@
 #![feature(
     proc_macro_hygiene,
     decl_macro,
-    slice_patterns,
     box_patterns,
     nll,
     try_trait
