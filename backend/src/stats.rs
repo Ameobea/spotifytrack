@@ -1,7 +1,7 @@
 use std::cmp::Reverse;
 
 use chrono::NaiveDateTime;
-use hashbrown::{HashMap, HashSet};
+use fnv::{FnvHashMap as HashMap, FnvHashSet as HashSet};
 
 use crate::models::{Artist, TimeFrames};
 
@@ -20,11 +20,11 @@ pub fn get_top_genres_by_artists(
 ) -> (Vec<NaiveDateTime>, HashMap<String, Vec<Option<usize>>>) {
     let mut all_timestamps: Vec<NaiveDateTime> = Vec::with_capacity(updates.len());
     let mut all_genre_counts: Vec<HashMap<String, usize>> = Vec::new();
-    let mut all_genres: HashSet<String> = HashSet::new();
+    let mut all_genres: HashSet<String> = HashSet::default();
 
     for (dt, update) in updates {
         all_timestamps.push(*dt);
-        let mut genre_counts = HashMap::new();
+        let mut genre_counts = HashMap::default();
 
         for (_tf, artist_ids) in update.iter() {
             let artist_count = artist_ids.len();
@@ -50,7 +50,7 @@ pub fn get_top_genres_by_artists(
         all_genre_counts.push(genre_counts);
     }
 
-    let mut counts_by_genre = HashMap::new();
+    let mut counts_by_genre = HashMap::default();
     for genre in all_genres {
         counts_by_genre.insert(genre, Vec::with_capacity(all_timestamps.len()));
     }
@@ -69,7 +69,7 @@ pub fn get_top_genres_by_artists(
 pub fn compute_track_popularity_scores(
     track_rank_snapshots: &[(NaiveDateTime, TimeFrames<String>)],
 ) -> Vec<(String, usize)> {
-    let mut track_scores: HashMap<String, usize> = HashMap::new();
+    let mut track_scores: HashMap<String, usize> = HashMap::default();
 
     for (_update_timestamp, track_stats_for_update) in track_rank_snapshots {
         for (_timeframe, track_ids) in track_stats_for_update.iter() {
@@ -90,18 +90,14 @@ pub fn compute_track_popularity_scores(
 
 pub fn compute_genre_ranking_history(
     updates: Vec<(NaiveDateTime, TimeFrames<crate::db_util::ArtistRanking>)>,
-) -> (
-    Vec<NaiveDateTime>,
-    Vec<(String, f32)>,
-    TimeFrames<usize>,
-) {
+) -> (Vec<NaiveDateTime>, Vec<(String, f32)>, TimeFrames<usize>) {
     let timestamps: Vec<NaiveDateTime> = updates.iter().map(|(ts, _)| ts.clone()).collect();
 
     // Compute rankings for each artist within the genre according to its cumulative score based
     // off of ranking, scaling back linearly as updates get older.  We may want to re-think this
     // ranking strategy in the future.
     let update_count = updates.len();
-    let mut rankings_by_artist_spotify_id: HashMap<String, f32> = HashMap::new();
+    let mut rankings_by_artist_spotify_id: HashMap<String, f32> = HashMap::default();
     for (i, (_ts, timeframes)) in updates.iter().enumerate() {
         for (_timeframe, rankings) in timeframes.iter() {
             for ranking in rankings {
@@ -116,7 +112,9 @@ pub fn compute_genre_ranking_history(
         }
     }
 
-    let mut artist_rankings = rankings_by_artist_spotify_id.into_iter().collect::<Vec<_>>();
+    let mut artist_rankings = rankings_by_artist_spotify_id
+        .into_iter()
+        .collect::<Vec<_>>();
     artist_rankings.sort_unstable_by_key(|ranking| Reverse((ranking.1 * 10000.0) as usize));
 
     let popularity_history = TimeFrames::flat_map(
@@ -129,9 +127,5 @@ pub fn compute_genre_ranking_history(
         },
     );
 
-    (
-        timestamps,
-        artist_rankings,
-        popularity_history,
-    )
+    (timestamps, artist_rankings, popularity_history)
 }

@@ -7,7 +7,7 @@ use diesel::{
     query_builder::{Query, QueryFragment, QueryId},
     sql_types::HasSqlType,
 };
-use hashbrown::{HashMap, HashSet};
+use fnv::{FnvHashMap as HashMap, FnvHashSet as HashSet};
 use serde::Serialize;
 
 use crate::benchmarking::mark;
@@ -140,7 +140,7 @@ pub fn group_updates_by_timestamp<T>(
     get_timestamp: fn(update: &T) -> NaiveDateTime,
     updates: &[T],
 ) -> HashMap<NaiveDateTime, Vec<&T>> {
-    let mut entity_stats_by_update_timestamp: HashMap<NaiveDateTime, Vec<&T>> = HashMap::new();
+    let mut entity_stats_by_update_timestamp: HashMap<NaiveDateTime, Vec<&T>> = HashMap::default();
     for update in updates {
         let timestamp = get_timestamp(update);
         let entries_for_update = entity_stats_by_update_timestamp
@@ -161,7 +161,7 @@ pub fn group_updates_by_timestamp<T>(
 fn get_entity_stats_history<
     T: HasSpotifyId + Debug,
     Q: RunQueryDsl<MysqlConnection> + QueryFragment<Mysql> + Query + QueryId,
-    U: Serialize+Debug,
+    U: Serialize + Debug,
 >(
     conn: DbConn,
     query: Q,
@@ -194,7 +194,7 @@ where
     let fetched_tracks = fetch_entities(spotify_access_token, &entity_spotify_ids)?;
     let entities_by_id = fetched_tracks
         .into_iter()
-        .fold(HashMap::new(), |mut acc, track| {
+        .fold(HashMap::default(), |mut acc, track| {
             acc.insert(track.get_spotify_id().to_string(), track);
             acc
         });
@@ -436,7 +436,7 @@ pub fn retrieve_mapped_spotify_ids<'a, T: Iterator<Item = &'a String> + Clone>(
         })?;
 
     // Match up the orderings to that the mapped ids are in the same ordering as the provided ids
-    let mut mapped_ids_mapping: HashMap<String, i32> = HashMap::new();
+    let mut mapped_ids_mapping: HashMap<String, i32> = HashMap::default();
     for mapping in mapped_ids {
         mapped_ids_mapping.insert(mapping.spotify_id, mapping.id);
     }
@@ -478,7 +478,7 @@ pub fn populate_tracks_artists_table(
         .map(|track_spotify_id| track_spotify_id.spotify_id.as_str())
         .collect::<Vec<&str>>();
 
-    let mut track_spotify_id_to_internal_id_mapping = HashMap::new();
+    let mut track_spotify_id_to_internal_id_mapping = HashMap::default();
     for ids in &all_track_spotify_ids {
         track_spotify_id_to_internal_id_mapping.insert(ids.spotify_id.clone(), ids.track_id);
     }
@@ -553,7 +553,7 @@ pub fn populate_artists_genres_table(
         .map(|ids| ids.spotify_id.as_str())
         .collect::<Vec<&str>>();
 
-    let mut artist_internal_id_by_spotify_id: HashMap<String, i32> = HashMap::new();
+    let mut artist_internal_id_by_spotify_id: HashMap<String, i32> = HashMap::default();
     for ids in &all_artist_ids {
         artist_internal_id_by_spotify_id.insert(ids.spotify_id.clone(), ids.artist_id);
     }

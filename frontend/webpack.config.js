@@ -30,7 +30,7 @@ module.exports = {
       },
       {
         test: /\.css$/,
-        use: ['style-loader', 'css-loader'],
+        use: ['style-loader', { loader: 'css-loader', options: { sourceMap: false } }],
       },
       {
         test: /\.scss$/,
@@ -59,9 +59,6 @@ module.exports = {
   resolve: {
     extensions: ['.tsx', '.ts', '.tsx', '.js', '.jsx', '.wasm'],
     modules: [path.resolve('./node_modules'), path.resolve('.')],
-    alias: {
-      Tone: path.resolve('./node_modules/tone/Tone'),
-    },
   },
   plugins: [
     new HtmlWebpackPlugin({

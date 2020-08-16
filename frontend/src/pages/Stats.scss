@@ -4,15 +4,16 @@
 
   .headline {
     font-size: 34px;
+    z-index: 3;
 
     .username {
       font-weight: 600;
-      color: #c700ff;
+      color: #ddd;
     }
   }
 
   .details {
-    max-width: 1000px;
+    max-width: 1020px;
     margin-left: auto;
     margin-right: auto;
     margin-bottom: 150px;

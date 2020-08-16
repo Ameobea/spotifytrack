@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use std::vec;
 
 use chrono::NaiveDateTime;
-use hashbrown::HashMap;
+use fnv::FnvHashMap as HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -385,9 +385,9 @@ impl<T: for<'de> Deserialize<'de> + std::fmt::Debug + Clone> std::ops::Try for S
             error: SpotifyErrorInner {
                 status: None,
                 message: Some(err_msg),
-                other: HashMap::new(),
+                other: HashMap::default(),
             },
-            other: HashMap::new(),
+            other: HashMap::default(),
         })
     }
 

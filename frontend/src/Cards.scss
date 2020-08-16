@@ -4,6 +4,13 @@
   flex-wrap: wrap;
   justify-content: space-around;
   min-height: 200px;
+
+  padding: 30px;
+  background-color: #0b0b0b;
+  border-radius: 12px;
+  margin-bottom: -46px;
+  // box-shadow: inset 0px 0px 7px 3px rgba(26, 26, 26, 1);
+  border: 1px solid #000;
 }
 
 .image-box-grid.horizontally-scrollable {
@@ -19,7 +26,8 @@
 
 .image-box-grid-title {
   padding-top: 60px;
-  padding-bottom: 10px;
+  padding-bottom: 0;
+  margin-bottom: 10px;
   text-align: center;
   font-size: 36px;
 }
@@ -49,7 +57,7 @@
 
   .card-data {
     z-index: 2;
-    padding: 4px;
+    padding: 3px;
     align-items: flex-start;
     width: 128px;
   }
@@ -57,6 +65,8 @@
   .image-container {
     width: 160px;
     height: 160px;
+    min-width: 160px;
+    min-height: 160px;
   }
 
   .play-pause-button-wrapper {

@@ -15,6 +15,7 @@ import { withMobileProp } from 'ameo-utils/dist/responsive';
 import dayjs from 'dayjs';
 
 import { monochromeChartColors, colors } from 'src/style';
+import { categoryChartColors } from 'src/_style';
 
 interface Series {
   seriesName: string;
@@ -31,7 +32,7 @@ const InnerLineChart: React.FC<{
   mobile: boolean;
   style?: React.CSSProperties;
 }> = ({ series, otherConfig = {}, mobile, style }) => {
-  const chartConfig: EChartOption = R.mergeDeepRight(
+  const chartConfig: any = R.mergeDeepRight(
     {
       ...getBaseConfigDefaults(mobile),
       series: series.map(({ data, name }, i) => ({
@@ -132,7 +133,7 @@ export const BarChart: React.FC<{
     otherConfig
   );
 
-  return <ReactEchartsCore style={style} echarts={echarts} option={chartConfig} />;
+  return <ReactEchartsCore style={style} echarts={echarts} option={chartConfig as any} />;
 };
 
 interface TreemapDatum {
@@ -147,15 +148,23 @@ export const Treemap: React.FC<{
   style?: React.CSSProperties;
   data: TreemapDatum[];
 }> = ({ data, style, otherConfig = {} }) => {
-  const chartConfig = R.mergeDeepRight(
+  const chartConfig: any = R.mergeDeepRight(
     {
-      series: {
-        type: 'treemap',
-        data,
-        roam: false,
-      },
-    },
-    otherConfig
+      series: [
+        {
+          type: 'treemap',
+          data,
+          roam: false,
+          left: -30,
+          right: -30,
+          top: -30,
+          bottom: 30,
+          width: '100%',
+        },
+      ],
+      color: categoryChartColors,
+    } as echarts.EChartOption,
+    otherConfig || {}
   );
 
   return <ReactEchartsCore style={style} echarts={echarts} option={chartConfig} />;

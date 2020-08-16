@@ -53,13 +53,13 @@ export const ArtistCards: React.FC<
           <ArtistCard
             name={artist.name}
             genres={artist.genres}
-            imageSrc={artist.images[0].url}
+            imageSrc={artist.images[0]?.url}
             uri={artist.uri}
             id={artist.id}
           />
         );
       }}
-      getItemCount={timeframe => (stats.artists ? stats.artists[timeframe].length : 0)}
+      getItemCount={(timeframe) => (stats.artists ? stats.artists[timeframe].length : 0)}
       initialItems={10}
       title="Artists"
       {...props}
@@ -99,7 +99,7 @@ const StatsDetails: React.FC<{ stats: UserStats }> = ({ stats }) => {
             />
           );
         }}
-        getItemCount={timeframe => (stats.tracks ? stats.tracks[timeframe].length : 0)}
+        getItemCount={(timeframe) => (stats.tracks ? stats.tracks[timeframe].length : 0)}
         initialItems={10}
         title="Tracks"
       />
@@ -167,10 +167,10 @@ const Stats: React.FC<ReactRouterRouteProps> = ({
       actionCreators.userStats.ADD_USER_STATS(username, {
         last_update_time,
         // TODO: Fix this type hackery when you're less lazy and ennui-riddled
-        tracks: mapObj((tracks as any) as { [key: string]: { id: string }[] }, tracks =>
+        tracks: mapObj((tracks as any) as { [key: string]: { id: string }[] }, (tracks) =>
           tracks.map(R.prop('id'))
         ) as any,
-        artists: mapObj((artists as any) as { [key: string]: { id: string }[] }, artists =>
+        artists: mapObj((artists as any) as { [key: string]: { id: string }[] }, (artists) =>
           artists.map(R.prop('id'))
         ) as any,
         artistStats: {},
@@ -180,9 +180,9 @@ const Stats: React.FC<ReactRouterRouteProps> = ({
 
   return (
     <main className="stats">
-      <span className="headline">
+      <span className="headline" style={{ textAlign: 'center', marginBottom: -62 }}>
         User stats for{' '}
-        <Link to={`/stats/${username}/`}>
+        <Link to={`/stats/${username}/`} style={{ textDecorationColor: '#ddd' }}>
           <span className="username">{username}</span>
         </Link>
       </span>
@@ -190,11 +190,7 @@ const Stats: React.FC<ReactRouterRouteProps> = ({
       {statsForUser && statsForUser.tracks && statsForUser.artists ? (
         <StatsContent username={username} match={match} statsForUser={statsForUser} />
       ) : (
-        <>
-          <br />
-          <br />
-          <Loading />
-        </>
+        <Loading style={{ marginTop: 100 }} />
       )}
     </main>
   );

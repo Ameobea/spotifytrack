@@ -8,8 +8,9 @@ import { useSelector, actionCreators, dispatch } from 'src/store';
 import Loading from 'src/components/Loading';
 import { useUsername } from 'src/store/selectors';
 import { fetchGenreHistory } from 'src/api';
+import { withMobileProp } from 'ameo-utils/dist/responsive';
 
-const GenresTreemap: React.FC<{}> = () => {
+const GenresTreemap: React.FC<{ mobile: boolean }> = ({ mobile }) => {
   const username = useUsername();
 
   useOnChange(username, async (username: string | null) => {
@@ -28,7 +29,7 @@ const GenresTreemap: React.FC<{}> = () => {
     dispatch(
       actionCreators.userStats.SET_GENRE_HISTORY(username, {
         popularityByGenre,
-        timestamps: timestamps.map(ts => new Date(ts)),
+        timestamps: timestamps.map((ts) => new Date(ts)),
       })
     );
   });
@@ -39,7 +40,7 @@ const GenresTreemap: React.FC<{}> = () => {
     }
 
     return Option.of(userStats[username])
-      .flatMap(stats => Option.of(stats.genreHistory))
+      .flatMap((stats) => Option.of(stats.genreHistory))
       .orNull();
   });
 
@@ -57,9 +58,9 @@ const GenresTreemap: React.FC<{}> = () => {
         name: genre,
         value: R.last(scores),
       }))}
-      style={{ height: 500 }}
+      style={{ height: mobile ? 'max(30vh, 300px)' : 'max(68vh, 400px)' }}
     />
   );
 };
 
-export default GenresTreemap;
+export default withMobileProp({ maxDeviceWidth: 800 })(GenresTreemap);

@@ -89,8 +89,12 @@ export const Track: React.FC<TrackProps> = ({
       imageSrc={imageSrc}
     >
       <div className="card-data">
-        <div>{truncateWithElipsis(title, 50)}</div>
-        <span style={{ zIndex: 2 }}>
+        <div title={title} style={{ maxHeight: 37, overflowY: 'hidden' }}>
+          {truncateWithElipsis(title, 30)}
+        </div>
+        <div
+          style={{ zIndex: 2, lineHeight: '1em', maxHeight: 48, overflowY: 'hidden', marginTop: 2 }}
+        >
           {artists.map(({ name, id }, i) => {
             return (
               <Fragment key={name}>
@@ -99,7 +103,7 @@ export const Track: React.FC<TrackProps> = ({
               </Fragment>
             );
           })}
-        </span>
+        </div>
         <audio preload="none" ref={audioTag} src={previewUrl} />
       </div>
 
@@ -160,7 +164,7 @@ export const Artist: React.FC<ArtistProps> = ({
         <div>
           <ArtistStatsLink artistId={id}>{name}</ArtistStatsLink>
         </div>
-        <div style={{ lineHeight: '1em' }}>
+        <div style={{ lineHeight: '1em', maxHeight: 44, overflowY: 'hidden' }}>
           {trimmedGenres.map((genre, i) => (
             <Fragment key={genre}>
               <Genre username={username!} genre={genre} />

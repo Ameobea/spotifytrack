@@ -4,7 +4,7 @@ use std::thread;
 use chrono::Utc;
 use crossbeam::channel;
 use diesel::prelude::*;
-use hashbrown::HashMap;
+use fnv::FnvHashMap as HashMap;
 use reqwest;
 use serde::{Deserialize, Serialize};
 
@@ -91,14 +91,14 @@ pub fn spotify_server_api_request<T: for<'de> Deserialize<'de> + std::fmt::Debug
 }
 
 pub fn fetch_auth_token() -> Result<AccessTokenResponse, String> {
-    let mut params = HashMap::new();
+    let mut params = HashMap::default();
     params.insert("grant_type", "client_credentials");
 
     spotify_server_api_request(SPOTIFY_APP_TOKEN_URL, params)
 }
 
 pub fn refresh_user_token(refresh_token: &str) -> Result<String, String> {
-    let mut params = HashMap::new();
+    let mut params = HashMap::default();
     params.insert("grant_type", "refresh_token");
     params.insert("refresh_token", refresh_token);
 
@@ -199,7 +199,7 @@ pub fn store_stats_snapshot(
         .chain(stats.tracks.iter().flat_map(|(_track_timeframe, tracks)| {
             tracks.iter().flat_map(|track| track.artists.iter())
         }))
-        .fold(HashMap::new(), |mut acc, artist| {
+        .fold(HashMap::default(), |mut acc, artist| {
             acc.insert(
                 artist.id.clone(),
                 artist.genres.clone().unwrap_or_else(Vec::new),

@@ -3,7 +3,7 @@ use std::sync::Mutex;
 
 use chrono::{NaiveDateTime, Utc};
 use diesel::{self, prelude::*};
-use hashbrown::HashMap;
+use fnv::FnvHashMap as HashMap;
 use rocket::http::{RawStr, Status};
 use rocket::response::status;
 use rocket::{response::Redirect, State};
@@ -251,7 +251,7 @@ pub fn oauth_cb(conn: DbConn, error: Option<&RawStr>, code: &RawStr) -> Result<R
     let oauth_cb_url = crate::conf::CONF.get_absolute_oauth_cb_uri();
 
     // Shoot the code back to Spotify and get an API token for the user in return
-    let mut params = HashMap::new();
+    let mut params = HashMap::default();
     params.insert("grant_type", "authorization_code");
     params.insert("code", code.as_str());
     params.insert("redirect_uri", oauth_cb_url.as_str());
