@@ -8,7 +8,6 @@ spawn-redis:
 
 docker-start:
   docker rm spotifytrack-server || true
-  echo "$SPOTIFY_CLIENT_ID"
   docker run -it --net host -p 3999:3999 --name spotifytrack-server \
     -e ROCKET_DATABASES="{ spotify_homepage = { url = \"$DATABASE_URL\" } }" \
     -e PORT="$PORT" \
@@ -19,7 +18,3 @@ docker-start:
     -e REDIS_URL="$REDIS_URL" \
     -e ADMIN_API_TOKEN="$ADMIN_API_TOKEN" \
     ${DOCKER_IMAGE}:latest
-
-deploy:
-  just docker-build
-  docker push $DOCKER_IMAGE
