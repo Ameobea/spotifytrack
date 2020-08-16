@@ -1,12 +1,12 @@
 build-and-deploy:
-  # cd frontend && yarn build
-  # cd -
+  cd frontend && yarn build
+  cd -
 
-  # cd backend && just docker-build
-  # cd -
+  cd backend && just docker-build
+  cd -
 
-  # docker tag ameo/spotifytrack-backend:latest gcr.io/free-tier-164405/spotifytrack-backend:latest
-  # docker push gcr.io/free-tier-164405/spotifytrack-backend:latest
+  docker tag ameo/spotifytrack-backend:latest gcr.io/free-tier-164405/spotifytrack-backend:latest
+  docker push gcr.io/free-tier-164405/spotifytrack-backend:latest
 
   gcloud config set run/region us-west1
   gcloud beta run deploy spotifytrack-backend \

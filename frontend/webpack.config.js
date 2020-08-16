@@ -12,8 +12,8 @@ module.exports = {
   entry: './src/index.tsx',
   output: {
     path: path.resolve(__dirname, 'dist'),
-    filename: 'index.js',
     publicPath: '/',
+    filename: 'itallhappened.[name].[contenthash].js',
   },
   mode: 'development',
   devtool: 'inline-source-map',
@@ -66,7 +66,7 @@ module.exports = {
       title: 'Personal Spotify Stats',
       minify: true,
       template: 'index.hbs',
-      inject: false,
+      inject: true,
     }),
     new webpack.EnvironmentPlugin(['REACT_APP_API_BASE_URL']),
   ],

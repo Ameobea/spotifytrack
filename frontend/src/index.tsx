@@ -3,6 +3,8 @@ import ReactDOM from 'react-dom';
 import { Route, Switch } from 'react-router';
 import { Provider } from 'react-redux';
 import { ConnectedRouter } from 'connected-react-router';
+import * as Sentry from '@sentry/browser';
+import { ReactQueryConfigProvider } from 'react-query';
 
 import { API_BASE_URL } from 'src/conf';
 import Loading from 'src/components/Loading';
@@ -10,9 +12,10 @@ const LazyHome = import('src/pages/Home');
 const LazyStats = import('src/pages/Stats');
 import { history, store } from 'src/store';
 import './index.scss';
-import { ReactQueryConfigProvider } from 'react-query';
 
-const [Home, Stats] = [LazyHome, LazyStats].map(LazyPage => {
+Sentry.init({ dsn: 'http://ae5045a642824128860df7fdc2850d35@104.225.217.211:8080/3' });
+
+const [Home, Stats] = [LazyHome, LazyStats].map((LazyPage) => {
   const Comp = React.lazy(() => LazyPage);
   const RenderComp = ({ ...props }: any) => <Comp {...props} />;
   return RenderComp;
@@ -40,7 +43,7 @@ const App = () => (
 
 ReactDOM.render(
   <Provider store={store}>
-    <ReactQueryConfigProvider config={{ refetchAllOnWindowFocus: false }}>
+    <ReactQueryConfigProvider config={{ queries: { refetchOnWindowFocus: false } }}>
       <App />
     </ReactQueryConfigProvider>
   </Provider>,
