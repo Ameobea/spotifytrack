@@ -54,7 +54,7 @@ const InnerLineChart: React.FC<{
           formatter: (value: string | number) => {
             // Formatted to be month/day; display year only in the first label
             const date = new Date(value);
-            return `${date.getMonth() + 1}/${date.getDate()}`;
+            return `${date.getMonth() + 1}/${date.getDate()}\n${date.getFullYear()}`;
           },
         },
         splitLine: splitLineStyle,

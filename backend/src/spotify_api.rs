@@ -16,7 +16,7 @@ use crate::models::{
 };
 use crate::DbConn;
 
-const SPOTIFY_USER_RECENTLY_PLAYED_URL: &str =
+const _SPOTIFY_USER_RECENTLY_PLAYED_URL: &str =
     "https://api.spotify.com/v1/me/player/recently-played";
 const SPOTIFY_USER_PROFILE_INFO_URL: &str = "https://api.spotify.com/v1/me";
 const SPOTIFY_BATCH_TRACKS_URL: &str = "https://api.spotify.com/v1/tracks";

@@ -558,20 +558,29 @@ pub fn populate_artists_genres_table(
         artist_internal_id_by_spotify_id.insert(ids.spotify_id.clone(), ids.artist_id);
     }
 
-    // Fetch track metadata for each of them
-    let artists = crate::spotify_api::fetch_artists(spotify_access_token, &all_artist_spotify_ids)?;
+    // Fetch artist metadata for each of them
+    println!("{:?}", all_artist_spotify_ids);
+    let mut artists =
+        crate::spotify_api::fetch_artists(spotify_access_token, &all_artist_spotify_ids)?;
+    artists.sort_unstable_by(|a, b| a.id.cmp(&b.id));
+    artists.dedup_by(|a, b| a.id == b.id);
 
     let pairs: Vec<ArtistGenrePair> = artists
         .into_iter()
-        .flat_map(|artist| {
-            let artist_internal_id: i32 = *artist_internal_id_by_spotify_id.get(&artist.id).expect(
-                format!(
-                    "No internal artist ID in mapping for artist with spotify id {}",
-                    artist.id
-                )
-                .as_str(),
-            );
-
+        .filter_map(|artist| {
+            let artist_internal_id: i32 = match artist_internal_id_by_spotify_id.get(&artist.id) {
+                Some(&artist_internal_id) => artist_internal_id,
+                None => {
+                    warn!(
+                        "No internal artist ID in mapping for artist with spotify id {}",
+                        artist.id
+                    );
+                    return None;
+                }
+            };
+            Some((artist, artist_internal_id))
+        })
+        .flat_map(|(artist, artist_internal_id)| {
             artist
                 .genres
                 .unwrap_or_else(Vec::new)

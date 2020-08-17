@@ -60,7 +60,7 @@ const GenreStats: React.FC<
     return (
       <div>
         <h1>{genre}</h1>
-        <Loading />
+        <Loading style={{ marginTop: 180 }} />
       </div>
     );
   }
