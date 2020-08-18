@@ -19,7 +19,7 @@ const GenreChip: React.FC<{ username: string; genre: string }> = ({ username, ge
 
 const GenresListing: React.FC<{ genres: string[]; username: string }> = ({ username, genres }) => (
   <div className="genres-listing">
-    {genres.map(genre => (
+    {genres.map((genre) => (
       <GenreChip key={genre} username={username} genre={genre} />
     ))}
   </div>
@@ -90,7 +90,7 @@ const ArtistStats: React.FC<ReactRouterRouteProps> = ({ match }) => {
   return (
     <div className="artist-stats">
       {!artistStats || !artist || !series ? (
-        <Loading style={{ height: 521 }} />
+        <Loading style={{ height: 525 - 140, marginTop: 140 }} />
       ) : (
         <>
           <h1>

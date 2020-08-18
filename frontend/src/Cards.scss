@@ -15,9 +15,9 @@
 
 .image-box-grid.horizontally-scrollable {
   flex-wrap: nowrap;
-  width: 100%;
   overflow-x: scroll;
   justify-content: flex-start;
+  margin-bottom: 0;
 }
 
 .timeframe-selector {
