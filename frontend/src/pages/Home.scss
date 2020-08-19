@@ -9,21 +9,33 @@ main.home {
     font-size: 48px;
   }
 
-  p.description {
-    margin-bottom: 40px;
+  .description-container {
+    border: 1px solid #111;
+    background-color: #212121;
+    padding: 0px 12px;
+    border-radius: 8px;
+    margin-bottom: 6vh;
+
+    p.description {
+      font-size: 20px;
+    }
   }
 
-  .example-image {
-    display: flex;
+  .example-carousel {
+    border-radius: 12px;
 
-    img {
-      width: 100%;
-      max-width: 60vw;
+    .carousel {
       margin-left: auto;
       margin-right: auto;
-      border: 4px solid #222;
       border-radius: 12px;
-      padding: 2px 0px;
+      border: 4px solid #222;
+
+      .example-image {
+        border-radius: 12px;
+        img {
+          border-radius: 12px;
+        }
+      }
     }
   }
 
@@ -31,17 +43,22 @@ main.home {
     display: flex;
     flex-direction: row;
     justify-content: space-around;
-    margin-top: 8vh;
+    margin-bottom: 6vh;
 
     button {
       width: 300px;
       height: 170px;
       font-size: 34px;
       color: #ddd;
-      background-color: #080808;
+      background-color: #0b0b0b;
       border: 2px solid #222;
       outline: none;
       border-radius: 10px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #141414;
     }
   }
 }
