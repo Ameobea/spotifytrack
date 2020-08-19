@@ -4,7 +4,6 @@
   flex-wrap: wrap;
   justify-content: space-around;
   min-height: 200px;
-
   padding: 30px;
   background-color: #0b0b0b;
   border-radius: 12px;
@@ -83,5 +82,31 @@
   a {
     z-index: 2;
     color: white;
+  }
+}
+
+@media only screen and (max-width: 800px) {
+  .image-box-grid {
+    padding: 10px;
+    min-height: unset;
+    max-height: 700px;
+    overflow-y: auto;
+  }
+
+  .image-box {
+    min-width: 140px;
+    height: 160px;
+    margin-right: 0;
+
+    .image-box-content {
+      max-width: 120px;
+    }
+
+    .image-container {
+      width: 120px;
+      height: 120px;
+      min-width: 120px;
+      min-height: 120px;
+    }
   }
 }

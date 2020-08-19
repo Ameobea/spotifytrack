@@ -180,12 +180,14 @@ const Stats: React.FC<ReactRouterRouteProps> = ({
 
   return (
     <main className="stats">
-      <span className="headline" style={{ textAlign: 'center', marginBottom: -62 }}>
-        User stats for{' '}
-        <Link to={`/stats/${username}/`} style={{ textDecorationColor: '#ddd' }}>
-          <span className="username">{username}</span>
-        </Link>
-      </span>
+      <div className="headline-wrapper">
+        <span className="headline" style={{ textAlign: 'center', marginBottom: -62 }}>
+          User stats for{' '}
+          <Link to={`/stats/${username}/`} style={{ textDecorationColor: '#ddd' }}>
+            <span className="username">{username}</span>
+          </Link>
+        </span>
+      </div>
 
       {statsForUser && statsForUser.tracks && statsForUser.artists ? (
         <StatsContent username={username} match={match} statsForUser={statsForUser} />

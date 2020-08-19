@@ -1,0 +1,24 @@
+.genre-stats {
+  .echarts-for-react {
+    margin-left: 4vw;
+    margin-right: 4vw;
+  }
+
+  h3 {
+    margin-top: 20px;
+    padding-top: 0px;
+  }
+}
+
+@media only screen and (max-width: 800px) {
+  h1 {
+    text-align: center;
+  }
+
+  .genre-stats {
+    h3 {
+      margin-top: 20px;
+      padding-top: 0px;
+    }
+  }
+}

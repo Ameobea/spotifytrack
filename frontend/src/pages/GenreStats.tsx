@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { connect } from 'react-redux';
 import { useQuery } from 'react-query';
+import { withMobileProp } from 'ameo-utils/dist/responsive';
 
 import { getUrl, getJsonEndpoint } from 'src/api';
 import { Artist, TimeFrames, ReduxStore } from 'src/types';
@@ -10,6 +11,7 @@ import { ImageBoxGrid, Artist as ArtistCard } from 'src/Cards';
 import { useDispatch } from 'react-redux';
 import { actionCreators } from 'src/store';
 import { ANewTab } from 'src/util';
+import './GenreStats.scss';
 
 interface GenreStats {
   artists_by_id: { [artistId: string]: Artist };
@@ -29,8 +31,8 @@ const fetchGenreStats = async (username: string, genre: string) =>
 const mapStateToProps = (state: ReduxStore) => ({ artistsCorpus: state.entityStore.artists });
 
 const GenreStats: React.FC<
-  { username: string; genre: string } & ReturnType<typeof mapStateToProps>
-> = ({ username, genre, artistsCorpus }) => {
+  { username: string; genre: string; mobile: boolean } & ReturnType<typeof mapStateToProps>
+> = ({ username, genre, artistsCorpus, mobile }) => {
   const dispatch = useDispatch();
 
   const { data: genreStats, status } = useQuery([genre, { username, genre }], () =>
@@ -58,16 +60,16 @@ const GenreStats: React.FC<
 
   if (status === 'loading' || !genreStats || !series) {
     return (
-      <div>
-        <h1>{genre}</h1>
+      <div className="genre-stats">
+        <h1 style={mobile ? { marginTop: 60 } : undefined}>{genre}</h1>
         <Loading style={{ marginTop: 180 }} />
       </div>
     );
   }
 
   return (
-    <div>
-      <h1>{genre}</h1>
+    <div className="genre-stats">
+      <h1 style={mobile ? { marginTop: 60 } : undefined}>{genre}</h1>
       <LineChart
         style={{ height: 300 }}
         series={series}
@@ -128,4 +130,4 @@ const GenreStats: React.FC<
   );
 };
 
-export default connect(mapStateToProps)(GenreStats);
+export default withMobileProp({ maxDeviceWidth: 800 })(connect(mapStateToProps)(GenreStats));

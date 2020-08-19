@@ -2,7 +2,6 @@ main.home {
   max-width: 1200px;
   margin-left: auto;
   margin-right: auto;
-  margin-bottom: 80px;
 
   h1 {
     text-align: center;
@@ -16,7 +15,7 @@ main.home {
     border-radius: 8px;
     margin-bottom: 6vh;
 
-    p.description {
+    p {
       font-size: 20px;
     }
   }
@@ -63,16 +62,36 @@ main.home {
   }
 }
 
+footer {
+  width: 100%;
+  position: absolute;
+  left: 0;
+  text-align: center;
+  font-size: 14px;
+  margin-top: 50px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  border-top: 1px solid #333;
+}
+
 @media only screen and (max-width: 800px) {
   main.home {
-    width: 80vw;
+    width: 90vw;
+
+    h1 {
+      font-size: 40px;
+    }
 
     .buttons-container button {
-      height: 30vw;
-      width: 40vw;
-      font-size: 7vw;
+      height: 31vw;
+      width: 41.8vw;
+      font-size: 5vw;
       margin-left: 10px;
       margin-right: 10px;
+    }
+
+    .description-container p {
+      font-size: 17px;
     }
   }
 }

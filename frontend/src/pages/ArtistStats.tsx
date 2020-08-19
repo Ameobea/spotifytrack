@@ -10,6 +10,7 @@ import Loading from 'src/components/Loading';
 import { LineChart, BarChart } from 'src/components/Charts';
 import { ArtistCards } from 'src/pages/Stats';
 import './ArtistStats.scss';
+import { withMobileProp } from 'ameo-utils/dist/responsive';
 
 const GenreChip: React.FC<{ username: string; genre: string }> = ({ username, genre }) => (
   <Link className="genre-chip-link" to={`/stats/${username}/genre/${genre}/`}>
@@ -25,7 +26,7 @@ const GenresListing: React.FC<{ genres: string[]; username: string }> = ({ usern
   </div>
 );
 
-const ArtistStats: React.FC<ReactRouterRouteProps> = ({ match }) => {
+const ArtistStats: React.FC<ReactRouterRouteProps & { mobile: boolean }> = ({ match, mobile }) => {
   const { username, artistId } = match.params;
   const artistStats: ArtistStatsType | undefined = useSelector(({ userStats }) =>
     R.path([username, 'artistStats', artistId], userStats)
@@ -93,7 +94,7 @@ const ArtistStats: React.FC<ReactRouterRouteProps> = ({ match }) => {
         <Loading style={{ height: 525 - 140, marginTop: 140 }} />
       ) : (
         <>
-          <h1>
+          <h1 style={mobile ? { marginTop: mobile ? 42 : 32 } : undefined}>
             Artist stats for <span style={{ color: colors.pink }}> {artist.name}</span>
           </h1>
 
@@ -173,4 +174,4 @@ const ArtistStats: React.FC<ReactRouterRouteProps> = ({ match }) => {
   );
 };
 
-export default ArtistStats;
+export default withMobileProp({ maxDeviceWidth: 800 })(ArtistStats);
