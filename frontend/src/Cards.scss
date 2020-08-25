@@ -4,7 +4,7 @@
   flex-wrap: wrap;
   justify-content: space-around;
   min-height: 200px;
-  padding: 30px;
+  padding: 20px;
   background-color: #0b0b0b;
   border-radius: 12px;
   margin-bottom: -46px;
@@ -14,9 +14,13 @@
 
 .image-box-grid.horizontally-scrollable {
   flex-wrap: nowrap;
-  overflow-x: scroll;
+  overflow-x: auto;
   justify-content: flex-start;
   margin-bottom: 0;
+
+  .image-box {
+    margin-bottom: 4px;
+  }
 }
 
 .timeframe-selector {

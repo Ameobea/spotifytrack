@@ -22,7 +22,8 @@
     "react/prop-types": 0,
     "react-hooks/rules-of-hooks": "error",
     "react-hooks/exhaustive-deps": "warn",
-    "react/jsx-no-target-blank": 0
+    "react/jsx-no-target-blank": 0,
+    "@typescript-eslint/explicit-module-boundary-types": 0
   },
   "env": {
     "es6": true,

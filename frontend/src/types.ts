@@ -35,7 +35,7 @@ export interface Track {
   id: string;
 }
 
-interface Image {
+export interface Image {
   height: number;
   url: string;
   width: number;
@@ -73,3 +73,23 @@ export type UserStats = Partial<{
     timestamps: Date[];
   };
 }>;
+
+type TimelineEventData =
+  | {
+      type: 'artistFirstSeen';
+      artistID: string;
+    }
+  | {
+      type: 'topTrackFirstSeen';
+      trackID: string;
+    };
+
+export type TimelineEvent = {
+  date: Date;
+  id: string;
+} & TimelineEventData;
+
+export interface TimelineData {
+  events: TimelineEvent[];
+  firstUpdate: Date;
+}

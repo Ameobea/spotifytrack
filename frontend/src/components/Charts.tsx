@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import ReactDOMServer from 'react-dom/server';
 import ReactEchartsCore from 'echarts-for-react/lib/core';
 import * as echarts from 'echarts/lib/echarts';
@@ -140,7 +140,7 @@ interface TreemapDatum {
   name: string;
   value?: number | null;
   children?: TreemapDatum[];
-  itemStyle?: object;
+  itemStyle?: React.CSSProperties;
 }
 
 export const Treemap: React.FC<{

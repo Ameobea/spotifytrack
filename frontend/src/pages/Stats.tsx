@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useState } from 'react';
 import * as R from 'ramda';
 import { Link } from 'react-router-dom';
 import { PropTypesOf } from 'ameo-utils/dist/util/react';
@@ -15,14 +15,14 @@ import Loading from 'src/components/Loading';
 import GenresTreemap from 'src/components/GenresTreemap';
 import './Stats.scss';
 import { useUsername } from 'src/store/selectors';
+import Timeline from 'src/components/Timeline';
 
 export const ArtistCards: React.FC<
   {
     horizontallyScrollable?: boolean;
   } & Partial<PropTypesOf<typeof ImageBoxGrid>>
 > = ({ horizontallyScrollable, ...props }) => {
-  const { artistsCorpus } = useSelector(({ entityStore: { tracks, artists } }) => ({
-    tracksCorpus: tracks,
+  const { artistsCorpus } = useSelector(({ entityStore: { artists } }) => ({
     artistsCorpus: artists,
   }));
   const username = useUsername()!;
@@ -105,6 +105,8 @@ const StatsDetails: React.FC<{ stats: UserStats }> = ({ stats }) => {
       />
 
       <ArtistCards />
+
+      <Timeline />
 
       <h3 className="image-box-grid-title">Top Genres</h3>
       <GenresTreemap />

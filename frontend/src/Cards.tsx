@@ -2,12 +2,10 @@ import React, { Fragment, useRef, useEffect, useState } from 'react';
 import * as R from 'ramda';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPlay, faPause } from '@fortawesome/free-solid-svg-icons';
-import HTMLEllipsis from 'react-lines-ellipsis/lib/html';
-import ReactDOMServer from 'react-dom/server';
 import { Link } from 'react-router-dom';
 
 import { Timeframe } from 'src/types';
-import { ANewTab, truncateWithElipsis, map } from 'src/util';
+import { truncateWithElipsis, map } from 'src/util';
 import { useUsername } from './store/selectors';
 import './Cards.scss';
 

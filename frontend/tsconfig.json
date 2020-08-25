@@ -21,7 +21,7 @@
     "noUnusedLocals": false,
     "skipLibCheck": true,
     "typeRoots": ["./node_modules/@types"],
-    "types": [],
+    "types": ["node"],
     "jsx": "react",
     "baseUrl": ".",
     "paths": {

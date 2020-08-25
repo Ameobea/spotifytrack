@@ -1,0 +1,114 @@
+.timeline {
+  margin-top: 60px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  .title {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    text-align: center;
+    font-size: 32px;
+  }
+
+  .timeframe-controls {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    height: 40px;
+
+    .cur-month {
+      height: 36px;
+      padding: 1px 3px;
+      font-size: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 220px;
+      text-align: center;
+    }
+
+    button {
+      height: 40px;
+      width: 34px;
+      background-color: #222;
+      outline: none;
+      border: 1px solid #333;
+      border-bottom: none;
+      color: #eee;
+      cursor: pointer;
+      font-size: 22px;
+    }
+  }
+
+  .timeline-week {
+    display: grid;
+    grid-template-columns: repeat(7, 126px);
+    gap: 2px 2px;
+    padding-top: 1px;
+    padding-bottom: 1px;
+
+    .timeline-day {
+      height: 126px;
+      cursor: pointer;
+
+      .timeline-date {
+        position: absolute;
+        z-index: 3;
+        font-weight: bolder;
+        padding-left: 2px;
+      }
+
+      .timeline-events {
+        display: grid;
+        grid-auto-flow: row;
+        max-height: 100%;
+
+        .timeline-event .timeline-event-tooltip {
+          visibility: hidden;
+          width: 150px;
+          font-size: 11px;
+          background-color: #121212;
+          border: 1px solid #444;
+          border-radius: 5px;
+          position: absolute;
+          z-index: 1;
+          padding: 3px 4px;
+        }
+
+        .timeline-event:hover .timeline-event-tooltip {
+          visibility: visible;
+        }
+      }
+
+      .timeline-events.event-count-1-4 {
+        grid-template-columns: repeat(2, 1fr);
+        grid-template-rows: repeat(2, 1fr);
+
+        .timeline-event {
+          max-height: 63px;
+        }
+      }
+
+      .timeline-events.event-count-5-9 {
+        grid-template-columns: repeat(3, 1fr);
+        grid-template-rows: repeat(3, 1fr);
+
+        .timeline-event {
+          max-height: 42px;
+        }
+      }
+    }
+  }
+
+  .day-stats {
+    width: 100%;
+
+    .events-section .image-box-grid-title {
+      margin-top: 20px;
+      padding-top: 0;
+      font-size: 30px;
+    }
+  }
+}
