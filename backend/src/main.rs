@@ -1,10 +1,4 @@
-#![feature(
-    proc_macro_hygiene,
-    decl_macro,
-    box_patterns,
-    nll,
-    try_trait
-)]
+#![feature(proc_macro_hygiene, decl_macro, box_patterns, try_trait)]
 #![allow(clippy::identity_conversion)]
 
 extern crate base64;
@@ -66,7 +60,8 @@ fn main() {
                 routes::get_genre_history,
                 routes::populate_tracks_artists_mapping_table,
                 routes::populate_artists_genres_mapping_table,
-                routes::get_genre_stats
+                routes::get_genre_stats,
+                routes::get_timeline
             ],
         )
         .attach(DbConn::fairing())

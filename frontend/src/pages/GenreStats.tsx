@@ -116,7 +116,7 @@ const GenreStats: React.FC<
               name={artist.name}
               genres={artist.genres}
               imageSrc={artist.images[0]?.url}
-              uri={artist.uri}
+              // uri={artist.uri}
               id={artist.id}
             />
           );

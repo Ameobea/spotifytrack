@@ -2,7 +2,7 @@ use std::default::Default;
 use std::fmt::Debug;
 use std::vec;
 
-use chrono::NaiveDateTime;
+use chrono::{NaiveDate, NaiveDateTime};
 use fnv::FnvHashMap as HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -243,23 +243,32 @@ pub struct Followers {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Image {
+    #[serde(skip_serializing)]
     pub height: Option<usize>,
     pub url: String,
+    #[serde(skip_serializing)]
     pub width: Option<usize>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Album {
+    #[serde(skip_serializing)]
     pub album_group: Option<String>,
+    #[serde(skip_serializing)]
     pub album_type: String,
     pub artists: Vec<Artist>,
+    #[serde(skip_serializing)]
     pub available_markets: Vec<String>,
+    #[serde(skip_serializing)]
     pub href: String,
     pub id: String,
     pub images: Vec<Image>,
     pub name: String,
+    #[serde(skip_serializing)]
     pub release_date: String,
+    #[serde(skip_serializing)]
     pub release_date_precision: String,
+    #[serde(skip_serializing)]
     pub uri: String,
 }
 
@@ -287,17 +296,26 @@ pub struct ArtistRankHistoryResItem {
 pub struct Track {
     pub album: Album,
     pub artists: Vec<Artist>,
+    #[serde(skip_serializing)]
     pub available_markets: Vec<String>,
+    #[serde(skip_serializing)]
     pub disc_number: usize,
+    #[serde(skip_serializing)]
     pub duration_ms: usize,
+    #[serde(skip_serializing)]
     pub explicit: bool,
+    #[serde(skip_serializing)]
     pub href: Option<String>,
     pub id: String,
+    #[serde(skip_serializing)]
     pub is_playable: Option<bool>,
     pub name: String,
+    #[serde(skip_serializing)]
     pub popularity: usize,
     pub preview_url: Option<String>,
+    #[serde(skip_serializing)]
     pub track_number: usize,
+    #[serde(skip_serializing)]
     pub uri: String,
 }
 
@@ -308,23 +326,30 @@ pub struct TopArtistsResponse {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Artist {
+    #[serde(skip_serializing)]
     pub followers: Option<Followers>,
     pub genres: Option<Vec<String>>,
+    #[serde(skip_serializing)]
     pub href: String,
     pub id: String,
     pub images: Option<Vec<Image>>,
     pub name: String,
+    #[serde(skip_serializing)]
     pub popularity: Option<usize>,
+    #[serde(skip_serializing)]
     pub uri: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UserProfile {
     pub display_name: String,
+    #[serde(skip_serializing)]
     pub followers: Followers,
+    #[serde(skip_serializing)]
     pub href: String,
     pub images: Vec<Image>,
     pub id: String,
+    #[serde(skip_serializing)]
     pub uri: String,
 }
 
@@ -422,4 +447,28 @@ impl HasSpotifyId for Track {
     fn get_spotify_id(&self) -> &str {
         &self.id
     }
+}
+
+#[derive(Serialize)]
+#[serde(tag = "type")]
+pub enum TimelineEventType {
+    #[serde(rename = "firstUpdate")]
+    FirstUpdate,
+    #[serde(rename = "artistFirstSeen")]
+    ArtistFirstSeen { artist: Artist },
+    #[serde(rename = "topTrackFirstSeen")]
+    TopTrackFirstSeen { track: Track },
+}
+
+#[derive(Serialize)]
+pub struct TimelineEvent {
+    pub date: NaiveDate,
+    pub id: usize,
+    #[serde(flatten)]
+    pub event_type: TimelineEventType,
+}
+
+#[derive(Serialize)]
+pub struct Timeline {
+    pub events: Vec<TimelineEvent>,
 }

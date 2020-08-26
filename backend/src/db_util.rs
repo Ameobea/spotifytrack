@@ -30,15 +30,17 @@ pub fn get_user_by_spotify_id(
     )
 }
 
+pub fn stringify_diesel_err(err: diesel::result::Error) -> String {
+    error!("Error querying database: {:?}", err);
+    String::from("Error querying database")
+}
+
 pub fn diesel_not_found_to_none<T>(
     res: Result<T, diesel::result::Error>,
 ) -> Result<Option<T>, String> {
     match res {
         Err(diesel::result::Error::NotFound) => Ok(None),
-        Err(err) => {
-            error!("Error querying user from database: {:?}", err);
-            Err("Error querying database for user.".into())
-        }
+        Err(err) => Err(stringify_diesel_err(err)),
         Ok(res) => Ok(Some(res)),
     }
 }
@@ -58,21 +60,18 @@ pub fn get_artist_stats(
     use crate::schema::artist_rank_snapshots::{self, dsl::*};
     use crate::schema::spotify_items::{self, dsl::*};
 
-    let artists_stats_opt = diesel_not_found_to_none(
-        artist_rank_snapshots
-            .filter(user_id.eq(user.id))
-            .filter(update_time.eq(user.last_update_time))
-            .order_by(update_time)
-            .inner_join(spotify_items)
-            .select((artist_rank_snapshots::timeframe, spotify_items::spotify_id))
-            .load::<StatsQueryResultItem>(&conn.0),
-    )?;
+    let artist_stats = artist_rank_snapshots
+        .filter(user_id.eq(user.id))
+        .filter(update_time.eq(user.last_update_time))
+        .inner_join(spotify_items)
+        .select((artist_rank_snapshots::timeframe, spotify_items::spotify_id))
+        .load::<StatsQueryResultItem>(&conn.0)
+        .map_err(stringify_diesel_err)?;
     mark("Got artist stats from database");
 
-    let artist_stats = match artists_stats_opt {
-        None => return Ok(None),
-        Some(res) => res,
-    };
+    if artist_stats.is_empty() {
+        return Ok(None);
+    }
 
     let artist_spotify_ids: Vec<&str> = artist_stats
         .iter()
@@ -628,4 +627,60 @@ pub fn update_user_last_updated(
             error!("Error updating user's last update time: {:?}", err);
             "Error updating user's last update time.".into()
         })
+}
+
+pub fn get_artist_timeline_events(
+    conn: &DbConn,
+    user_id: i64,
+    start_day: NaiveDateTime,
+    end_day: NaiveDateTime,
+) -> Result<Vec<(String, NaiveDateTime)>, diesel::result::Error> {
+    use crate::schema::{artists_users_first_seen, spotify_items};
+
+    artists_users_first_seen::table
+        .filter(
+            artists_users_first_seen::dsl::user_id.eq(user_id).and(
+                artists_users_first_seen::dsl::first_seen
+                    .ge(start_day)
+                    .and(artists_users_first_seen::dsl::first_seen.le(end_day)),
+            ),
+        )
+        .order_by(artists_users_first_seen::dsl::first_seen)
+        .inner_join(
+            spotify_items::table
+                .on(spotify_items::dsl::id.eq(artists_users_first_seen::dsl::mapped_spotify_id)),
+        )
+        .select((
+            spotify_items::dsl::spotify_id,
+            artists_users_first_seen::dsl::first_seen,
+        ))
+        .load(&conn.0)
+}
+
+pub fn get_track_timeline_events(
+    conn: &DbConn,
+    user_id: i64,
+    start_day: NaiveDateTime,
+    end_day: NaiveDateTime,
+) -> Result<Vec<(String, NaiveDateTime)>, diesel::result::Error> {
+    use crate::schema::{spotify_items, tracks_users_first_seen};
+
+    tracks_users_first_seen::table
+        .filter(
+            tracks_users_first_seen::dsl::user_id.eq(user_id).and(
+                tracks_users_first_seen::dsl::first_seen
+                    .ge(start_day)
+                    .and(tracks_users_first_seen::dsl::first_seen.le(end_day)),
+            ),
+        )
+        .order_by(tracks_users_first_seen::dsl::first_seen)
+        .inner_join(
+            spotify_items::table
+                .on(spotify_items::dsl::id.eq(tracks_users_first_seen::dsl::mapped_spotify_id)),
+        )
+        .select((
+            spotify_items::dsl::spotify_id,
+            tracks_users_first_seen::dsl::first_seen,
+        ))
+        .load(&conn.0)
 }

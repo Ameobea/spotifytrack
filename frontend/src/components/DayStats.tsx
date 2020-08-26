@@ -5,7 +5,6 @@ import * as R from 'ramda';
 import { Artist, ReduxStore, TimelineEvent } from 'src/types';
 import type { TimelineDay } from './Timeline';
 import { Artist as ArtistCard, ImageBoxGrid } from '../Cards';
-import { UnimplementedError } from 'ameo-utils';
 
 const EventTypePrecedence: TimelineEvent['type'][] = ['artistFirstSeen', 'topTrackFirstSeen'];
 
@@ -19,7 +18,7 @@ const ArtistFirstSeenRenderer: React.FC<{
 }> = ({ events }) => {
   const { artists } = useSelector((state: ReduxStore) => ({
     artists: events.reduce((acc, evt) => {
-      const artist = state.entityStore.artists[evt.artistID];
+      const artist = state.entityStore.artists[evt.artist.id];
       if (artist) {
         acc.set(artist.id, artist);
       }
@@ -35,7 +34,7 @@ const ArtistFirstSeenRenderer: React.FC<{
       initialItems={events.length}
       title={EventTypeTitleByEventType.artistFirstSeen}
       renderItem={(i) => {
-        const artist = artists.get(events[i].artistID);
+        const artist = artists.get(events[i].artist.id);
         if (!artist) {
           return null;
         }
@@ -49,7 +48,7 @@ const ArtistFirstSeenRenderer: React.FC<{
 const TopTrackFirstSeenRenderer: React.FC<{
   events: (TimelineEvent & { type: 'topTrackFirstSeen' })[];
 }> = ({ events }) => {
-  throw new UnimplementedError();
+  return <>TODO</>; // TODO
 };
 
 const EventRendererByEventType: {

@@ -31,9 +31,13 @@ const ImageBox: React.FC<ImageBoxProps> = ({ imageSrc, imgAlt, children, linkTo 
 
 interface TrackProps {
   title: string;
-  artists: { name: string; uri: string; id: string }[];
+  artists: {
+    name: string;
+    // uri: string;
+    id: string;
+  }[];
   previewUrl: string;
-  album: string;
+  // album: string;
   imageSrc: string;
   playing: string | false;
   setPlaying: (currentlyPlayingPreviewUrl: string | false) => void;
@@ -55,7 +59,6 @@ export const Track: React.FC<TrackProps> = ({
   title,
   artists,
   previewUrl,
-  album,
   imageSrc,
   playing,
   setPlaying,
@@ -83,7 +86,7 @@ export const Track: React.FC<TrackProps> = ({
 
   return (
     <ImageBox
-      imgAlt={`Album art for ${title} on ${album} by ${artists.map(R.prop('name')).join(', ')}`}
+      imgAlt={`Album art for ${title} by ${artists.map(R.prop('name')).join(', ')}`}
       imageSrc={imageSrc}
     >
       <div className="card-data">
@@ -132,7 +135,7 @@ interface ArtistProps {
   name: string;
   genres: string[];
   imageSrc: string;
-  uri: string;
+  // uri: string;
   preferredGenres?: Set<string>;
 }
 

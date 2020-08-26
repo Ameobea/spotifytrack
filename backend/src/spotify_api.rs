@@ -348,7 +348,7 @@ pub fn store_stats_snapshot(
 
 const MAX_BATCH_ENTITY_COUNT: usize = 50;
 
-fn fetch_batch_entities<T: for<'de> Deserialize<'de>>(
+fn fetch_batch_entities<'a, T: for<'de> Deserialize<'de>>(
     base_url: &str,
     token: &str,
     spotify_entity_ids: &[&str],
@@ -443,24 +443,42 @@ pub fn fetch_artists(
     spotify_access_token: &str,
     spotify_ids: &[&str],
 ) -> Result<Vec<Artist>, String> {
-    fetch_with_cache::<SpotifyBatchArtistsResponse, _>(
+    let mut entities = fetch_with_cache::<SpotifyBatchArtistsResponse, _>(
         &CONF.artists_cache_hash_name,
         SPOTIFY_BATCH_ARTISTS_URL,
         spotify_access_token,
         spotify_ids,
         |res: SpotifyBatchArtistsResponse| Ok(res.artists),
-    )
+    )?;
+
+    for artist in &mut entities {
+        if let Some(images) = artist.images.as_mut() {
+            while images.len() > 1 {
+                images.pop();
+            }
+        }
+    }
+
+    Ok(entities)
 }
 
 pub fn fetch_tracks(
     spotify_access_token: &str,
     spotify_ids: &[&str],
 ) -> Result<Vec<Track>, String> {
-    fetch_with_cache::<SpotifyBatchTracksResponse, _>(
+    let mut entities = fetch_with_cache::<SpotifyBatchTracksResponse, _>(
         &CONF.tracks_cache_hash_name,
         SPOTIFY_BATCH_TRACKS_URL,
         spotify_access_token,
         spotify_ids,
         |res: SpotifyBatchTracksResponse| Ok(res.tracks),
-    )
+    )?;
+
+    for track in &mut entities {
+        while track.album.images.len() > 1 {
+            track.album.images.pop();
+        }
+    }
+
+    Ok(entities)
 }

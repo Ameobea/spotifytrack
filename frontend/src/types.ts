@@ -20,37 +20,41 @@ export interface TimeFrames<T> {
 
 export interface Track {
   album: {
-    available_markets: string[];
-    name: string;
-    release_date: string;
-    uri: string;
-    artists: { name: string; uri: string; id: string }[];
+    // available_markets: string[];
+    // name: string;
+    // release_date: string;
+    // uri: string;
+    artists: {
+      name: string;
+      // uri: string;
+      id: string;
+    }[];
     images: Image[];
   };
-  duration_ms: number;
+  // duration_ms: number;
   preview_url: string;
   name: string;
-  popularity: number;
-  uri: string;
+  // popularity: number;
+  // uri: string;
   id: string;
 }
 
 export interface Image {
-  height: number;
+  // height: number;
   url: string;
-  width: number;
+  // width: number;
 }
 
 export interface Artist {
-  followers: {
-    total: number;
-  };
+  // followers: {
+  //   total: number;
+  // };
   genres: string[];
   id: string;
   images: Image[];
   name: string;
   popularity: number;
-  uri: string;
+  // uri: string;
 }
 
 export interface ArtistStats {
@@ -77,19 +81,19 @@ export type UserStats = Partial<{
 type TimelineEventData =
   | {
       type: 'artistFirstSeen';
-      artistID: string;
+      artist: Artist;
     }
   | {
       type: 'topTrackFirstSeen';
-      trackID: string;
+      track: Track;
     };
 
 export type TimelineEvent = {
-  date: Date;
-  id: string;
+  date: string;
+  id: number;
 } & TimelineEventData;
 
 export interface TimelineData {
   events: TimelineEvent[];
-  firstUpdate: Date;
+  // firstUpdate: Date;
 }

@@ -54,7 +54,7 @@ export const ArtistCards: React.FC<
             name={artist.name}
             genres={artist.genres}
             imageSrc={artist.images[0]?.url}
-            uri={artist.uri}
+            // uri={artist.uri}
             id={artist.id}
           />
         );
@@ -92,7 +92,7 @@ const StatsDetails: React.FC<{ stats: UserStats }> = ({ stats }) => {
               title={track.name}
               artists={track.album.artists}
               previewUrl={track.preview_url}
-              album={track.album.name}
+              // album={track.album.name}
               imageSrc={track.album.images[0].url}
               playing={playing}
               setPlaying={setPlaying}

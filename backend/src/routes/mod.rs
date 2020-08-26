@@ -12,7 +12,10 @@ use rocket_contrib::json::Json;
 use crate::benchmarking::{mark, start};
 use crate::conf::CONF;
 use crate::db_util;
-use crate::models::{Artist, NewUser, OAuthTokenResponse, StatsSnapshot, TimeFrames, Track, User};
+use crate::models::{
+    Artist, NewUser, OAuthTokenResponse, StatsSnapshot, TimeFrames, Timeline, TimelineEvent,
+    TimelineEventType, Track, User,
+};
 use crate::DbConn;
 use crate::SpotifyTokenData;
 
@@ -222,6 +225,92 @@ pub fn get_genre_stats(
         popularity_history,
         timestamps,
     })))
+}
+
+#[get("/stats/<username>/timeline?<start_day_id>&<end_day_id>")]
+pub fn get_timeline(
+    conn: DbConn,
+    token_data: State<Mutex<SpotifyTokenData>>,
+    conn_2: DbConn,
+    username: String,
+    start_day_id: String,
+    end_day_id: String,
+) -> Result<Option<Json<Timeline>>, String> {
+    let start_day = NaiveDateTime::parse_from_str(
+        &format!("{}T08:00:00+08:00", start_day_id),
+        "%Y-%m-%dT%H:%M:%S%z",
+    )
+    .map_err(|_| String::from("Invalid `start_day_id` provided"))?;
+    let end_day = NaiveDateTime::parse_from_str(
+        &format!("{}T08:00:00+08:00", end_day_id),
+        "%Y-%m-%dT%H:%M:%S%z",
+    )
+    .map_err(|_| String::from("Invalid `end_day_id` provided"))?;
+
+    let User { id: user_id, .. } = match db_util::get_user_by_spotify_id(&conn, &username)? {
+        Some(user) => user,
+        None => {
+            return Ok(None);
+        }
+    };
+    let spotify_access_token = {
+        let token_data = &mut *(&*token_data).lock().unwrap();
+        token_data.get()
+    }?;
+
+    let (artist_events, track_events) = rayon::join(
+        move || {
+            crate::db_util::get_artist_timeline_events(&conn, user_id, start_day, end_day)
+                .map_err(crate::db_util::stringify_diesel_err)
+        },
+        move || {
+            crate::db_util::get_track_timeline_events(&conn_2, user_id, start_day, end_day)
+                .map_err(crate::db_util::stringify_diesel_err)
+        },
+    );
+    let (artist_events, track_events) = (artist_events?, track_events?);
+
+    let artist_ids = artist_events
+        .iter()
+        .map(|evt| evt.0.as_str())
+        .collect::<Vec<_>>();
+    let track_ids = track_events
+        .iter()
+        .map(|evt| evt.0.as_str())
+        .collect::<Vec<_>>();
+
+    // Join to artist/track metadata
+    let (artists, tracks) = rayon::join(
+        || crate::spotify_api::fetch_artists(&spotify_access_token, &artist_ids),
+        || crate::spotify_api::fetch_tracks(&spotify_access_token, &track_ids),
+    );
+    let (artists, tracks) = (artists?, tracks?);
+
+    let mut events = Vec::new();
+    let mut event_count = 0;
+    events.extend(artist_events.into_iter().zip(artists.into_iter()).map(
+        |((_artist_id, first_seen), artist)| {
+            event_count += 1;
+            TimelineEvent {
+                event_type: TimelineEventType::ArtistFirstSeen { artist },
+                date: first_seen.date(),
+                id: event_count,
+            }
+        },
+    ));
+    events.extend(track_events.into_iter().zip(tracks.into_iter()).map(
+        |((_track_id, first_seen), track)| {
+            event_count += 1;
+            TimelineEvent {
+                event_type: TimelineEventType::TopTrackFirstSeen { track },
+                date: first_seen.date(),
+                id: event_count,
+            }
+        },
+    ));
+    events.sort_unstable_by_key(|evt| evt.date);
+
+    Ok(Some(Json(Timeline { events })))
 }
 
 /// Redirects to the Spotify authorization page for the application

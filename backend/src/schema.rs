@@ -7,6 +7,14 @@ table! {
 }
 
 table! {
+    artists_users_first_seen (user_id, mapped_spotify_id) {
+        user_id -> Bigint,
+        mapped_spotify_id -> Integer,
+        first_seen -> Datetime,
+    }
+}
+
+table! {
     artist_rank_snapshots (id) {
         id -> Bigint,
         user_id -> Bigint,
@@ -39,6 +47,14 @@ table! {
         id -> Integer,
         track_id -> Integer,
         artist_id -> Integer,
+    }
+}
+
+table! {
+    tracks_users_first_seen (user_id, mapped_spotify_id) {
+        user_id -> Bigint,
+        mapped_spotify_id -> Integer,
+        first_seen -> Datetime,
     }
 }
 
@@ -82,10 +98,12 @@ joinable!(track_rank_snapshots -> users (user_id));
 
 allow_tables_to_appear_in_same_query!(
     artists_genres,
+    artists_users_first_seen,
     artist_rank_snapshots,
     artist_stats_history,
     spotify_items,
     tracks_artists,
+    tracks_users_first_seen,
     track_rank_snapshots,
     track_stats_history,
     users,

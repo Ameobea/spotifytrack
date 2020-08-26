@@ -4,12 +4,12 @@ import dayjs from 'dayjs';
 
 import { useUsername } from 'src/store/selectors';
 import { fetchTimelineEvents } from 'src/api';
-import { ReduxStore, TimelineData, TimelineEvent, Image } from 'src/types';
+import { ReduxStore, TimelineEvent, Image } from 'src/types';
 import './Timeline.scss';
 import { connect } from 'react-redux';
 import { truncateWithElipsis } from 'src/util';
-import { UnimplementedError } from 'ameo-utils';
 import DayStats from './DayStats';
+import { UnimplementedError } from 'ameo-utils';
 
 export interface TimelineDay {
   date: number;
@@ -32,71 +32,67 @@ const TimelineEventComp: React.FC<{
   </div>
 );
 
-const mapStateToProps = (state: ReduxStore, { day }: { day: TimelineDay }) => {
-  return {
-    eventImages: day.events.map((evt) => {
-      switch (evt.type) {
-        case 'artistFirstSeen':
-          return state.entityStore.artists[evt.artistID]?.images[0];
-        case 'topTrackFirstSeen':
-          return state.entityStore.tracks[evt.trackID]?.album.images[0];
-        default:
-          return null;
-      }
-    }),
-    tooltipContent: day.events.map((evt) => {
-      switch (evt.type) {
-        case 'artistFirstSeen': {
-          const artist = state.entityStore.artists[evt.artistID];
-          if (!artist) {
-            return null;
-          }
-
-          return (
-            <>
-              Artist Seen for the First Time:
-              <br />
-              <b>{truncateWithElipsis(artist.name, 60)}</b>
-            </>
-          );
-        }
-        case 'topTrackFirstSeen': {
-          throw new UnimplementedError();
-        }
-        default:
-          return null;
-      }
-    }),
-  };
+const getEventImage = (event: TimelineEvent) => {
+  switch (event.type) {
+    case 'artistFirstSeen':
+      return event.artist?.images?.[0];
+    case 'topTrackFirstSeen':
+      return event.track.album?.images?.[0];
+    default:
+      return null;
+  }
 };
 
-const TimelineDayCompInner: React.FC<
-  {
-    day: TimelineDay;
-    onClick: () => void;
-    selected?: boolean;
-  } & ReturnType<typeof mapStateToProps>
-> = ({ day, eventImages, tooltipContent, onClick, selected }) => (
-  <div
-    onClick={onClick}
-    className="timeline-day"
-    style={{ backgroundColor: selected ? '#389' : day.isPrevMonth ? '#222' : '#444' }}
-  >
-    <div className="timeline-date">{day.date}</div>
-    <div className={`timeline-events event-count-${day.events.length > 4 ? '5-9' : '1-4'}`}>
-      {day.events.map((event, i) => (
-        <TimelineEventComp
-          key={event.id}
-          event={event}
-          image={eventImages[i]}
-          tooltipContent={tooltipContent[i]}
-        />
-      ))}
-    </div>
-  </div>
-);
+const TooltipContent: React.FC<{ event: TimelineEvent }> = ({ event: evt }) => {
+  switch (evt.type) {
+    case 'artistFirstSeen': {
+      return (
+        <>
+          Artist Seen for the First Time:
+          <br />
+          <b>{truncateWithElipsis(evt.artist.name, 60)}</b>
+        </>
+      );
+    }
+    case 'topTrackFirstSeen': {
+      return (
+        <>
+          Top Track Seen for the First Time:
+          <br />
+          <b>{truncateWithElipsis(`${evt.track.album.artists[0].name} - ${evt.track.name}`, 60)}</b>
+        </>
+      );
+    }
+    default:
+      throw new UnimplementedError();
+  }
+};
 
-const TimelineDayComp = connect(mapStateToProps)(TimelineDayCompInner);
+const TimelineDayComp: React.FC<{
+  day: TimelineDay;
+  onClick: () => void;
+  selected?: boolean;
+}> = ({ day, onClick, selected }) => {
+  return (
+    <div
+      onClick={onClick}
+      className="timeline-day"
+      style={{ backgroundColor: selected ? '#389' : day.isPrevMonth ? '#222' : '#444' }}
+    >
+      <div className="timeline-date">{day.date}</div>
+      <div className={`timeline-events event-count-${day.events.length > 4 ? '5-9' : '1-4'}`}>
+        {day.events.map((event, i) => (
+          <TimelineEventComp
+            key={event.id}
+            event={event}
+            image={getEventImage(event)}
+            tooltipContent={<TooltipContent event={event} />}
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
 
 const TimelineWeek: React.FC<{
   days: TimelineDay[];
@@ -117,54 +113,57 @@ const TimelineWeek: React.FC<{
   );
 };
 
-const data: TimelineData = {
-  firstUpdate: new Date('2020-05-20'),
-  events: [
-    {
-      date: new Date('2020-08-04'),
-      type: 'artistFirstSeen',
-      artistID: '0xByDfltDVpk6LDsUMHyI2',
-      id: '1',
-    },
-    {
-      date: new Date('2020-08-04'),
-      type: 'artistFirstSeen',
-      artistID: '3luonLzvSOxdU8ytCaEIK8',
-      id: '2',
-    },
-    {
-      date: new Date('2020-08-04'),
-      type: 'artistFirstSeen',
-      artistID: '3luonLzvSOxdU8ytCaEIK8',
-      id: '11',
-    },
-    {
-      date: new Date('2020-08-04'),
-      type: 'artistFirstSeen',
-      artistID: '3luonLzvSOxdU8ytCaEIK8',
-      id: '211',
-    },
-    {
-      date: new Date('2020-08-04'),
-      type: 'artistFirstSeen',
-      artistID: '3luonLzvSOxdU8ytCaEIK8',
-      id: '2311',
-    },
-    {
-      date: new Date('2020-08-08'),
-      type: 'artistFirstSeen',
-      artistID: '59pWgeY26Q6yJy37QvJflh',
-      id: '3',
-    },
-  ],
-};
+// const data: TimelineData = {
+//   firstUpdate: new Date('2020-05-20'),
+//   events: [
+//     {
+//       date: new Date('2020-08-04'),
+//       type: 'artistFirstSeen',
+//       artistID: '0xByDfltDVpk6LDsUMHyI2',
+//       id: 1,
+//     },
+//     {
+//       date: new Date('2020-08-04'),
+//       type: 'artistFirstSeen',
+//       artistID: '3luonLzvSOxdU8ytCaEIK8',
+//       id: 2,
+//     },
+//     {
+//       date: new Date('2020-08-04'),
+//       type: 'artistFirstSeen',
+//       artistID: '3luonLzvSOxdU8ytCaEIK8',
+//       id: 11,
+//     },
+//     {
+//       date: new Date('2020-08-04'),
+//       type: 'artistFirstSeen',
+//       artistID: '3luonLzvSOxdU8ytCaEIK8',
+//       id: 211,
+//     },
+//     {
+//       date: new Date('2020-08-04'),
+//       type: 'artistFirstSeen',
+//       artistID: '3luonLzvSOxdU8ytCaEIK8',
+//       id: 2311,
+//     },
+//     {
+//       date: new Date('2020-08-08'),
+//       type: 'artistFirstSeen',
+//       artistID: '59pWgeY26Q6yJy37QvJflh',
+//       id: 3,
+//     },
+//   ],
+// };
 
 const Timeline: React.FC = () => {
   const username = useUsername();
 
-  // const { data } = useQuery({ queryKey: ['timeline', username], queryFn: fetchTimelineEvents });
-
   const [curMonth, setCurMonth] = useState(dayjs().startOf('month'));
+  const { data } = useQuery({
+    queryKey: ['timeline', username, curMonth.toString()],
+    queryFn: fetchTimelineEvents,
+  });
+
   const weeks = useMemo(() => {
     const month = curMonth.month();
     const startOfCurMonth = curMonth.startOf('month');
@@ -180,7 +179,7 @@ const Timeline: React.FC = () => {
       curWeek.push({ date: daysInPrevMonth - (firstDayOfWeek - i), isPrevMonth: true, events: [] });
     }
 
-    let curDay = dayjs(startOfCurMonth);
+    let curDay = dayjs(startOfCurMonth).endOf('day');
     while (curDay.month() === month) {
       // Check to see if we've filled up the whole current week and start a new one if we have
       if (curWeek.length === 7) {
@@ -191,7 +190,11 @@ const Timeline: React.FC = () => {
       const events = [];
       // We assume that the events are sorted by date
       const curDate = curDay.date();
-      while (data && data.events.length > 0 && data.events[0].date.getDate() === curDate) {
+      while (
+        data &&
+        data.events.length > 0 &&
+        dayjs(data.events[0].date, 'YYYY-MM-DD').isBefore(curDay)
+      ) {
         // This mutates `data.events`, popping the first element and leaving the tail in place in `data.events`
         events.push(data.events.shift()!);
       }
