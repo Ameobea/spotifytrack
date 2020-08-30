@@ -47,23 +47,23 @@ pub struct DbConn(diesel::MysqlConnection);
 fn main() {
     dotenv::dotenv().expect("dotenv file parsing failed");
 
+    let all_routes = routes![
+        routes::index,
+        routes::get_current_stats,
+        routes::oauth_cb,
+        routes::authorize,
+        routes::update_user,
+        routes::get_artist_stats,
+        routes::get_genre_history,
+        routes::populate_tracks_artists_mapping_table,
+        routes::populate_artists_genres_mapping_table,
+        routes::get_genre_stats,
+        routes::get_timeline
+    ];
+
     rocket::ignite()
-        .mount(
-            "/",
-            routes![
-                routes::index,
-                routes::get_current_stats,
-                routes::oauth_cb,
-                routes::authorize,
-                routes::update_user,
-                routes::get_artist_stats,
-                routes::get_genre_history,
-                routes::populate_tracks_artists_mapping_table,
-                routes::populate_artists_genres_mapping_table,
-                routes::get_genre_stats,
-                routes::get_timeline
-            ],
-        )
+        .mount("/", all_routes.clone())
+        .mount("/api/", all_routes)
         .attach(DbConn::fairing())
         .attach(cors::CorsFairing)
         .attach(Compression::fairing())

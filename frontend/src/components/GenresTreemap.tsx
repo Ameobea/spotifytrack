@@ -2,13 +2,13 @@ import React from 'react';
 import { Option } from 'funfix-core';
 import * as R from 'ramda';
 import { useOnChange } from 'ameo-utils/dist/util/react';
+import { withMobileProp } from 'ameo-utils/dist/responsive';
 
 import { Treemap } from 'src/components/Charts';
 import { useSelector, actionCreators, dispatch } from 'src/store';
 import Loading from 'src/components/Loading';
 import { useUsername } from 'src/store/selectors';
 import { fetchGenreHistory } from 'src/api';
-import { withMobileProp } from 'ameo-utils/dist/responsive';
 
 const GenresTreemap: React.FC<{ mobile: boolean }> = ({ mobile }) => {
   const username = useUsername();

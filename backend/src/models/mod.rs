@@ -243,33 +243,24 @@ pub struct Followers {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Image {
-    #[serde(skip_serializing)]
-    pub height: Option<usize>,
+    // pub height: Option<usize>,
     pub url: String,
-    #[serde(skip_serializing)]
-    pub width: Option<usize>,
+    // pub width: Option<usize>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Album {
-    #[serde(skip_serializing)]
-    pub album_group: Option<String>,
-    #[serde(skip_serializing)]
-    pub album_type: String,
+    // pub album_group: Option<String>,
+    // pub album_type: String,
     pub artists: Vec<Artist>,
-    #[serde(skip_serializing)]
-    pub available_markets: Vec<String>,
-    #[serde(skip_serializing)]
-    pub href: String,
+    // pub available_markets: Vec<String>,
+    // pub href: String,
     pub id: String,
     pub images: Vec<Image>,
     pub name: String,
-    #[serde(skip_serializing)]
-    pub release_date: String,
-    #[serde(skip_serializing)]
-    pub release_date_precision: String,
-    #[serde(skip_serializing)]
-    pub uri: String,
+    // pub release_date: String,
+    // pub release_date_precision: String,
+    // pub uri: String,
 }
 
 #[derive(Clone, Deserialize, Debug)]
@@ -296,27 +287,18 @@ pub struct ArtistRankHistoryResItem {
 pub struct Track {
     pub album: Album,
     pub artists: Vec<Artist>,
-    #[serde(skip_serializing)]
-    pub available_markets: Vec<String>,
-    #[serde(skip_serializing)]
-    pub disc_number: usize,
-    #[serde(skip_serializing)]
-    pub duration_ms: usize,
-    #[serde(skip_serializing)]
-    pub explicit: bool,
-    #[serde(skip_serializing)]
-    pub href: Option<String>,
+    // pub available_markets: Vec<String>,
+    // pub disc_number: usize,
+    // pub duration_ms: usize,
+    // pub explicit: bool,
+    // pub href: Option<String>,
     pub id: String,
-    #[serde(skip_serializing)]
-    pub is_playable: Option<bool>,
+    // pub is_playable: Option<bool>,
     pub name: String,
-    #[serde(skip_serializing)]
-    pub popularity: usize,
+    // pub popularity: usize,
     pub preview_url: Option<String>,
-    #[serde(skip_serializing)]
-    pub track_number: usize,
-    #[serde(skip_serializing)]
-    pub uri: String,
+    // pub track_number: usize,
+    // pub uri: String,
 }
 
 #[derive(Clone, Deserialize, Debug)]
@@ -326,31 +308,24 @@ pub struct TopArtistsResponse {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Artist {
-    #[serde(skip_serializing)]
-    pub followers: Option<Followers>,
+    // pub followers: Option<Followers>,
     pub genres: Option<Vec<String>>,
-    #[serde(skip_serializing)]
-    pub href: String,
+    // pub href: String,
     pub id: String,
     pub images: Option<Vec<Image>>,
     pub name: String,
-    #[serde(skip_serializing)]
-    pub popularity: Option<usize>,
-    #[serde(skip_serializing)]
-    pub uri: String,
+    // pub popularity: Option<usize>,
+    // pub uri: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UserProfile {
     pub display_name: String,
-    #[serde(skip_serializing)]
-    pub followers: Followers,
-    #[serde(skip_serializing)]
-    pub href: String,
+    // pub followers: Followers,
+    // pub href: String,
     pub images: Vec<Image>,
     pub id: String,
-    #[serde(skip_serializing)]
-    pub uri: String,
+    // pub uri: String,
 }
 
 // {

@@ -1,15 +1,14 @@
 import React, { useMemo, useState } from 'react';
 import { useQuery } from 'react-query';
 import dayjs from 'dayjs';
+import { UnimplementedError } from 'ameo-utils';
 
 import { useUsername } from 'src/store/selectors';
 import { fetchTimelineEvents } from 'src/api';
-import { ReduxStore, TimelineEvent, Image } from 'src/types';
+import { TimelineEvent, Image } from 'src/types';
 import './Timeline.scss';
-import { connect } from 'react-redux';
 import { truncateWithElipsis } from 'src/util';
 import DayStats from './DayStats';
-import { UnimplementedError } from 'ameo-utils';
 
 export interface TimelineDay {
   date: number;
@@ -21,7 +20,7 @@ const TimelineEventComp: React.FC<{
   event: TimelineEvent;
   image: Image | null | undefined;
   tooltipContent: React.ReactNode | null;
-}> = ({ event, image, tooltipContent }) => (
+}> = ({ image, tooltipContent }) => (
   <div className="timeline-event">
     {image ? (
       <>
@@ -81,7 +80,7 @@ const TimelineDayComp: React.FC<{
     >
       <div className="timeline-date">{day.date}</div>
       <div className={`timeline-events event-count-${day.events.length > 4 ? '5-9' : '1-4'}`}>
-        {day.events.map((event, i) => (
+        {day.events.slice(0, 9).map((event) => (
           <TimelineEventComp
             key={event.id}
             event={event}
@@ -98,62 +97,18 @@ const TimelineWeek: React.FC<{
   days: TimelineDay[];
   selectedDay: TimelineDay | null;
   setSelectedDay: (day: TimelineDay) => void;
-}> = ({ days, setSelectedDay, selectedDay }) => {
-  return (
-    <div className="timeline-week">
-      {days.map((day) => (
-        <TimelineDayComp
-          key={day.date}
-          selected={day === selectedDay}
-          day={day}
-          onClick={() => setSelectedDay(day)}
-        />
-      ))}
-    </div>
-  );
-};
-
-// const data: TimelineData = {
-//   firstUpdate: new Date('2020-05-20'),
-//   events: [
-//     {
-//       date: new Date('2020-08-04'),
-//       type: 'artistFirstSeen',
-//       artistID: '0xByDfltDVpk6LDsUMHyI2',
-//       id: 1,
-//     },
-//     {
-//       date: new Date('2020-08-04'),
-//       type: 'artistFirstSeen',
-//       artistID: '3luonLzvSOxdU8ytCaEIK8',
-//       id: 2,
-//     },
-//     {
-//       date: new Date('2020-08-04'),
-//       type: 'artistFirstSeen',
-//       artistID: '3luonLzvSOxdU8ytCaEIK8',
-//       id: 11,
-//     },
-//     {
-//       date: new Date('2020-08-04'),
-//       type: 'artistFirstSeen',
-//       artistID: '3luonLzvSOxdU8ytCaEIK8',
-//       id: 211,
-//     },
-//     {
-//       date: new Date('2020-08-04'),
-//       type: 'artistFirstSeen',
-//       artistID: '3luonLzvSOxdU8ytCaEIK8',
-//       id: 2311,
-//     },
-//     {
-//       date: new Date('2020-08-08'),
-//       type: 'artistFirstSeen',
-//       artistID: '59pWgeY26Q6yJy37QvJflh',
-//       id: 3,
-//     },
-//   ],
-// };
+}> = ({ days, setSelectedDay, selectedDay }) => (
+  <div className="timeline-week">
+    {days.map((day) => (
+      <TimelineDayComp
+        key={day.date}
+        selected={day === selectedDay}
+        day={day}
+        onClick={() => setSelectedDay(day)}
+      />
+    ))}
+  </div>
+);
 
 const Timeline: React.FC = () => {
   const username = useUsername();

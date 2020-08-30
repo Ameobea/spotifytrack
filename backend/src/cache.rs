@@ -71,7 +71,11 @@ pub fn get_hash_items<T: for<'de> Deserialize<'de>>(
         .into_iter()
         .map(|opt: Option<String>| match opt {
             Some(val) => serde_json::from_str(&val).map_err(|err| -> String {
-                error!("Error deserializing value: {:?}", err);
+                error!(
+                    "Error deserializing value of {}: {:?}",
+                    std::any::type_name::<T>(),
+                    err
+                );
                 "Error reading values from cache".into()
             }),
             None => Ok(None),
