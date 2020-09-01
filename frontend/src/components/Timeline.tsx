@@ -9,6 +9,7 @@ import { TimelineEvent, Image } from 'src/types';
 import './Timeline.scss';
 import { truncateWithElipsis } from 'src/util';
 import DayStats from './DayStats';
+import { withMobileOrDesktop } from 'ameo-utils/dist/responsive';
 
 export interface TimelineDay {
   date: number;
@@ -93,11 +94,17 @@ const TimelineDayComp: React.FC<{
   );
 };
 
-const TimelineWeek: React.FC<{
+interface TimelineWeekProps {
   days: TimelineDay[];
   selectedDay: TimelineDay | null;
   setSelectedDay: (day: TimelineDay) => void;
-}> = ({ days, setSelectedDay, selectedDay }) => (
+}
+
+const DesktopTimelineWeek: React.FC<TimelineWeekProps> = ({
+  days,
+  setSelectedDay,
+  selectedDay,
+}) => (
   <div className="timeline-week">
     {days.map((day) => (
       <TimelineDayComp
@@ -109,6 +116,72 @@ const TimelineWeek: React.FC<{
     ))}
   </div>
 );
+
+interface InnerTimelineProps {
+  weeks: TimelineDay[][];
+  selectedDay: TimelineDay | null;
+  setSelectedDay: (newSelectedDay: TimelineDay | null) => void;
+}
+
+const DesktopTimeline: React.FC<InnerTimelineProps> = ({ weeks, selectedDay, setSelectedDay }) => (
+  <>
+    {weeks.map((week) => (
+      <DesktopTimelineWeek
+        key={week[0].date}
+        days={week}
+        selectedDay={selectedDay}
+        setSelectedDay={setSelectedDay}
+      />
+    ))}
+  </>
+);
+
+const MobileTimelineWeek: React.FC<
+  TimelineWeekProps & { isSelected: boolean; onSelect: () => void }
+> = ({ days, isSelected, onSelect }) => {
+  const allEvents = useMemo(
+    () => days.reduce((acc, day) => acc.concat(day.events), [] as TimelineEvent[]),
+    [days]
+  );
+
+  return (
+    <div
+      style={isSelected ? { backgroundColor: '#389' } : undefined}
+      className="timeline-events mobile-timeline-week"
+      onClick={onSelect}
+    >
+      {allEvents.slice(0, 12).map((evt) => (
+        <TimelineEventComp
+          key={evt.id}
+          event={evt}
+          image={getEventImage(evt)}
+          tooltipContent={<TooltipContent event={evt} />}
+        />
+      ))}
+    </div>
+  );
+};
+
+const MobileTimeline: React.FC<InnerTimelineProps> = ({ weeks, selectedDay, setSelectedDay }) => {
+  const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
+
+  return (
+    <div className="mobile-timeline-weeks">
+      {weeks.map((week) => (
+        <MobileTimelineWeek
+          key={week[0].date}
+          days={week}
+          selectedDay={selectedDay}
+          setSelectedDay={setSelectedDay}
+          isSelected={week[0].date === selectedWeek}
+          onSelect={() => setSelectedWeek(week[0].date)}
+        />
+      ))}
+    </div>
+  );
+};
+
+const InnerTimeline = withMobileOrDesktop({ maxDeviceWidth: 800 })(MobileTimeline, DesktopTimeline);
 
 const Timeline: React.FC = () => {
   const username = useUsername();
@@ -185,14 +258,7 @@ const Timeline: React.FC = () => {
         </button>
       </div>
 
-      {weeks.map((week) => (
-        <TimelineWeek
-          key={week[0].date}
-          days={week}
-          selectedDay={selectedDay}
-          setSelectedDay={setSelectedDay}
-        />
-      ))}
+      <InnerTimeline weeks={weeks} selectedDay={selectedDay} setSelectedDay={setSelectedDay} />
 
       {selectedDay ? (
         <DayStats day={selectedDay} />
