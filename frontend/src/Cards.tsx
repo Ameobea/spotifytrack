@@ -8,6 +8,7 @@ import { Timeframe } from 'src/types';
 import { truncateWithElipsis, map } from 'src/util';
 import { useUsername } from './store/selectors';
 import './Cards.scss';
+import { withMobileProp } from 'ameo-utils/dist/responsive';
 
 interface ImageBoxProps {
   imageSrc: string;
@@ -218,9 +219,10 @@ interface ImageBoxGridProps {
   hideShowMore?: boolean;
   disableTimeframes?: boolean;
   style?: React.CSSProperties;
+  mobile: boolean;
 }
 
-export const ImageBoxGrid: React.FC<ImageBoxGridProps> = ({
+const ImageBoxGridInner: React.FC<ImageBoxGridProps> = ({
   renderItem,
   getItemCount,
   initialItems,
@@ -260,3 +262,5 @@ export const ImageBoxGrid: React.FC<ImageBoxGridProps> = ({
     </div>
   );
 };
+
+export const ImageBoxGrid = withMobileProp({ maxDeviceWidth: 800 })(ImageBoxGridInner);

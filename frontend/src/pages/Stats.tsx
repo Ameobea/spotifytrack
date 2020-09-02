@@ -16,12 +16,14 @@ import GenresTreemap from 'src/components/GenresTreemap';
 import { useUsername } from 'src/store/selectors';
 import Timeline from 'src/components/Timeline';
 import './Stats.scss';
+import { withMobileProp } from 'ameo-utils/dist/responsive';
 
 export const ArtistCards: React.FC<
   {
     horizontallyScrollable?: boolean;
+    mobile: boolean;
   } & Partial<PropTypesOf<typeof ImageBoxGrid>>
-> = ({ horizontallyScrollable, ...props }) => {
+> = ({ horizontallyScrollable, mobile, ...props }) => {
   const { artistsCorpus } = useSelector(({ entityStore: { artists } }) => ({
     artistsCorpus: artists,
   }));
@@ -60,14 +62,14 @@ export const ArtistCards: React.FC<
         );
       }}
       getItemCount={(timeframe) => (stats.artists ? stats.artists[timeframe].length : 0)}
-      initialItems={10}
+      initialItems={mobile ? 9 : 10}
       title="Artists"
       {...props}
     />
   );
 };
 
-const StatsDetails: React.FC<{ stats: UserStats }> = ({ stats }) => {
+const StatsDetailsInner: React.FC<{ stats: UserStats; mobile: boolean }> = ({ stats, mobile }) => {
   const { tracksCorpus } = useSelector(({ entityStore: { tracks, artists } }) => ({
     tracksCorpus: tracks,
     artistsCorpus: artists,
@@ -76,7 +78,7 @@ const StatsDetails: React.FC<{ stats: UserStats }> = ({ stats }) => {
 
   return (
     <div className="details">
-      {/* <ImageBoxGrid
+      <ImageBoxGrid
         renderItem={(i, timeframe) => {
           if (!stats.tracks) {
             return null;
@@ -100,11 +102,11 @@ const StatsDetails: React.FC<{ stats: UserStats }> = ({ stats }) => {
           );
         }}
         getItemCount={(timeframe) => (stats.tracks ? stats.tracks[timeframe].length : 0)}
-        initialItems={10}
+        initialItems={mobile ? 9 : 10}
         title="Tracks"
       />
 
-      <ArtistCards /> */}
+      <ArtistCards mobile={mobile} />
 
       <Timeline />
 
@@ -113,6 +115,8 @@ const StatsDetails: React.FC<{ stats: UserStats }> = ({ stats }) => {
     </div>
   );
 };
+
+const StatsDetails = withMobileProp({ maxDeviceWidth: 800 })(StatsDetailsInner);
 
 const StatsContent: React.FC<
   { username: string; statsForUser: ValueOf<UserStatsState> } & Pick<ReactRouterRouteProps, 'match'>
