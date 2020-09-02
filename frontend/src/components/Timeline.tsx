@@ -1,18 +1,19 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { useQuery } from 'react-query';
-import dayjs from 'dayjs';
+import dayjs, { Dayjs } from 'dayjs';
 import { UnimplementedError } from 'ameo-utils';
+import { withMobileOrDesktop, withMobileProp } from 'ameo-utils/dist/responsive';
 
 import { useUsername } from 'src/store/selectors';
 import { fetchTimelineEvents } from 'src/api';
-import { TimelineEvent, Image } from 'src/types';
+import { TimelineEvent, Image, TimelineData } from 'src/types';
 import './Timeline.scss';
 import { truncateWithElipsis } from 'src/util';
 import DayStats from './DayStats';
-import { withMobileOrDesktop } from 'ameo-utils/dist/responsive';
 
 export interface TimelineDay {
   date: number;
+  rawDate: Dayjs;
   isPrevMonth: boolean;
   events: TimelineEvent[];
 }
@@ -146,44 +147,90 @@ const MobileTimelineWeek: React.FC<
 
   return (
     <div
-      style={isSelected ? { backgroundColor: '#389' } : undefined}
-      className="timeline-events mobile-timeline-week"
-      onClick={onSelect}
+      style={
+        isSelected
+          ? { backgroundColor: '#389', marginTop: 8, borderRadius: 5 }
+          : { marginTop: 8, borderRadius: 5 }
+      }
     >
-      {allEvents.slice(0, 12).map((evt) => (
-        <TimelineEventComp
-          key={evt.id}
-          event={evt}
-          image={getEventImage(evt)}
-          tooltipContent={<TooltipContent event={evt} />}
-        />
-      ))}
+      <div className="mobile-week-label">
+        {days[0].rawDate.toDate().toLocaleDateString()} -{' '}
+        {days[days.length - 1].rawDate.toDate().toLocaleDateString()}
+      </div>
+      <div
+        style={isSelected ? { backgroundColor: '#278' } : undefined}
+        className="timeline-events mobile-timeline-week"
+        onClick={onSelect}
+      >
+        {allEvents.slice(0, 12).map((evt) => (
+          <TimelineEventComp
+            key={evt.id}
+            event={evt}
+            image={getEventImage(evt)}
+            tooltipContent={<TooltipContent event={evt} />}
+          />
+        ))}
+      </div>
     </div>
   );
 };
 
-const MobileTimeline: React.FC<InnerTimelineProps> = ({ weeks, selectedDay, setSelectedDay }) => {
-  const [selectedWeek, setSelectedWeek] = useState<number | null>(null);
-
-  return (
-    <div className="mobile-timeline-weeks">
-      {weeks.map((week) => (
-        <MobileTimelineWeek
-          key={week[0].date}
-          days={week}
-          selectedDay={selectedDay}
-          setSelectedDay={setSelectedDay}
-          isSelected={week[0].date === selectedWeek}
-          onSelect={() => setSelectedWeek(week[0].date)}
-        />
-      ))}
-    </div>
-  );
-};
+const MobileTimeline: React.FC<InnerTimelineProps> = ({ weeks, selectedDay, setSelectedDay }) => (
+  <div className="mobile-timeline-weeks">
+    {weeks.map((week) => (
+      <MobileTimelineWeek
+        key={week[0].date}
+        days={week}
+        selectedDay={selectedDay}
+        setSelectedDay={setSelectedDay}
+        isSelected={week[0] === selectedDay}
+        onSelect={() => setSelectedDay(week[0])}
+      />
+    ))}
+  </div>
+);
 
 const InnerTimeline = withMobileOrDesktop({ maxDeviceWidth: 800 })(MobileTimeline, DesktopTimeline);
 
-const Timeline: React.FC = () => {
+const maybeUpdateMobileSelectedDay = (
+  data: TimelineData | undefined | null,
+  mobile: boolean,
+  selectedDay: TimelineDay | null,
+  weeks: TimelineDay[][],
+  mobileSelectedDay: React.MutableRefObject<{
+    lastSelectedDay: TimelineDay;
+    mergedDay: TimelineDay;
+  } | null>
+) => {
+  if (!mobile || !data) {
+    return;
+  }
+
+  // If user hasn't changed their selected day/week, nothing needs to be done
+  if (selectedDay === mobileSelectedDay.current?.lastSelectedDay) {
+    return;
+  }
+
+  if (!selectedDay) {
+    mobileSelectedDay.current = null;
+    return;
+  }
+
+  const targetWeek = weeks.find((week) => week[0] === selectedDay);
+  if (!targetWeek) {
+    throw new Error("Expected that our selected week would be found since it's newly selected");
+  }
+
+  const [firstDay, ...days] = targetWeek;
+  const mergedDay = days.reduce((acc, day) => {
+    acc.events = acc.events.concat(day.events);
+    return acc;
+  }, firstDay);
+
+  mobileSelectedDay.current = { lastSelectedDay: selectedDay, mergedDay };
+};
+
+const Timeline: React.FC<{ mobile: boolean }> = ({ mobile }) => {
   const username = useUsername();
 
   const [curMonth, setCurMonth] = useState(dayjs().startOf('month'));
@@ -204,7 +251,12 @@ const Timeline: React.FC = () => {
     const startOfPrevMonth = startOfCurMonth.subtract(2, 'day');
     const daysInPrevMonth = startOfPrevMonth.daysInMonth();
     for (let i = 0; i < firstDayOfWeek; i++) {
-      curWeek.push({ date: daysInPrevMonth - (firstDayOfWeek - i), isPrevMonth: true, events: [] });
+      curWeek.push({
+        date: daysInPrevMonth - (firstDayOfWeek - i),
+        rawDate: startOfCurMonth.subtract(firstDayOfWeek - i, 'day'),
+        isPrevMonth: true,
+        events: [],
+      });
     }
 
     let curDay = dayjs(startOfCurMonth).endOf('day');
@@ -227,7 +279,7 @@ const Timeline: React.FC = () => {
         events.push(data.events.shift()!);
       }
 
-      curWeek.push({ date: curDate, isPrevMonth: false, events });
+      curWeek.push({ date: curDate, rawDate: curDay, isPrevMonth: false, events });
 
       curDay = curDay.add(1, 'day');
     }
@@ -235,7 +287,12 @@ const Timeline: React.FC = () => {
     // Pad out the final week to end with Saturday using days from the next month
     let dayOfNextMonth = 1;
     while (curWeek.length < 7) {
-      curWeek.push({ date: dayOfNextMonth, isPrevMonth: true, events: [] });
+      curWeek.push({
+        date: dayOfNextMonth,
+        rawDate: curDay.add(dayOfNextMonth, 'day'),
+        isPrevMonth: true,
+        events: [],
+      });
       dayOfNextMonth += 1;
     }
     weeks.push(curWeek);
@@ -243,6 +300,11 @@ const Timeline: React.FC = () => {
     return weeks;
   }, [data, curMonth]);
   const [selectedDay, setSelectedDay] = useState<TimelineDay | null>(null);
+  const mobileSelectedDay = useRef<{ lastSelectedDay: TimelineDay; mergedDay: TimelineDay } | null>(
+    null
+  );
+
+  maybeUpdateMobileSelectedDay(data, mobile, selectedDay, weeks, mobileSelectedDay);
 
   return (
     <div className="timeline">
@@ -261,7 +323,13 @@ const Timeline: React.FC = () => {
       <InnerTimeline weeks={weeks} selectedDay={selectedDay} setSelectedDay={setSelectedDay} />
 
       {selectedDay ? (
-        <DayStats day={selectedDay} />
+        mobile ? (
+          <DayStats day={mobileSelectedDay.current!.mergedDay} />
+        ) : (
+          <DayStats day={selectedDay} />
+        )
+      ) : mobile ? (
+        'Select a week above to display details'
       ) : (
         'Click a day on the calendar above to display details'
       )}
@@ -269,4 +337,6 @@ const Timeline: React.FC = () => {
   );
 };
 
-export default Timeline;
+const WrappedTimeline = withMobileProp({ maxDeviceWidth: 800 })(Timeline);
+
+export default WrappedTimeline;

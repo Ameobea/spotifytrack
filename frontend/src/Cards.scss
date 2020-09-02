@@ -113,4 +113,27 @@
       min-height: 120px;
     }
   }
+
+  .image-box-grid.horizontally-scrollable {
+    .image-box {
+      min-width: 90px;
+      margin-right: 0;
+
+      .image-box-content {
+        max-width: 90px;
+        font-size: 10px;
+      }
+
+      .image-container {
+        width: 90px;
+        height: 90px;
+        min-width: 90px;
+        min-height: 90px;
+      }
+
+      .play-pause-button-wrapper > * {
+        font-size: 15px;
+      }
+    }
+  }
 }

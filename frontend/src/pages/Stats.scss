@@ -1,7 +1,4 @@
 .stats {
-  display: flex;
-  flex-direction: column;
-
   .headline-wrapper {
     display: flex;
     justify-content: center;
@@ -22,5 +19,11 @@
     margin-left: auto;
     margin-right: auto;
     margin-bottom: 150px;
+  }
+}
+
+@media only screen and (max-width: 800px) {
+  .stats {
+    width: calc(100vw - 14px);
   }
 }

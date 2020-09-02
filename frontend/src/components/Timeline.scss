@@ -113,16 +113,28 @@
   }
 }
 
+@media only screen and (max-width: 800px) {
+  .timeline .day-stats .events-section .image-box-grid-title {
+    font-size: 22px;
+  }
+}
+
 .mobile-timeline-weeks {
   display: flex;
   flex-direction: column;
+  width: 100%;
+
+  .mobile-week-label {
+    text-align: center;
+    font-size: 13px;
+    margin-top: 4px;
+  }
 
   .mobile-timeline-week {
     display: grid;
-    gap: 0 0;
     min-height: 33.333vw;
-    padding-top: 10px;
-    padding-bottom: 10px;
+    background-color: #040404;
+    border-radius: 0px 0px 5px 5px;
 
     grid-template-columns: repeat(6, 1fr);
     grid-template-rows: 1fr 1fr;

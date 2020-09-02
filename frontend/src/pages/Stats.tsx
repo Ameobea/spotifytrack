@@ -13,9 +13,9 @@ import ArtistStats from 'src/pages/ArtistStats';
 import GenreStats from 'src/pages/GenreStats';
 import Loading from 'src/components/Loading';
 import GenresTreemap from 'src/components/GenresTreemap';
-import './Stats.scss';
 import { useUsername } from 'src/store/selectors';
 import Timeline from 'src/components/Timeline';
+import './Stats.scss';
 
 export const ArtistCards: React.FC<
   {
@@ -76,7 +76,7 @@ const StatsDetails: React.FC<{ stats: UserStats }> = ({ stats }) => {
 
   return (
     <div className="details">
-      <ImageBoxGrid
+      {/* <ImageBoxGrid
         renderItem={(i, timeframe) => {
           if (!stats.tracks) {
             return null;
@@ -104,7 +104,7 @@ const StatsDetails: React.FC<{ stats: UserStats }> = ({ stats }) => {
         title="Tracks"
       />
 
-      <ArtistCards />
+      <ArtistCards /> */}
 
       <Timeline />
 
