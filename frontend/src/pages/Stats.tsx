@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import * as R from 'ramda';
 import { Link } from 'react-router-dom';
 import { PropTypesOf } from 'ameo-utils/dist/util/react';
+import { withMobileProp } from 'ameo-utils/dist/responsive';
 
 import { ReactRouterRouteProps, UserStats, TimeFrames, Track, Artist, ValueOf } from 'src/types';
 import { useOnce } from 'src/util/hooks';
@@ -16,7 +17,6 @@ import GenresTreemap from 'src/components/GenresTreemap';
 import { useUsername } from 'src/store/selectors';
 import Timeline from 'src/components/Timeline';
 import './Stats.scss';
-import { withMobileProp } from 'ameo-utils/dist/responsive';
 
 export const ArtistCards: React.FC<
   {
@@ -94,7 +94,6 @@ const StatsDetailsInner: React.FC<{ stats: UserStats; mobile: boolean }> = ({ st
               title={track.name}
               artists={track.album.artists}
               previewUrl={track.preview_url}
-              // album={track.album.name}
               imageSrc={track.album.images[0].url}
               playing={playing}
               setPlaying={setPlaying}

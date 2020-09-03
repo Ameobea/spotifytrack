@@ -91,7 +91,7 @@
 
 @media only screen and (max-width: 800px) {
   .image-box-grid {
-    padding: 4px;
+    padding: 2px;
     min-height: unset;
     max-height: 700px;
     overflow-y: auto;
@@ -102,14 +102,28 @@
     height: 140px;
     margin-right: 0;
 
-    .image-box-content {
-      max-width: 100px;
-      font-size: 10px;
+    .track {
+      text-align: center;
+
+      .image-box-content {
+        text-align: left;
+        max-width: 100px;
+        font-size: 10px;
+
+        .card-data {
+          padding: unset;
+          padding-top: 0;
+          padding-left: 5px;
+          width: unset;
+          max-height: 43px;
+          overflow-y: hidden;
+        }
+      }
     }
 
     .image-container {
-      width: 80px;
-      height: 80px;
+      width: 90px;
+      height: 90px;
       min-width: 80px;
       min-height: 80px;
     }
