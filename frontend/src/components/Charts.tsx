@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import ReactDOMServer from 'react-dom/server';
 import ReactEchartsCore from 'echarts-for-react/lib/core';
 import * as echarts from 'echarts/lib/echarts';
@@ -35,6 +35,7 @@ const InnerLineChart: React.FC<{
   const chartConfig: any = R.mergeDeepRight(
     {
       ...getBaseConfigDefaults(mobile),
+      grid: { bottom: 20 } as EChartOption['grid'],
       series: series.map(({ data, name }, i) => ({
         ...seriesDefaults,
         smooth: 0.3,
@@ -98,39 +99,45 @@ export const BarChart: React.FC<{
   data: number[];
   categories: string[];
   otherConfig?: Partial<EChartOption>;
+  mobile: boolean;
 }> = ({ data, categories, style, otherConfig = {} }) => {
   if (data.length !== categories.length) {
     throw new Error('The number of supplied data points and categories must be the same');
   }
 
-  const chartConfig = R.mergeDeepRight(
-    {
-      ...getBaseConfigDefaults(false), // TODO
-      dataZoom: undefined,
-      xAxis: {
-        type: 'category',
-        data: categories,
-        axisLabel: {
-          color: '#ccc',
-        },
-      },
-      backgroundColor: '#111', // TODO: Dedup these things with the line chart
-      yAxis: {
-        axisLabel: {
-          color: '#ccc',
-        },
-      },
-      series: [
+  const chartConfig = useMemo(
+    () =>
+      R.mergeDeepRight(
         {
-          data,
-          type: 'bar',
-          itemStyle: {
-            color: colors.green,
+          ...getBaseConfigDefaults(false), // TODO
+          grid: { top: 10, left: 56, right: 10, bottom: 30 },
+          dataZoom: undefined,
+          xAxis: {
+            type: 'category',
+            data: categories,
+            axisLabel: {
+              color: '#ccc',
+            },
           },
+          backgroundColor: '#111', // TODO: Dedup these things with the line chart
+          yAxis: {
+            axisLabel: {
+              color: '#ccc',
+            },
+          },
+          series: [
+            {
+              data,
+              type: 'bar',
+              itemStyle: {
+                color: colors.green,
+              },
+            },
+          ],
         },
-      ],
-    },
-    otherConfig
+        otherConfig
+      ),
+    [data, otherConfig, categories]
   );
 
   return <ReactEchartsCore style={style} echarts={echarts} option={chartConfig as any} />;
@@ -147,24 +154,31 @@ export const Treemap: React.FC<{
   otherConfig?: Partial<EChartOption>;
   style?: React.CSSProperties;
   data: TreemapDatum[];
-}> = ({ data, style, otherConfig = {} }) => {
-  const chartConfig: any = R.mergeDeepRight(
-    {
-      series: [
+  mobile: boolean;
+}> = ({ data, style, otherConfig = {}, mobile }) => {
+  const chartConfig: any = useMemo(
+    () =>
+      R.mergeDeepRight(
         {
-          type: 'treemap',
-          data,
-          roam: false,
-          left: -30,
-          right: -30,
-          top: -30,
-          bottom: 30,
-          width: '100%',
-        },
-      ],
-      color: categoryChartColors,
-    } as echarts.EChartOption,
-    otherConfig || {}
+          series: [
+            {
+              type: 'treemap',
+              data,
+              roam: false,
+              width: '100%',
+              squareRatio: 0.9,
+              label: {
+                padding: 1,
+                fontSize: mobile ? 10 : 12,
+              },
+              ...(mobile ? {} : { left: -30, right: -30, top: -30, bottom: 30 }),
+            },
+          ],
+          color: categoryChartColors,
+        } as echarts.EChartOption,
+        otherConfig
+      ),
+    [otherConfig, mobile, data]
   );
 
   return <ReactEchartsCore style={style} echarts={echarts} option={chartConfig} />;

@@ -141,7 +141,7 @@ const MobileTimelineWeek: React.FC<
   TimelineWeekProps & { isSelected: boolean; onSelect: () => void }
 > = ({ days, isSelected, onSelect }) => {
   const allEvents = useMemo(
-    () => days.reduce((acc, day) => acc.concat(day.events), [] as TimelineEvent[]),
+    () => days.reduce((acc, day) => [...acc, ...day.events], [] as TimelineEvent[]),
     [days]
   );
 

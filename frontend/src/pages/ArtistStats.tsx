@@ -134,6 +134,7 @@ const ArtistStats: React.FC<ReactRouterRouteProps & { mobile: boolean }> = ({ ma
       )}
 
       <ArtistCards
+        mobile={mobile}
         disableHeader
         hideShowMore
         style={{ width: '100%', paddingTop: 30, paddingBottom: 30 }}
@@ -147,6 +148,7 @@ const ArtistStats: React.FC<ReactRouterRouteProps & { mobile: boolean }> = ({ ma
             <div style={{ textAlign: 'center' }}>No top tracks available for artist</div>
           ) : (
             <BarChart
+              mobile={mobile}
               data={artistStats.topTracks.map(R.prop('score'))}
               categories={artistStats.topTracks.map(({ trackId }) => topTracksCorpus[trackId].name)}
               style={{

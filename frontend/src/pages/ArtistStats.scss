@@ -45,6 +45,8 @@
     }
 
     .genres-listing {
+      height: unset;
+
       .genre-chip {
         padding: 5px;
         border: 1px solid nth($monochrome-chart-colors, 1);

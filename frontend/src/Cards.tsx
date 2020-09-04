@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, Fragment } from 'react';
 import * as R from 'ramda';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPlay, faPause } from '@fortawesome/free-solid-svg-icons';
@@ -99,10 +99,10 @@ export const Track: React.FC<TrackProps> = ({
         >
           {artists.map(({ name, id }, i) => {
             return (
-              <>
+              <Fragment key={id}>
                 <ArtistStatsLink artistId={id}>{name}</ArtistStatsLink>
                 {i !== artists.length - 1 ? ', ' : null}
-              </>
+              </Fragment>
             );
           })}
         </div>
@@ -166,12 +166,12 @@ export const Artist: React.FC<ArtistProps> = ({
         <div>
           <ArtistStatsLink artistId={id}>{name}</ArtistStatsLink>
         </div>
-        <div style={{ lineHeight: '1em', maxHeight: 44, overflowY: 'hidden' }}>
+        <div style={{ lineHeight: '1em', maxHeight: 31, overflowY: 'hidden' }}>
           {trimmedGenres.map((genre, i) => (
-            <>
+            <Fragment key={genre}>
               <Genre username={username!} genre={genre} />
               {i !== trimmedGenres.length - 1 ? ', ' : null}
-            </>
+            </Fragment>
           ))}
         </div>
       </div>
@@ -193,7 +193,7 @@ export const TimeframeSelector: React.FC<TimeframeSelectorProps> = ({
   <div className="timeframe-selector">
     Timeframe:{' '}
     {TIMEFRAMES.map((frame, i, frames) => (
-      <>
+      <Fragment key={i}>
         <span
           style={{
             textDecoration: 'underline',
@@ -204,7 +204,7 @@ export const TimeframeSelector: React.FC<TimeframeSelectorProps> = ({
           {frame}
         </span>
         {i !== frames.length - 1 ? ' \u2022 ' : null}
-      </>
+      </Fragment>
     ))}
   </div>
 );
@@ -248,7 +248,7 @@ const ImageBoxGridInner: React.FC<ImageBoxGridProps> = ({
       ) : null}
       <div className={`image-box-grid${horizontallyScrollable ? ' horizontally-scrollable' : ''}`}>
         {hasItems ? (
-          R.times((i) => renderItem(i, timeframe), itemCount)
+          R.times((i) => <Fragment key={i}>{renderItem(i, timeframe)}</Fragment>, itemCount)
         ) : (
           <>No items for timeframe</>
         )}

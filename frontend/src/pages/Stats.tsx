@@ -91,6 +91,7 @@ const StatsDetailsInner: React.FC<{ stats: UserStats; mobile: boolean }> = ({ st
 
           return (
             <TrackCard
+              key={track.id}
               title={track.name}
               artists={track.album.artists}
               previewUrl={track.preview_url}

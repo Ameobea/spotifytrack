@@ -59,6 +59,7 @@ const GenresTreemap: React.FC<{ mobile: boolean }> = ({ mobile }) => {
         value: R.last(scores),
       }))}
       style={{ height: mobile ? 'max(30vh, 300px)' : 'max(68vh, 400px)' }}
+      mobile={mobile}
     />
   );
 };
