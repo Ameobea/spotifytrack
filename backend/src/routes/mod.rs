@@ -14,7 +14,7 @@ use crate::conf::CONF;
 use crate::db_util;
 use crate::models::{
     Artist, NewUser, OAuthTokenResponse, StatsSnapshot, TimeFrames, Timeline, TimelineEvent,
-    TimelineEventType, Track, User,
+    TimelineEventType, Track, User, UserComparison,
 };
 use crate::DbConn;
 use crate::SpotifyTokenData;
@@ -583,4 +583,100 @@ pub fn populate_artists_genres_mapping_table(
         Status::Ok,
         "Sucessfully populated mapping table".into(),
     ))
+}
+
+#[get("/compare/<user1>/<user2>")]
+pub fn compare_users(
+    conn1: DbConn,
+    conn2: DbConn,
+    conn3: DbConn,
+    conn4: DbConn,
+    token_data: State<Mutex<SpotifyTokenData>>,
+    user1: String,
+    user2: String,
+) -> Result<Option<Json<UserComparison>>, String> {
+    let (user1_res, user2_res) = rayon::join(
+        move || {
+            db_util::get_user_by_spotify_id(&conn1, &user1)
+                .map(|user_opt| user_opt.map(|user| (user, conn1)))
+        },
+        move || {
+            db_util::get_user_by_spotify_id(&conn2, &user2)
+                .map(|user_opt| user_opt.map(|user| (user, conn2)))
+        },
+    );
+    let (user1, conn1) = match user1_res? {
+        Some(user) => user,
+        None => {
+            return Ok(None);
+        }
+    };
+    let (user2, conn2) = match user2_res? {
+        Some(user) => user,
+        None => {
+            return Ok(None);
+        }
+    };
+    let (user1_id, user2_id) = (user1.id, user2.id);
+
+    let spotify_access_token = {
+        let token_data = &mut *(&*token_data).lock().unwrap();
+        token_data.get()
+    }?;
+    let spotify_access_token_clone = spotify_access_token.clone();
+
+    let (tracks_intersection, artists_intersection) = rayon::join(
+        move || {
+            let (user1_tracks, user2_tracks) = rayon::join(
+                move || {
+                    crate::db_util::get_all_top_tracks_for_user(&conn1, user1_id)
+                        .map_err(db_util::stringify_diesel_err)
+                },
+                move || {
+                    crate::db_util::get_all_top_tracks_for_user(&conn2, user2_id)
+                        .map_err(db_util::stringify_diesel_err)
+                },
+            );
+            let (user1_tracks, user2_tracks) = (user1_tracks?, user2_tracks?);
+
+            let mut intersection = user1_tracks;
+            intersection.retain(|(id, _)| user2_tracks.iter().any(|(o_id, _)| *o_id == *id));
+
+            let spotify_ids = intersection
+                .iter()
+                .map(|(_, spotify_id)| spotify_id.as_str())
+                .collect::<Vec<_>>();
+            crate::spotify_api::fetch_tracks(&spotify_access_token, &spotify_ids)
+        },
+        move || {
+            let (user1_artists, user2_artists) = rayon::join(
+                move || {
+                    crate::db_util::get_all_top_artists_for_user(&conn3, user1_id)
+                        .map_err(db_util::stringify_diesel_err)
+                },
+                move || {
+                    crate::db_util::get_all_top_artists_for_user(&conn4, user2_id)
+                        .map_err(db_util::stringify_diesel_err)
+                },
+            );
+            let (user1_artists, user2_artists) = (user1_artists?, user2_artists?);
+
+            let mut intersection = user1_artists;
+            intersection.retain(|(id, _)| user2_artists.iter().any(|(o_id, _)| *o_id == *id));
+
+            let spotify_ids = intersection
+                .iter()
+                .map(|(_, spotify_id)| spotify_id.as_str())
+                .collect::<Vec<_>>();
+            crate::spotify_api::fetch_artists(&spotify_access_token_clone, &spotify_ids)
+        },
+    );
+
+    let (tracks_intersection, artists_intersection) = (tracks_intersection?, artists_intersection?);
+
+    Ok(Some(Json(UserComparison {
+        tracks: tracks_intersection,
+        artists: artists_intersection,
+        genres: Vec::new(), // TODO
+    })))
 }

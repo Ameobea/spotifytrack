@@ -684,3 +684,41 @@ pub fn get_track_timeline_events(
         ))
         .load(&conn.0)
 }
+
+pub fn get_all_top_tracks_for_user(
+    conn: &DbConn,
+    user_id: i64,
+) -> Result<Vec<(i32, String)>, diesel::result::Error> {
+    use crate::schema::{spotify_items, tracks_users_first_seen};
+
+    tracks_users_first_seen::table
+        .filter(tracks_users_first_seen::dsl::user_id.eq(user_id))
+        .inner_join(
+            spotify_items::table
+                .on(spotify_items::dsl::id.eq(tracks_users_first_seen::dsl::mapped_spotify_id)),
+        )
+        .select((
+            tracks_users_first_seen::dsl::mapped_spotify_id,
+            spotify_items::dsl::spotify_id,
+        ))
+        .load(&conn.0)
+}
+
+pub fn get_all_top_artists_for_user(
+    conn: &DbConn,
+    user_id: i64,
+) -> Result<Vec<(i32, String)>, diesel::result::Error> {
+    use crate::schema::{artists_users_first_seen, spotify_items};
+
+    artists_users_first_seen::table
+        .filter(artists_users_first_seen::dsl::user_id.eq(user_id))
+        .inner_join(
+            spotify_items::table
+                .on(spotify_items::dsl::id.eq(artists_users_first_seen::dsl::mapped_spotify_id)),
+        )
+        .select((
+            artists_users_first_seen::dsl::mapped_spotify_id,
+            spotify_items::dsl::spotify_id,
+        ))
+        .load(&conn.0)
+}

@@ -447,3 +447,10 @@ pub struct TimelineEvent {
 pub struct Timeline {
     pub events: Vec<TimelineEvent>,
 }
+
+#[derive(Serialize)]
+pub struct UserComparison {
+    pub tracks: Vec<Track>,
+    pub artists: Vec<Artist>,
+    pub genres: Vec<String>,
+}
