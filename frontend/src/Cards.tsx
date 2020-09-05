@@ -57,7 +57,7 @@ export const buildArtistStatsUrl = (username: string, artistId: string): string 
 const ArtistStatsLink: React.FC<{ artistId: string }> = ({ artistId, children }) => {
   const username = useUsername();
   if (!username) {
-    return <>children</>;
+    return <>{children}</>;
   }
 
   return <Link to={buildArtistStatsUrl(username, artistId)}>{children}</Link>;

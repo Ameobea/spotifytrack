@@ -1,0 +1,19 @@
+.compare {
+  display: flex;
+  flex-direction: column;
+
+  .username {
+    color: #b2c;
+  }
+
+  h1 {
+    font-size: 28px;
+    text-align: center;
+    margin-top: 0;
+  }
+}
+
+.compare.loading {
+  text-align: center;
+  font-size: 24px;
+}

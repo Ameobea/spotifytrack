@@ -57,3 +57,10 @@ export const fetchTimelineEvents = async (
     getUrl(`/stats/${username}/timeline?start_day_id=${startDayID}&end_day_id=${endDayID}`)
   );
 };
+
+export const fetchComparison = (
+  _key: string,
+  user1: string,
+  user2: string
+): Promise<{ artists: Artist[]; tracks: Track[] } | null> =>
+  getJsonEndpoint(getUrl(`/compare/${user1}/${user2}`));
