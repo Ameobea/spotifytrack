@@ -32,6 +32,7 @@ pub struct User {
     pub username: String,
     pub token: String,
     pub refresh_token: String,
+    pub has_playlist_perms: bool,
 }
 
 #[derive(Serialize, Insertable, Associations)]
@@ -455,4 +456,64 @@ pub struct UserComparison {
     pub genres: Vec<String>,
     pub user1_username: String,
     pub user2_username: String,
+}
+
+#[derive(Default, Debug, Clone, Deserialize)]
+pub struct PlaylistExternalUrls {
+    pub spotify: String,
+}
+
+#[derive(Default, Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaylistFollowers {
+    pub href: Option<String>,
+    pub total: i64,
+}
+
+#[derive(Default, Debug, Clone, Deserialize)]
+pub struct PlaylistOwner {
+    pub external_urls: PlaylistExternalUrls,
+    pub href: String,
+    pub id: String,
+    #[serde(rename = "type")]
+    pub type_field: String,
+    pub uri: String,
+}
+
+#[derive(Default, Debug, Clone, Deserialize)]
+pub struct PlaylistTracks {
+    pub href: String,
+    pub items: Vec<Track>,
+    pub limit: usize,
+    pub next: Option<usize>,
+    pub offset: usize,
+    pub previous: Option<usize>,
+    pub total: usize,
+}
+
+#[derive(Default, Debug, Clone, Deserialize)]
+pub struct Playlist {
+    pub collaborative: bool,
+    pub description: Option<String>,
+    pub external_urls: PlaylistExternalUrls,
+    pub followers: PlaylistFollowers,
+    pub href: String,
+    pub id: String,
+    pub images: Vec<Image>,
+    pub name: String,
+    pub owner: PlaylistOwner,
+    pub public: bool,
+    pub snapshot_id: String,
+    pub tracks: PlaylistTracks,
+    #[serde(rename = "type")]
+    pub type_field: String,
+    pub uri: String,
+}
+
+#[derive(Serialize, Default)]
+pub struct CreatePlaylistRequest {
+    pub name: String,
+    pub public: Option<bool>,
+    pub collaborative: Option<bool>,
+    pub description: Option<String>,
 }

@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use chrono::NaiveDateTime;
+use chrono::{NaiveDateTime, Utc};
 use diesel::{
     mysql::{Mysql, MysqlConnection},
     prelude::*,
@@ -8,6 +8,8 @@ use diesel::{
     sql_types::HasSqlType,
 };
 use fnv::{FnvHashMap as HashMap, FnvHashSet as HashSet};
+use rocket::http::Status;
+use rocket::response::status;
 use serde::Serialize;
 
 use crate::benchmarking::mark;
@@ -721,4 +723,34 @@ pub fn get_all_top_artists_for_user(
             spotify_items::dsl::spotify_id,
         ))
         .load(&conn.0)
+}
+
+pub fn refresh_user_access_token(
+    conn: &DbConn,
+    user: &mut User,
+) -> Result<Option<status::Custom<String>>, String> {
+    use crate::schema::users;
+
+    // Update the access token for that user using the refresh token
+    let updated_access_token = match crate::spotify_api::refresh_user_token(&user.refresh_token) {
+        Ok(updated_access_token) => updated_access_token,
+        Err(_) => {
+            update_user_last_updated(&user, &conn, Utc::now().naive_utc())?;
+
+            // TODO: Disable auto-updates for the user that has removed their permission grant to prevent wasted updates in the future
+            let msg = format!("Failed to refresh user token for user {}; updating last updated timestamp and not updating.", user.username);
+            info!("{}", msg);
+            return Ok(Some(status::Custom(Status::Unauthorized, msg)));
+        }
+    };
+    diesel::update(users::table.filter(users::dsl::id.eq(user.id)))
+        .set(users::dsl::token.eq(&updated_access_token))
+        .execute(&conn.0)
+        .map_err(|err| -> String {
+            error!("{:?}", err);
+            "Error updating user with new access token".into()
+        })?;
+    user.token = updated_access_token;
+
+    Ok(None)
 }

@@ -10,9 +10,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::conf::CONF;
 use crate::models::{
-    AccessTokenResponse, Artist, ArtistGenrePair, NewArtistHistoryEntry, NewTrackHistoryEntry,
-    SpotifyBatchArtistsResponse, SpotifyBatchTracksResponse, SpotifyResponse, StatsSnapshot,
-    TopArtistsResponse, TopTracksResponse, Track, TrackArtistPair, User, UserProfile,
+    AccessTokenResponse, Artist, ArtistGenrePair, CreatePlaylistRequest, NewArtistHistoryEntry,
+    NewTrackHistoryEntry, Playlist, SpotifyBatchArtistsResponse, SpotifyBatchTracksResponse,
+    SpotifyResponse, StatsSnapshot, TopArtistsResponse, TopTracksResponse, Track, TrackArtistPair,
+    User, UserProfile,
 };
 use crate::DbConn;
 
@@ -481,4 +482,23 @@ pub fn fetch_tracks(
     }
 
     Ok(entities)
+}
+
+pub fn create_playlist(
+    user: &User,
+    name: String,
+    description: Option<String>,
+    track_spotify_ids: &[String],
+) -> Result<Playlist, String> {
+    let url = format!(
+        "https://api.spotify.com/v1/users/{user_id}/playlists",
+        user_id = user.spotify_id
+    );
+    let body = CreatePlaylistRequest {
+        name,
+        description,
+        ..Default::default()
+    };
+
+    unimplemented!() // TODO
 }

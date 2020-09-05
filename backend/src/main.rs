@@ -35,6 +35,7 @@ pub mod db_util;
 pub mod models;
 pub mod routes;
 pub mod schema;
+pub mod shared_playlist_gen;
 pub mod spotify_api;
 pub mod spotify_token;
 pub mod stats;

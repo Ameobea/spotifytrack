@@ -479,26 +479,9 @@ pub fn update_user(
                 "Error querying user to update from database".into()
             })?;
 
-    // Update the access token for that user using the refresh token
-    let updated_access_token = match crate::spotify_api::refresh_user_token(&user.refresh_token) {
-        Ok(updated_access_token) => updated_access_token,
-        Err(_) => {
-            db_util::update_user_last_updated(&user, &conn, Utc::now().naive_utc())?;
-
-            // TODO: Disable auto-updates for the user that has removed their permission grant to prevent wasted updates in the future
-            let msg = format!("Failed to refresh user token for user {}; updating last updated timestamp and not updating.", user.username);
-            info!("{}", msg);
-            return Ok(status::Custom(Status::Unauthorized, msg));
-        }
-    };
-    diesel::update(users.filter(id.eq(user.id)))
-        .set(token.eq(&updated_access_token))
-        .execute(&conn.0)
-        .map_err(|err| -> String {
-            error!("{:?}", err);
-            "Error updating user with new access token".into()
-        })?;
-    user.token = updated_access_token;
+    if let Some(res) = db_util::refresh_user_access_token(&conn, &mut user)? {
+        return Ok(res);
+    }
 
     // Only update the user if it's been longer than the minimum update interval
     let min_update_interval_seconds = crate::conf::CONF.min_update_interval;
@@ -585,16 +568,15 @@ pub fn populate_artists_genres_mapping_table(
     ))
 }
 
-#[get("/compare/<user1>/<user2>")]
-pub fn compare_users(
+fn compute_comparison(
+    user1: &str,
+    user2: &str,
     conn1: DbConn,
     conn2: DbConn,
     conn3: DbConn,
     conn4: DbConn,
     token_data: State<Mutex<SpotifyTokenData>>,
-    user1: String,
-    user2: String,
-) -> Result<Option<Json<UserComparison>>, String> {
+) -> Result<Option<(DbConn, User, User, UserComparison)>, String> {
     let (user1_res, user2_res) = rayon::join(
         move || {
             db_util::get_user_by_spotify_id(&conn1, &user1)
@@ -674,11 +656,77 @@ pub fn compare_users(
 
     let (tracks_intersection, artists_intersection) = (tracks_intersection?, artists_intersection?);
 
-    Ok(Some(Json(UserComparison {
-        tracks: tracks_intersection,
-        artists: artists_intersection,
-        genres: Vec::new(), // TODO
-        user1_username: user1.username,
-        user2_username: user2.username,
-    })))
+    Ok(Some((
+        conn1,
+        user1,
+        user2,
+        UserComparison {
+            tracks: tracks_intersection,
+            artists: artists_intersection,
+            genres: Vec::new(), // TODO
+            user1_username: user1.username,
+            user2_username: user2.username,
+        },
+    )))
+}
+
+#[get("/compare/<user1>/<user2>")]
+pub fn compare_users(
+    conn1: DbConn,
+    conn2: DbConn,
+    conn3: DbConn,
+    conn4: DbConn,
+    token_data: State<Mutex<SpotifyTokenData>>,
+    user1: String,
+    user2: String,
+) -> Result<Option<Json<UserComparison>>, String> {
+    compute_comparison(&user1, &user2, conn1, conn2, conn3, conn4, token_data)
+        .map(|opt| opt.map(|(_, _, _, comparison)| Json(comparison)))
+}
+
+#[post("/generate_shared_playlist/<user1>/<user2>")]
+pub fn generate_shared_playlist(
+    conn1: DbConn,
+    conn2: DbConn,
+    conn3: DbConn,
+    conn4: DbConn,
+    token_data: State<Mutex<SpotifyTokenData>>,
+    user1: String,
+    user2: String,
+) -> Result<Option<status::Custom<String>>, String> {
+    let (conn, user1, mut user2, comparison) =
+        match compute_comparison(&user1, &user2, conn1, conn2, conn3, conn4, token_data) {
+            Err(err) => return Err(err),
+            Ok(None) => return Ok(None),
+            Ok(Some(comparison)) => comparison,
+        };
+
+    if let Some(res) = db_util::refresh_user_access_token(&conn, &mut user2)? {
+        return Ok(Some(res));
+    }
+
+    if !user2.has_playlist_perms {
+        return Ok(Some(status::Custom(
+            Status::Forbidden,
+            format!(
+                "User {:?} doesn't has not granted permission to create playlists",
+                user2
+            ),
+        )));
+    }
+
+    let playlist_track_spotify_ids =
+        crate::shared_playlist_gen::generate_shared_playlist_track_spotify_ids(comparison)?;
+
+    let created_playlist = crate::spotify_api::create_playlist(
+        &user2,
+        format!("Shared Tastes of {} and {}", user1.username, user2.username),
+        Some(format!(
+            "Contains tracks and artists that both {} and {} enjoy, {}",
+            user1.username, user2.username, "generated automatically by https://spotifytrack.net/"
+        )),
+        &playlist_track_spotify_ids,
+    )?;
+
+    Ok(Some(status::Custom(Status::Ok, created_playlist.href)))
 }

@@ -209,6 +209,7 @@ const maybeUpdateMobileSelectedDay = (
   data: TimelineData | undefined | null,
   mobile: boolean,
   selectedDay: TimelineDay | null,
+  setSelectedDay: (newSelectedDay: TimelineDay | null) => void,
   weeks: TimelineDay[][],
   mobileSelectedDay: React.MutableRefObject<{
     lastSelectedDay: TimelineDay;
@@ -231,7 +232,9 @@ const maybeUpdateMobileSelectedDay = (
 
   const targetWeek = weeks.find((week) => week[0] === selectedDay);
   if (!targetWeek) {
-    throw new Error("Expected that our selected week would be found since it's newly selected");
+    // User probably switched between mobile and desktop modes
+    setSelectedDay(null);
+    return;
   }
 
   const [firstDay, ...days] = targetWeek;
@@ -317,7 +320,7 @@ const Timeline: React.FC<{ mobile: boolean }> = ({ mobile }) => {
     null
   );
 
-  maybeUpdateMobileSelectedDay(data, mobile, selectedDay, weeks, mobileSelectedDay);
+  maybeUpdateMobileSelectedDay(data, mobile, selectedDay, setSelectedDay, weeks, mobileSelectedDay);
 
   return (
     <div className="timeline">

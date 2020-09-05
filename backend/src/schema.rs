@@ -87,6 +87,7 @@ table! {
         username -> Text,
         token -> Text,
         refresh_token -> Text,
+        has_playlist_perms -> Bool,
     }
 }
 
