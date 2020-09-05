@@ -11,6 +11,21 @@
     text-align: center;
     margin-top: 0;
   }
+
+  .image-box-grid-title {
+    padding-top: 30px;
+  }
+}
+
+@media only screen and (max-width: 800px) {
+  .compare .image-box-grid-title {
+    padding-top: 16px;
+    margin-top: 0;
+  }
+
+  .compare .image-box-grid-title:nth-child(1) {
+    margin-top: 30px;
+  }
 }
 
 .compare.loading {

@@ -678,5 +678,7 @@ pub fn compare_users(
         tracks: tracks_intersection,
         artists: artists_intersection,
         genres: Vec::new(), // TODO
+        user1_username: user1.username,
+        user2_username: user2.username,
     })))
 }

@@ -42,11 +42,11 @@ const CompareInner: React.FC<{ mobile: boolean }> = ({ mobile }) => {
       <h1>
         Shared Musical Interests between{' '}
         <Link to={`/stats/${user1}`}>
-          <span className="username">{user1}</span>
+          <span className="username">{data.user1_username}</span>
         </Link>{' '}
         and{' '}
         <Link to={`/stats/${user2}`}>
-          <span className="username">{user2}</span>
+          <span className="username">{data.user2_username}</span>
         </Link>
       </h1>
 

@@ -453,4 +453,6 @@ pub struct UserComparison {
     pub tracks: Vec<Track>,
     pub artists: Vec<Artist>,
     pub genres: Vec<String>,
+    pub user1_username: String,
+    pub user2_username: String,
 }

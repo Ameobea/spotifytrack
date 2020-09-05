@@ -62,5 +62,9 @@ export const fetchComparison = (
   _key: string,
   user1: string,
   user2: string
-): Promise<{ artists: Artist[]; tracks: Track[] } | null> =>
-  getJsonEndpoint(getUrl(`/compare/${user1}/${user2}`));
+): Promise<{
+  artists: Artist[];
+  tracks: Track[];
+  user1_username: string;
+  user2_username: string;
+} | null> => getJsonEndpoint(getUrl(`/compare/${user1}/${user2}`));

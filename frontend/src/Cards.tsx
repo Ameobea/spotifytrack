@@ -177,7 +177,7 @@ export const Artist: React.FC<ArtistProps> = ({
         <div>
           <ArtistStatsLink artistId={id}>{name}</ArtistStatsLink>
         </div>
-        <div style={{ lineHeight: '1em', maxHeight: 31, overflowY: 'hidden' }}>
+        <div style={{ lineHeight: '1em', maxHeight: 30, overflowY: 'hidden' }}>
           {trimmedGenres.map((genre, i) => (
             <Fragment key={genre}>
               <Genre username={username!} genre={genre} />
