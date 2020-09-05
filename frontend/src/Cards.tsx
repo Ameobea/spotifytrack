@@ -9,15 +9,23 @@ import { truncateWithElipsis, map } from 'src/util';
 import { useUsername } from './store/selectors';
 import './Cards.scss';
 import { withMobileProp } from 'ameo-utils/dist/responsive';
+import { getProxiedImageURL } from './util/index';
 
 interface ImageBoxProps {
   imageSrc: string;
   imgAlt: string;
   linkTo?: string;
+  mobile: boolean;
 }
 
-const ImageBox: React.FC<ImageBoxProps> = ({ imageSrc, imgAlt, children, linkTo }) => {
-  const image = <img alt={imgAlt} src={imageSrc} className="image-container" />;
+const ImageBox: React.FC<ImageBoxProps> = ({ imageSrc, imgAlt, children, linkTo, mobile }) => {
+  const image = (
+    <img
+      alt={imgAlt}
+      src={getProxiedImageURL(mobile ? 90 : 160, imageSrc)}
+      className="image-container"
+    />
+  );
 
   return (
     <div className="image-box">
@@ -34,14 +42,13 @@ interface TrackProps {
   title: string;
   artists: {
     name: string;
-    // uri: string;
     id: string;
   }[];
   previewUrl: string;
-  // album: string;
   imageSrc: string;
   playing: string | false;
   setPlaying: (currentlyPlayingPreviewUrl: string | false) => void;
+  mobile: boolean;
 }
 
 export const buildArtistStatsUrl = (username: string, artistId: string): string =>
@@ -63,6 +70,7 @@ export const Track: React.FC<TrackProps> = ({
   imageSrc,
   playing,
   setPlaying,
+  mobile,
 }) => {
   const isPlaying = playing && playing === previewUrl;
   const audioTag = useRef<HTMLAudioElement | null>(null);
@@ -89,6 +97,7 @@ export const Track: React.FC<TrackProps> = ({
     <ImageBox
       imgAlt={`Album art for ${title} by ${artists.map(R.prop('name')).join(', ')}`}
       imageSrc={imageSrc}
+      mobile={mobile}
     >
       <div className="card-data">
         <div title={title} style={{ maxHeight: 37, overflowY: 'hidden' }}>
@@ -136,8 +145,8 @@ interface ArtistProps {
   name: string;
   genres: string[];
   imageSrc: string;
-  // uri: string;
   preferredGenres?: Set<string>;
+  mobile: boolean;
 }
 
 const Genre: React.FC<{ username: string; genre: string }> = ({ username, genre }) => (
@@ -150,6 +159,7 @@ export const Artist: React.FC<ArtistProps> = ({
   genres,
   imageSrc,
   preferredGenres = DEFAULT_PREFERRED_GENRES,
+  mobile,
 }) => {
   const username = useUsername();
   // Make sure that preferred genres show up and aren't trimmed off
@@ -161,6 +171,7 @@ export const Artist: React.FC<ArtistProps> = ({
       imgAlt={name}
       imageSrc={imageSrc}
       linkTo={map(username, (username) => buildArtistStatsUrl(username, id)) || undefined}
+      mobile={mobile}
     >
       <div className="card-data">
         <div>

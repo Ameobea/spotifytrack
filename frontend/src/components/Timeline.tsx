@@ -10,6 +10,7 @@ import { TimelineEvent, Image, TimelineData } from 'src/types';
 import './Timeline.scss';
 import { truncateWithElipsis } from 'src/util';
 import DayStats from './DayStats';
+import { getProxiedImageURL } from 'src/util/index';
 
 export interface TimelineDay {
   date: number;
@@ -18,15 +19,23 @@ export interface TimelineDay {
   events: TimelineEvent[];
 }
 
+const getViewportWidth = () =>
+  Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
+
 const TimelineEventComp: React.FC<{
   event: TimelineEvent;
   image: Image | null | undefined;
   tooltipContent: React.ReactNode | null;
-}> = ({ image, tooltipContent }) => (
+  mobile: boolean;
+}> = ({ image, tooltipContent, mobile }) => (
   <div className="timeline-event">
     {image ? (
       <>
-        <img src={image.url} height="100%" width="100%" />
+        <img
+          src={getProxiedImageURL(mobile ? Math.round(getViewportWidth() / 6) + 10 : 63, image.url)}
+          height="100%"
+          width="100%"
+        />
         <div className="timeline-event-tooltip">{tooltipContent}</div>{' '}
       </>
     ) : null}
@@ -73,7 +82,8 @@ const TimelineDayComp: React.FC<{
   day: TimelineDay;
   onClick: () => void;
   selected?: boolean;
-}> = ({ day, onClick, selected }) => {
+  mobile: boolean;
+}> = ({ day, onClick, selected, mobile }) => {
   return (
     <div
       onClick={onClick}
@@ -88,6 +98,7 @@ const TimelineDayComp: React.FC<{
             event={event}
             image={getEventImage(event)}
             tooltipContent={<TooltipContent event={event} />}
+            mobile={mobile}
           />
         ))}
       </div>
@@ -113,6 +124,7 @@ const DesktopTimelineWeek: React.FC<TimelineWeekProps> = ({
         selected={day === selectedDay}
         day={day}
         onClick={() => setSelectedDay(day)}
+        mobile={false}
       />
     ))}
   </div>
@@ -168,6 +180,7 @@ const MobileTimelineWeek: React.FC<
             event={evt}
             image={getEventImage(evt)}
             tooltipContent={<TooltipContent event={evt} />}
+            mobile
           />
         ))}
       </div>

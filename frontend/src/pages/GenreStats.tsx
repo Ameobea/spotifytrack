@@ -37,7 +37,10 @@ const GenreStats: React.FC<
 
   const { data: genreStats, status } = useQuery([genre, { username, genre }], () =>
     fetchGenreStats(username, genre).then((res) => {
-      dispatch(actionCreators.entityStore.ADD_ARTISTS(res.artists_by_id));
+      if (res) {
+        dispatch(actionCreators.entityStore.ADD_ARTISTS(res.artists_by_id));
+      }
+
       return res;
     })
   );
@@ -49,7 +52,7 @@ const GenreStats: React.FC<
 
     const dates = genreStats.timestamps.map((date) => new Date(date));
 
-    return ['short' as const, 'medium' as const, 'long' as const].map((name, i) => ({
+    return ['short' as const, 'medium' as const, 'long' as const].map((name) => ({
       name,
       data: genreStats.popularity_history[name].map((popularity, i): [Date, number | null] => [
         dates[i],
@@ -116,8 +119,8 @@ const GenreStats: React.FC<
               name={artist.name}
               genres={artist.genres}
               imageSrc={artist.images[0]?.url}
-              // uri={artist.uri}
               id={artist.id}
+              mobile={mobile}
             />
           );
         }}

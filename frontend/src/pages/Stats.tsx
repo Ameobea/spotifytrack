@@ -56,8 +56,8 @@ export const ArtistCards: React.FC<
             name={artist.name}
             genres={artist.genres}
             imageSrc={artist.images[0]?.url}
-            // uri={artist.uri}
             id={artist.id}
+            mobile={mobile}
           />
         );
       }}
@@ -98,6 +98,7 @@ const StatsDetailsInner: React.FC<{ stats: UserStats; mobile: boolean }> = ({ st
               imageSrc={track.album.images[0].url}
               playing={playing}
               setPlaying={setPlaying}
+              mobile={mobile}
             />
           );
         }}
