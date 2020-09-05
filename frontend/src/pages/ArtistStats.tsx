@@ -60,52 +60,56 @@ const ArtistStats: React.FC<ReactRouterRouteProps & { mobile: boolean }> = ({ ma
 
     fetchedStatsFor.current = artistId;
     (async () => {
-      const {
-        artist,
-        top_tracks,
-        popularity_history,
-        tracks_by_id,
-      }: {
-        artist: Artist;
-        top_tracks: [string, number][]; // (trackId, score)
-        popularity_history: [string, [number | null, number | null, number | null]][]; // (timestamp string, [short_ranking, medium_ranking, long_ranking])
-        tracks_by_id: { [trackId: string]: Track };
-      } = await fetchArtistStats(username, artistId);
+      try {
+        const res = await fetchArtistStats(username, artistId);
+        if (!res) {
+          console.warn(`No history found for artist id ${artistId} user ${username}`);
+          dispatch(actionCreators.entityStore.ADD_TRACKS({}));
+          dispatch(actionCreators.userStats.SET_ARTIST_STATS(username, artistId, [], []));
+          return;
+        }
 
-      dispatch(actionCreators.entityStore.ADD_TRACKS(tracks_by_id));
-      dispatch(actionCreators.entityStore.ADD_ARTISTS({ [artist.id]: artist }));
-      dispatch(
-        actionCreators.userStats.SET_ARTIST_STATS(
-          username,
-          artistId,
-          top_tracks.map(([trackId, score]) => ({ trackId, score })),
-          popularity_history.map(([timestamp, popularityPerTimePeriod]) => ({
-            timestamp: new Date(timestamp),
-            popularityPerTimePeriod,
-          }))
-        )
-      );
+        const { artist, top_tracks, popularity_history, tracks_by_id } = res;
+
+        dispatch(actionCreators.entityStore.ADD_TRACKS(tracks_by_id));
+        dispatch(actionCreators.entityStore.ADD_ARTISTS({ [artist.id]: artist }));
+        dispatch(
+          actionCreators.userStats.SET_ARTIST_STATS(
+            username,
+            artistId,
+            top_tracks.map(([trackId, score]) => ({ trackId, score })),
+            popularity_history.map(([timestamp, popularityPerTimePeriod]) => ({
+              timestamp: new Date(timestamp),
+              popularityPerTimePeriod,
+            }))
+          )
+        );
+      } catch (err) {
+        console.error(`Error fetching artist history for artist id ${artistId} user ${username}`);
+        dispatch(actionCreators.entityStore.ADD_TRACKS({}));
+        dispatch(actionCreators.userStats.SET_ARTIST_STATS(username, artistId, [], []));
+      }
     })();
   });
 
   return (
     <div className="artist-stats">
-      {!artistStats || !artist || !series ? (
+      {!artistStats || !series ? (
         <Loading style={{ height: 525 - 140, marginTop: 140 }} />
-      ) : (
+      ) : !R.isEmpty(artistStats.topTracks) && !R.isEmpty(artistStats.popularityHistory) ? (
         <>
           <h1 style={mobile ? { marginTop: mobile ? 42 : 32 } : undefined}>
-            Artist stats for <span style={{ color: colors.pink }}> {artist.name}</span>
+            Artist stats for <span style={{ color: colors.pink }}> {artist!.name}</span>
           </h1>
 
           <p>Top genres:</p>
-          <GenresListing username={username} genres={artist.genres} />
+          <GenresListing username={username} genres={artist!.genres} />
 
           <LineChart
             style={{ height: 300 }}
             series={series}
             otherConfig={{
-              title: { text: `Popularity History for ${artist.name}` },
+              title: { text: `Popularity History for ${artist!.name}` },
               xAxis: {
                 type: 'time',
                 name: 'Update Time',
@@ -131,6 +135,20 @@ const ArtistStats: React.FC<ReactRouterRouteProps & { mobile: boolean }> = ({ ma
             }}
           />
         </>
+      ) : (
+        <div
+          style={{
+            marginTop: 76,
+            marginBottom: 20,
+            fontSize: mobile ? 18 : 23,
+            textAlign: 'center',
+          }}
+        >
+          No stats were found for this artist.
+          <br />
+          If you&apos;ve listened to them for the first time recently, it may take a day or two for
+          them to show up here due to Spotify&apos;s delay in reporting stats
+        </div>
       )}
 
       <ArtistCards

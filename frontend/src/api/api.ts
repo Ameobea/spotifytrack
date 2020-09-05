@@ -1,12 +1,21 @@
-import dayjs, { Dayjs } from 'dayjs';
+import dayjs from 'dayjs';
+
 import { API_BASE_URL } from 'src/conf';
-import { TimelineData } from 'src/types';
+import { Artist, TimelineData, Track } from 'src/types';
 
 export const getUrl = (path: string) => `${API_BASE_URL}${path}`;
 
 export const getJsonEndpoint = <T = any>(url: string) =>
   fetch(url)
-    .then((res) => res.json() as Promise<T>)
+    .then(async (res) => {
+      if (res.status === 404) {
+        return null;
+      } else if (!res.ok) {
+        throw await res.text();
+      }
+
+      return res.json() as Promise<T>;
+    })
     .catch((err) => {
       console.error(`Error fetching API endpoint: ${url}: `, err);
       throw err;
@@ -14,8 +23,15 @@ export const getJsonEndpoint = <T = any>(url: string) =>
 
 export const fetchUserStats = (username: string) => getJsonEndpoint(getUrl(`/stats/${username}`));
 
-export const fetchArtistStats = (username: string, artistId: string) =>
-  getJsonEndpoint(getUrl(`/stats/${username}/artist/${artistId}`));
+export const fetchArtistStats = (
+  username: string,
+  artistId: string
+): Promise<{
+  artist: Artist;
+  top_tracks: [string, number][]; // (trackId, score)
+  popularity_history: [string, [number | null, number | null, number | null]][]; // (timestamp string, [short_ranking, medium_ranking, long_ranking])
+  tracks_by_id: { [trackId: string]: Track };
+} | null> => getJsonEndpoint(getUrl(`/stats/${username}/artist/${artistId}`));
 
 export const fetchGenreHistory = (username: string) =>
   getJsonEndpoint(getUrl(`/stats/${username}/genre_history`));
