@@ -149,9 +149,8 @@ interface ArtistProps {
   mobile: boolean;
 }
 
-const Genre: React.FC<{ username: string; genre: string }> = ({ username, genre }) => (
-  <Link to={`/stats/${username}/genre/${genre}/`}>{genre}</Link>
-);
+const Genre: React.FC<{ username: string | null; genre: string }> = ({ username, genre }) =>
+  username ? <Link to={`/stats/${username}/genre/${genre}/`}>{genre}</Link> : <>{genre}</>;
 
 export const Artist: React.FC<ArtistProps> = ({
   id,
@@ -180,7 +179,7 @@ export const Artist: React.FC<ArtistProps> = ({
         <div style={{ lineHeight: '1em', maxHeight: 30, overflowY: 'hidden' }}>
           {trimmedGenres.map((genre, i) => (
             <Fragment key={genre}>
-              <Genre username={username!} genre={genre} />
+              <Genre username={username} genre={genre} />
               {i !== trimmedGenres.length - 1 ? ', ' : null}
             </Fragment>
           ))}
@@ -261,7 +260,7 @@ const ImageBoxGridInner: React.FC<ImageBoxGridProps> = ({
         {hasItems ? (
           R.times((i) => <Fragment key={i}>{renderItem(i, timeframe)}</Fragment>, itemCount)
         ) : (
-          <>No items for timeframe</>
+          <>{disableTimeframes ? 'No items to display' : 'No items for timeframe'}</>
         )}
       </div>
 

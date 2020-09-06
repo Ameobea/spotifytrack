@@ -13,7 +13,7 @@ use crate::models::{
     AccessTokenResponse, Artist, ArtistGenrePair, CreatePlaylistRequest, NewArtistHistoryEntry,
     NewTrackHistoryEntry, Playlist, SpotifyBatchArtistsResponse, SpotifyBatchTracksResponse,
     SpotifyResponse, StatsSnapshot, TopArtistsResponse, TopTracksResponse, Track, TrackArtistPair,
-    User, UserProfile,
+    UpdatePlaylistResponse, User, UserProfile,
 };
 use crate::DbConn;
 
@@ -78,12 +78,53 @@ pub fn spotify_server_api_request<T: for<'de> Deserialize<'de> + std::fmt::Debug
             "Error communicating with from the Spotify API".into()
         })?;
 
-    if res.status() != reqwest::StatusCode::OK {
+    if !res.status().is_success() {
         error!("Got bad status code of {} from Spotify API", res.status());
         return Err("Got bad response from Spotify API".into());
     }
 
     res.json::<SpotifyResponse<T>>()
+        .map_err(|err| -> String {
+            error!("Error decoding response from Spotify API: {:?}.", err,);
+            "Error decoding response from Spotify API".into()
+        })?
+        .into_result()
+}
+
+pub fn spotify_user_json_api_request<
+    T: Serialize + std::fmt::Debug,
+    R: for<'de> Deserialize<'de> + Clone + std::fmt::Debug,
+>(
+    bearer_token: &str,
+    url: &str,
+    body: &T,
+) -> Result<R, String> {
+    let client = reqwest::blocking::Client::new();
+
+    info!(
+        "Hitting Spotify API at URL {}, params: {:?}, bearer_token={}",
+        url, body, bearer_token
+    );
+    let res = client
+        .post(url)
+        .header("Authorization", format!("Bearer {}", bearer_token))
+        .json(body)
+        .send()
+        .map_err(|err| -> String {
+            error!("Error communicating with Spotify API: {:?}", err);
+            "Error communicating with from the Spotify API".into()
+        })?;
+
+    if !res.status().is_success() {
+        error!(
+            "Got bad status code of {} from Spotify API: {:?}",
+            res.status(),
+            res.text()
+        );
+        return Err("Got bad response from Spotify API".into());
+    }
+
+    res.json::<SpotifyResponse<R>>()
         .map_err(|err| -> String {
             error!("Error decoding response from Spotify API: {:?}.", err,);
             "Error decoding response from Spotify API".into()
@@ -485,6 +526,7 @@ pub fn fetch_tracks(
 }
 
 pub fn create_playlist(
+    bearer_token: &str,
     user: &User,
     name: String,
     description: Option<String>,
@@ -497,8 +539,29 @@ pub fn create_playlist(
     let body = CreatePlaylistRequest {
         name,
         description,
+        public: Some(true),
         ..Default::default()
     };
 
-    unimplemented!() // TODO
+    let mut created_playlist: Playlist = spotify_user_json_api_request(bearer_token, &url, &body)?;
+    info!(
+        "Successfully created playlist with id={:?}",
+        created_playlist.id
+    );
+
+    let url = format!(
+        "https://api.spotify.com/v1/playlists/{playlist_id}/tracks",
+        playlist_id = created_playlist.id
+    );
+    let body = json!({ "uris": track_spotify_ids });
+    let UpdatePlaylistResponse { snapshot_id } =
+        spotify_user_json_api_request(bearer_token, &url, &body)?;
+    info!(
+        "Successfully added {} items to playlist",
+        track_spotify_ids.len()
+    );
+    created_playlist.snapshot_id = snapshot_id;
+    created_playlist.tracks.total = track_spotify_ids.len();
+
+    Ok(created_playlist)
 }

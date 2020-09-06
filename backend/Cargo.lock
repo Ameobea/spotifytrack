@@ -1573,6 +1573,7 @@ dependencies = [
  "lazy_static",
  "log 0.4.11",
  "r2d2_redis",
+ "rand",
  "rayon",
  "redis",
  "reqwest",

@@ -32,7 +32,6 @@ pub struct User {
     pub username: String,
     pub token: String,
     pub refresh_token: String,
-    pub has_playlist_perms: bool,
 }
 
 #[derive(Serialize, Insertable, Associations)]
@@ -510,10 +509,21 @@ pub struct Playlist {
     pub uri: String,
 }
 
-#[derive(Serialize, Default)]
+#[derive(Serialize, Default, Debug)]
 pub struct CreatePlaylistRequest {
     pub name: String,
     pub public: Option<bool>,
     pub collaborative: Option<bool>,
     pub description: Option<String>,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct UpdatePlaylistResponse {
+    pub snapshot_id: String,
+}
+
+#[derive(Deserialize)]
+pub struct CreateSharedPlaylistRequest {
+    pub user1_id: String,
+    pub user2_id: String,
 }
