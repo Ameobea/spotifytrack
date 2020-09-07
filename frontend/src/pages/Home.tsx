@@ -9,6 +9,7 @@ import './Home.scss';
 const Home: React.FC<ReactRouterRouteProps> = () => (
   <main className="home">
     <h1>SpotifyTrack</h1>
+    <h2>Hub for Spotify Statistics + Musical Taste Analysis</h2>
 
     <div className="description-container">
       <p className="description">
@@ -52,13 +53,6 @@ const Home: React.FC<ReactRouterRouteProps> = () => (
         ></img>
       </div>
     </Carousel>
-
-    <footer>
-      Spotifytrack created by{' '}
-      <a target="_blank" href="https://cprimozic.net/">
-        Casey Primozic (Ameo)
-      </a>
-    </footer>
   </main>
 );
 

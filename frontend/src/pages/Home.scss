@@ -6,6 +6,14 @@ main.home {
   h1 {
     text-align: center;
     font-size: 48px;
+    margin-bottom: 4px;
+    padding-bottom: 0;
+  }
+
+  h2 {
+    margin-top: 4px;
+    margin-bottom: 24px;
+    text-align: center;
   }
 
   .description-container {
@@ -50,7 +58,7 @@ main.home {
       font-size: 34px;
       color: #ddd;
       background-color: #0b0b0b;
-      border: 2px solid #222;
+      border: 2px solid #444;
       outline: none;
       border-radius: 10px;
       cursor: pointer;

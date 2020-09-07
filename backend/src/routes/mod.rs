@@ -1,7 +1,7 @@
 use std::io::Read;
 use std::sync::Mutex;
 
-use chrono::{NaiveDateTime, Utc};
+use chrono::{NaiveDate, NaiveDateTime, Utc};
 use diesel::{self, prelude::*};
 use fnv::FnvHashMap as HashMap;
 use rocket::http::{RawStr, Status};
@@ -287,6 +287,11 @@ pub fn get_timeline(
     let (artists, tracks) = (artists?, tracks?);
 
     let mut events = Vec::new();
+    events.push(TimelineEvent {
+        event_type: TimelineEventType::FirstUpdate,
+        date: NaiveDate::from_ymd(2020, 4, 20),
+        id: 1000000,
+    });
     let mut event_count = 0;
     events.extend(artist_events.into_iter().zip(artists.into_iter()).map(
         |((_artist_id, first_seen), artist)| {
@@ -308,6 +313,7 @@ pub fn get_timeline(
             }
         },
     ));
+
     events.sort_unstable_by_key(|evt| evt.date);
 
     Ok(Some(Json(Timeline { events })))
@@ -526,7 +532,7 @@ pub fn oauth_cb(
     };
 
     match state {
-        Some(s) => {
+        Some(s) if !s.is_empty() => {
             match serde_json::from_str(
                 s.percent_decode()
                     .map_err(|_| {
@@ -583,7 +589,7 @@ pub fn oauth_cb(
                 }
             }
         }
-        None => (),
+        _ => (),
     }
 
     let redirect_url = match state.map(|s| s.as_str()) {

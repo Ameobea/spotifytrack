@@ -91,17 +91,28 @@ const CompareInner: React.FC<{ mobile: boolean }> = ({ mobile }) => {
             );
           } else {
             return (
-              <button
-                onClick={() => {
-                  const req = { user1_id: user1, user2_id: user2 };
-                  const url = `/connect?playlist_perms=true&state=${encodeURIComponent(
-                    JSON.stringify(req)
-                  )}`;
-                  push(url);
-                }}
-              >
-                Generate a Shared Taste Playlist
-              </button>
+              <>
+                <p style={{ fontSize: 20, textAlign: 'center' }}>
+                  A shared taste playlist contains tracks that both of you enjoy, pulling from the
+                  top tracks and artists from both of your Spotifytrack profiles, plus a little
+                  extra that we think you&apos;ll both enjoy. <br />
+                  Give it a try - you&apos;ll have the playlist in your Spotify in less than 30
+                  seconds!
+                </p>
+
+                <button
+                  className="gen-playlist-button"
+                  onClick={() => {
+                    const req = { user1_id: user1, user2_id: user2 };
+                    const url = `/connect?playlist_perms=true&state=${encodeURIComponent(
+                      JSON.stringify(req)
+                    )}`;
+                    push(url);
+                  }}
+                >
+                  Generate a Shared Taste Playlist
+                </button>
+              </>
             );
           }
         })()

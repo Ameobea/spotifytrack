@@ -11,6 +11,9 @@ import './Timeline.scss';
 import { truncateWithElipsis } from 'src/util';
 import DayStats from './DayStats';
 import { getProxiedImageURL } from 'src/util/index';
+import Tooltip from './Tooltip';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faInfoCircle } from '@fortawesome/free-solid-svg-icons';
 
 export interface TimelineDay {
   date: number;
@@ -324,7 +327,15 @@ const Timeline: React.FC<{ mobile: boolean }> = ({ mobile }) => {
 
   return (
     <div className="timeline">
-      <h2 className="title">Timeline</h2>
+      <div style={{ display: 'flex', flexDirection: 'row', alignContent: 'flex-start' }}>
+        <h2 className="title">Timeline</h2>
+        <Tooltip
+          tooltip="Shows the first time that tracks and artists were seen by Spotifytrack"
+          style={{ marginLeft: 3 }}
+        >
+          <FontAwesomeIcon icon={faInfoCircle} size="sm" />
+        </Tooltip>
+      </div>
 
       <div className="timeframe-controls">
         <button title="Back one month" onClick={() => setCurMonth(curMonth.subtract(1, 'month'))}>
@@ -340,7 +351,7 @@ const Timeline: React.FC<{ mobile: boolean }> = ({ mobile }) => {
 
       {selectedDay ? (
         mobile ? (
-          <DayStats day={mobileSelectedDay.current!.mergedDay} />
+          <DayStats day={mobileSelectedDay.current!.mergedDay} isWeek />
         ) : (
           <DayStats day={selectedDay} />
         )

@@ -13,6 +13,7 @@ const LazyCompare = import('./components/Compare');
 import { history, store } from 'src/store';
 import './index.scss';
 import OAuthRedirect from './components/OAuthRedirect';
+import Footer from './components/Footer';
 
 Sentry.init({ dsn: 'http://ae5045a642824128860df7fdc2850d35@104.225.217.211:8080/3' });
 
@@ -34,6 +35,7 @@ const App = () => (
         <Route path="/connect" component={OAuthRedirect} />
       </Switch>
     </Suspense>
+    <Footer />
   </ConnectedRouter>
 );
 

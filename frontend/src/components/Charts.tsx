@@ -35,7 +35,7 @@ const InnerLineChart: React.FC<{
   const chartConfig: any = R.mergeDeepRight(
     {
       ...getBaseConfigDefaults(mobile),
-      grid: { bottom: 20 } as EChartOption['grid'],
+      grid: { bottom: 0, top: 50 } as EChartOption['grid'],
       series: series.map(({ data, name }, i) => ({
         ...seriesDefaults,
         smooth: 0.3,

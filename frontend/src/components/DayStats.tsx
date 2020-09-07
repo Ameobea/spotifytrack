@@ -5,6 +5,7 @@ import { TimelineEvent } from 'src/types';
 import type { TimelineDay } from './Timeline';
 import { Artist as ArtistCard, ImageBoxGrid, Track as TrackCard } from '../Cards';
 import { withMobileProp } from 'ameo-utils/dist/responsive';
+import { Dayjs } from 'dayjs';
 
 const EventTypePrecedence: TimelineEvent['type'][] = ['artistFirstSeen', 'topTrackFirstSeen'];
 
@@ -87,15 +88,33 @@ const EventsSectionInner: React.FC<{
 
 const EventsSection = withMobileProp({ maxDeviceWidth: 800 })(EventsSectionInner);
 
-const DayStats: React.FC<{ day: TimelineDay }> = ({ day }) => {
+const DayHeader: React.FC<{ day: Dayjs; isWeek: boolean }> = ({ day, isWeek }) => (
+  <h2 style={{ textAlign: 'center', marginTop: 3, marginBottom: 0 }}>
+    {day.format('YYYY-MM-DD')}
+    {isWeek ? (
+      <>
+        {' to '}
+        {day.add(7, 'day').format('YYYY-MM-DD')}
+      </>
+    ) : null}
+  </h2>
+);
+
+const DayStats: React.FC<{ day: TimelineDay; isWeek?: boolean }> = ({ day, isWeek = false }) => {
   const eventsByType = R.groupBy(R.prop('type'), day.events);
 
   if (Object.keys(eventsByType).length === 0) {
-    return <div className="day-stats">No events to display for this day</div>;
+    return (
+      <div className="day-stats">
+        <DayHeader day={day.rawDate} isWeek={isWeek} />
+        No events to display for this day
+      </div>
+    );
   }
 
   return (
     <div className="day-stats">
+      <DayHeader day={day.rawDate} isWeek={isWeek} />
       {EventTypePrecedence.filter((key) => !!eventsByType[key]).map((key) => (
         <EventsSection key={key} eventType={key} events={eventsByType[key]} />
       ))}
