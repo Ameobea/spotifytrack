@@ -493,7 +493,7 @@ pub fn oauth_cb(
         spotify_id: user_spotify_id.clone(),
         username: username.clone(),
         token: access_token.clone(),
-        refresh_token,
+        refresh_token: refresh_token.clone(),
     };
 
     match diesel::insert_into(users::table)
@@ -504,6 +504,21 @@ pub fn oauth_cb(
             diesel::result::DatabaseErrorKind::UniqueViolation,
             _,
         )) => {
+            diesel::update(users::table)
+                .filter(users::dsl::spotify_id.eq(&user_spotify_id))
+                .set((
+                    users::dsl::refresh_token.eq(refresh_token),
+                    users::dsl::token.eq(&access_token),
+                ))
+                .execute(&conn1.0)
+                .map_err(|err| {
+                    error!(
+                        "Error updating tokens for user id={}: {:?}",
+                        user_spotify_id, err
+                    );
+                    String::from("Internal error occurred when trying to update user")
+                })?;
+
             info!("Already have a row for user; skipping manual update and redirecting directly.");
         }
         Err(err) => {
@@ -617,10 +632,11 @@ fn validate_api_token(api_token_data: rocket::data::Data) -> Result<bool, String
 
 /// This route is internal and hit by the cron job that is called to periodically update the stats
 /// for the least recently updated user.
-#[post("/update_user", data = "<api_token_data>")]
+#[post("/update_user?<user_id>", data = "<api_token_data>")]
 pub fn update_user(
     conn: DbConn,
     api_token_data: rocket::data::Data,
+    user_id: Option<&RawStr>,
 ) -> Result<status::Custom<String>, String> {
     use crate::schema::users::dsl::*;
 
@@ -632,14 +648,21 @@ pub fn update_user(
     }
 
     // Get the least recently updated user
-    let mut user: User =
-        users
-            .order_by(last_update_time)
-            .first(&conn.0)
-            .map_err(|err| -> String {
-                error!("{:?}", err);
-                "Error querying user to update from database".into()
+    let mut user: User = match user_id.clone().map(|s| s.percent_decode()) {
+        Some(s) => {
+            let user_id = s.map_err(|_| {
+                error!("Invalid `user_id` param provided to `/update/user`");
+                String::from("Invalid `user_id` param; couldn't decode")
             })?;
+
+            users.filter(spotify_id.eq(user_id.as_ref())).first(&conn.0)
+        }
+        None => users.order_by(last_update_time).first(&conn.0),
+    }
+    .map_err(|err| -> String {
+        error!("{:?}", err);
+        "Error querying user to update from database".into()
+    })?;
 
     if let Some(res) = db_util::refresh_user_access_token(&conn, &mut user)? {
         return Ok(res);
@@ -649,7 +672,7 @@ pub fn update_user(
     let min_update_interval_seconds = crate::conf::CONF.min_update_interval;
     let now = chrono::Utc::now().naive_utc();
     let diff = now - user.last_update_time;
-    if diff < min_update_interval_seconds {
+    if user_id.is_none() && diff < min_update_interval_seconds {
         let msg = format!(
             "{} since last update; not updating anything right now.",
             diff

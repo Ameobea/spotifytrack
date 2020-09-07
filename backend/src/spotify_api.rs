@@ -79,7 +79,11 @@ pub fn spotify_server_api_request<T: for<'de> Deserialize<'de> + std::fmt::Debug
         })?;
 
     if !res.status().is_success() {
-        error!("Got bad status code of {} from Spotify API", res.status());
+        error!(
+            "Got bad status code of {} from Spotify API: {:?}",
+            res.status(),
+            res.text()
+        );
         return Err("Got bad response from Spotify API".into());
     }
 
