@@ -30,6 +30,7 @@ START TRANSACTION;
     FOREIGN KEY (artist_id) REFERENCES spotify_items(id) ON DELETE CASCADE
   );
   ALTER TABLE `spotify_homepage`.`tracks_artists` ADD UNIQUE `unique_index`(`track_id`, `artist_id`);
+  CREATE INDEX artist_id_ix ON `spotify_homepage`.`tracks_artists` (artist_id);
 
    -- Table for parent/child relationships between genres and artists.  Artists can have multiple parents.
   CREATE TABLE `spotify_homepage`.`artists_genres` (

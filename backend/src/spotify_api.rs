@@ -195,7 +195,7 @@ pub fn fetch_cur_stats(user: &User) -> Result<Option<StatsSnapshot>, String> {
                     "Error parsing response from Spotify".into()
                 })?;
 
-                for top_track in parsed_res.items.into_iter() {
+                for top_track in parsed_res.items.into_iter().filter_map(|x| x) {
                     stats_snapshot.tracks.add_item(timeframe, top_track);
                 }
             }

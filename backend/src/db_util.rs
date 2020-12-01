@@ -599,9 +599,12 @@ pub fn populate_artists_genres_table(
             diesel::delete(artists_genres).execute(&conn.0)?;
 
             // Re-fill the table with the new ones we've created
-            diesel::insert_into(artists_genres)
-                .values(&pairs)
-                .execute(&conn.0)
+            for pairs in pairs.chunks(500) {
+                diesel::insert_into(artists_genres)
+                    .values(pairs)
+                    .execute(&conn.0)?;
+            }
+            Ok(())
         })
         .map_err(|err| -> String {
             error!(

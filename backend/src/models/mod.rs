@@ -265,7 +265,7 @@ pub struct Album {
 
 #[derive(Clone, Deserialize, Debug)]
 pub struct TopTracksResponse {
-    pub items: Vec<Track>,
+    pub items: Vec<Option<Track>>,
 }
 
 #[derive(Queryable)]

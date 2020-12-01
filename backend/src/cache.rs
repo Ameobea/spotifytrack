@@ -10,10 +10,18 @@ use crate::conf::CONF;
 lazy_static! {
     pub static ref REDIS_CONN_POOL: r2d2::Pool<RedisConnectionManager> = {
         let manager = RedisConnectionManager::new(CONF.redis_url.as_str())
-            .expect("Failed to create Redis connection manager");
+            .map_err(|err| {
+                error!("Failed to create Redis connection manager: {:?}", err);
+                std::process::exit(1);
+            })
+            .unwrap();
         r2d2::Pool::builder()
             .build(manager)
-            .expect("Failed to build Redis connection pool")
+            .map_err(|err| {
+                error!("Failed to build Redis connection pool: {:?}", err);
+                std::process::exit(1);
+            })
+            .unwrap()
     };
 }
 
