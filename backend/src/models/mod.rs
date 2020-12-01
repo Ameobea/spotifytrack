@@ -266,11 +266,15 @@ pub struct TopTracksResponse {
     pub items: Vec<Option<Track>>,
 }
 
-#[derive(Queryable)]
+#[derive(Queryable, QueryableByName)]
 pub struct StatsHistoryQueryResItem {
+    #[sql_type = "::diesel::sql_types::Text"]
     pub spotify_id: String,
+    #[sql_type = "::diesel::sql_types::Datetime"]
     pub update_time: NaiveDateTime,
+    #[sql_type = "::diesel::sql_types::Unsigned<::diesel::sql_types::SmallInt>"]
     pub ranking: u16,
+    #[sql_type = "::diesel::sql_types::Unsigned<::diesel::sql_types::TinyInt>"]
     pub timeframe: u8,
 }
 

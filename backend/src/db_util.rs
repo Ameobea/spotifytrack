@@ -4,8 +4,9 @@ use chrono::{NaiveDateTime, Utc};
 use diesel::{
     mysql::{Mysql, MysqlConnection},
     prelude::*,
-    query_builder::{Query, QueryFragment, QueryId},
-    sql_types::HasSqlType,
+    query_builder::{QueryFragment, QueryId},
+    query_dsl::LoadQuery,
+    r2d2::{ConnectionManager, PooledConnection},
 };
 use fnv::{FnvHashMap as HashMap, FnvHashSet as HashSet};
 use rocket::{http::Status, response::status};
@@ -165,7 +166,10 @@ pub fn group_updates_by_timestamp<T>(
 /// the rankings of different entities changes over time.
 fn get_entity_stats_history<
     T: HasSpotifyId + Debug,
-    Q: RunQueryDsl<MysqlConnection> + QueryFragment<Mysql> + Query + QueryId,
+    Q: RunQueryDsl<MysqlConnection>
+        + QueryFragment<Mysql>
+        + LoadQuery<PooledConnection<ConnectionManager<MysqlConnection>>, StatsHistoryQueryResItem>
+        + QueryId,
     U: Serialize + Debug,
 >(
     conn: DbConn,
@@ -176,11 +180,7 @@ fn get_entity_stats_history<
         entity_spotify_ids: &[&str],
     ) -> Result<Vec<T>, String>,
     get_update_item: fn(&StatsHistoryQueryResItem) -> U,
-) -> Result<Option<(HashMap<String, T>, Vec<(NaiveDateTime, TimeFrames<U>)>)>, String>
-where
-    (String, NaiveDateTime, u16, u8): Queryable<<Q as Query>::SqlType, Mysql>,
-    Mysql: HasSqlType<<Q as Query>::SqlType>,
-{
+) -> Result<Option<(HashMap<String, T>, Vec<(NaiveDateTime, TimeFrames<U>)>)>, String> {
     debug!("{}", diesel::debug_query::<diesel::mysql::Mysql, _>(&query));
     let entity_stats_opt: Option<Vec<StatsHistoryQueryResItem>> =
         diesel_not_found_to_none(query.load::<StatsHistoryQueryResItem>(&conn.0))?;
@@ -287,21 +287,49 @@ pub fn get_genre_stats_history(
     )>,
     String,
 > {
-    use crate::schema::{
-        artist_rank_snapshots::{self, dsl::*},
-        artists_genres::{self, dsl::*},
-        spotify_items::dsl::*,
-    };
+    // use crate::schema::{artist_rank_snapshots, artists_genres, spotify_items};
+    //
+    // let query = artist_rank_snapshots::table
+    //     .filter(artist_rank_snapshots::dsl::user_id.eq(user.id))
+    //     .filter(
+    //         artist_rank_snapshots::dsl::mapped_spotify_id.eq_any(
+    //             artists_genres::table
+    //                 .filter(artists_genres::dsl::genre.eq(target_genre))
+    //                 .inner_join(spotify_items::table)
+    //                 .select(spotify_items::dsl::id),
+    //         ),
+    //     )
+    //     .inner_join(spotify_items::table)
+    //     .select((
+    //         spotify_items::dsl::spotify_id,
+    //         artist_rank_snapshots::dsl::update_time,
+    //         artist_rank_snapshots::dsl::ranking,
+    //         artist_rank_snapshots::dsl::timeframe,
+    //     ));
 
-    let query =
-        artists_genres
-            .filter(genre.eq(target_genre))
-            .filter(user_id.eq(user.id))
-            .inner_join(artist_rank_snapshots.on(
-                artist_rank_snapshots::dsl::mapped_spotify_id.eq(artists_genres::dsl::artist_id),
-            ))
-            .inner_join(spotify_items)
-            .select((spotify_id, update_time, ranking, timeframe));
+    // Using a raw query here because the `STRAIGHT_JOIN` forces the MySQL query optimizer to do
+    // something different which makes the query run several times faster.
+    let query = diesel::sql_query(
+        r#"
+            SELECT STRAIGHT_JOIN
+                `spotify_items`.`spotify_id`,
+                `artist_rank_snapshots`.`update_time`,
+                `artist_rank_snapshots`.`ranking`,
+                `artist_rank_snapshots`.`timeframe`
+            FROM `artist_rank_snapshots`
+            INNER JOIN `spotify_items`
+                ON `artist_rank_snapshots`.`mapped_spotify_id` = `spotify_items`.`id`
+            WHERE `artist_rank_snapshots`.`user_id` = ?
+                AND `artist_rank_snapshots`.`mapped_spotify_id` IN (
+                    SELECT `spotify_items`.`id` FROM `artists_genres`
+                        INNER JOIN `spotify_items`
+                            ON `artists_genres`.`artist_id` = `spotify_items`.`id`
+                        WHERE `artists_genres`.`genre` = ?
+                )
+    "#,
+    )
+    .bind::<diesel::sql_types::BigInt, _>(user.id)
+    .bind::<diesel::sql_types::Text, _>(target_genre);
 
     get_entity_stats_history(
         conn,
