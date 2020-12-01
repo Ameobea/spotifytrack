@@ -8,16 +8,17 @@ use diesel::{
     sql_types::HasSqlType,
 };
 use fnv::{FnvHashMap as HashMap, FnvHashSet as HashSet};
-use rocket::http::Status;
-use rocket::response::status;
+use rocket::{http::Status, response::status};
 use serde::Serialize;
 
-use crate::benchmarking::mark;
-use crate::models::{
-    Artist, ArtistGenrePair, ArtistRankHistoryResItem, HasSpotifyId, NewSpotifyIdMapping,
-    SpotifyIdMapping, StatsHistoryQueryResItem, TimeFrames, Track, TrackArtistPair, User,
+use crate::{
+    benchmarking::mark,
+    models::{
+        Artist, ArtistGenrePair, ArtistRankHistoryResItem, HasSpotifyId, NewSpotifyIdMapping,
+        SpotifyIdMapping, StatsHistoryQueryResItem, TimeFrames, Track, TrackArtistPair, User,
+    },
+    DbConn,
 };
-use crate::DbConn;
 
 pub fn get_user_by_spotify_id(
     conn: &DbConn,
@@ -53,14 +54,17 @@ struct StatsQueryResultItem {
     spotify_id: String,
 }
 
-/// Returns the top artists for the last update for the given user.  Items are returned as `(timeframe_id, artist)`.
+/// Returns the top artists for the last update for the given user.  Items are returned as
+/// `(timeframe_id, artist)`.
 pub fn get_artist_stats(
     user: &User,
     conn: DbConn,
     spotify_access_token: &str,
 ) -> Result<Option<Vec<(u8, Artist)>>, String> {
-    use crate::schema::artist_rank_snapshots::{self, dsl::*};
-    use crate::schema::spotify_items::{self, dsl::*};
+    use crate::schema::{
+        artist_rank_snapshots::{self, dsl::*},
+        spotify_items::{self, dsl::*},
+    };
 
     let artist_stats = artist_rank_snapshots
         .filter(user_id.eq(user.id))
@@ -97,8 +101,7 @@ pub fn get_artist_rank_history_single_artist(
     conn: DbConn,
     artist_spotify_id: &str,
 ) -> Result<Option<Vec<(NaiveDateTime, [Option<u16>; 3])>>, String> {
-    use crate::schema::artist_rank_snapshots::dsl::*;
-    use crate::schema::spotify_items::dsl::*;
+    use crate::schema::{artist_rank_snapshots::dsl::*, spotify_items::dsl::*};
 
     let query = artist_rank_snapshots
         .filter(user_id.eq(user.id))
@@ -153,12 +156,13 @@ pub fn group_updates_by_timestamp<T>(
     entity_stats_by_update_timestamp
 }
 
-/// Generic function that handles executing a given SQL query to fetch metrics for a set of entities of some type.
-/// Once the metrics are fetched, it also fetches entity metadata for all of the fetched updates and returns them as a
-/// mapping from spotify id to entity along with the sorted + grouped metrics.
+/// Generic function that handles executing a given SQL query to fetch metrics for a set of entities
+/// of some type. Once the metrics are fetched, it also fetches entity metadata for all of the
+/// fetched updates and returns them as a mapping from spotify id to entity along with the sorted +
+/// grouped metrics.
 ///
-/// The data returned by this function is useful for generating graphs on the frontend showing how the rankings of
-/// different entities changes over time.
+/// The data returned by this function is useful for generating graphs on the frontend showing how
+/// the rankings of different entities changes over time.
 fn get_entity_stats_history<
     T: HasSpotifyId + Debug,
     Q: RunQueryDsl<MysqlConnection> + QueryFragment<Mysql> + Query + QueryId,
@@ -243,8 +247,7 @@ pub fn get_artist_stats_history(
     )>,
     String,
 > {
-    use crate::schema::artist_rank_snapshots::dsl::*;
-    use crate::schema::spotify_items::dsl::*;
+    use crate::schema::{artist_rank_snapshots::dsl::*, spotify_items::dsl::*};
 
     let mut query = artist_rank_snapshots
         .filter(user_id.eq(user.id))
@@ -284,9 +287,11 @@ pub fn get_genre_stats_history(
     )>,
     String,
 > {
-    use crate::schema::artist_rank_snapshots::{self, dsl::*};
-    use crate::schema::artists_genres::{self, dsl::*};
-    use crate::schema::spotify_items::dsl::*;
+    use crate::schema::{
+        artist_rank_snapshots::{self, dsl::*},
+        artists_genres::{self, dsl::*},
+        spotify_items::dsl::*,
+    };
 
     let query =
         artists_genres
@@ -310,15 +315,14 @@ pub fn get_genre_stats_history(
     )
 }
 
-/// Returns a list of track data items for each of the top tracks for the user's most recent update.  The first item
-/// of the tuple is the timeframe ID: short, medium, long.
+/// Returns a list of track data items for each of the top tracks for the user's most recent update.
+/// The first item of the tuple is the timeframe ID: short, medium, long.
 pub fn get_track_stats(
     user: &User,
     conn: DbConn,
     spotify_access_token: &str,
 ) -> Result<Option<Vec<(u8, Track)>>, String> {
-    use crate::schema::spotify_items::dsl::*;
-    use crate::schema::track_rank_snapshots::dsl::*;
+    use crate::schema::{spotify_items::dsl::*, track_rank_snapshots::dsl::*};
 
     let track_stats_opt = diesel_not_found_to_none(
         track_rank_snapshots
@@ -352,8 +356,9 @@ pub fn get_track_stats(
     Ok(Some(fetched_tracks))
 }
 
-/// Retrieves the top tracks for all timeframes for each update for a given user.  Rather than duplicating track metadata,
-/// each timeframe simply stores the track ID and a `HashMap` is returned which serves as a local lookup tool for the track metadata.
+/// Retrieves the top tracks for all timeframes for each update for a given user.  Rather than
+/// duplicating track metadata, each timeframe simply stores the track ID and a `HashMap` is
+/// returned which serves as a local lookup tool for the track metadata.
 pub fn get_track_stats_history(
     user: &User,
     conn: DbConn,
@@ -366,9 +371,11 @@ pub fn get_track_stats_history(
     )>,
     String,
 > {
-    use crate::schema::spotify_items::{self, dsl::*};
-    use crate::schema::track_rank_snapshots::{self, dsl::*};
-    use crate::schema::tracks_artists::{self, dsl::*};
+    use crate::schema::{
+        spotify_items::{self, dsl::*},
+        track_rank_snapshots::{self, dsl::*},
+        tracks_artists::{self, dsl::*},
+    };
 
     let artist_inner_id: i32 = spotify_items
         .filter(spotify_items::spotify_id.eq(parent_artist_id))
@@ -445,15 +452,17 @@ pub fn retrieve_mapped_spotify_ids<'a, T: Iterator<Item = &'a String> + Clone>(
     Ok(mapped_ids_mapping)
 }
 
-/// Using the list of all stored track spotify IDs, retrieves fresh track metadata for all of them and populates
-/// the mapping table with artist-track pairs for all of them
+/// Using the list of all stored track spotify IDs, retrieves fresh track metadata for all of them
+/// and populates the mapping table with artist-track pairs for all of them
 pub fn populate_tracks_artists_table(
     conn: &DbConn,
     spotify_access_token: &str,
 ) -> Result<(), String> {
-    use crate::schema::spotify_items::dsl::*;
-    use crate::schema::track_rank_snapshots::{self, dsl::*};
-    use crate::schema::tracks_artists::dsl::*;
+    use crate::schema::{
+        spotify_items::dsl::*,
+        track_rank_snapshots::{self, dsl::*},
+        tracks_artists::dsl::*,
+    };
 
     #[derive(Queryable)]
     struct Ids {
@@ -528,9 +537,11 @@ pub fn populate_artists_genres_table(
     conn: &DbConn,
     spotify_access_token: &str,
 ) -> Result<(), String> {
-    use crate::schema::artist_rank_snapshots::{self, dsl::*};
-    use crate::schema::artists_genres::dsl::*;
-    use crate::schema::spotify_items::dsl::*;
+    use crate::schema::{
+        artist_rank_snapshots::{self, dsl::*},
+        artists_genres::dsl::*,
+        spotify_items::dsl::*,
+    };
 
     #[derive(Queryable)]
     struct Ids {
@@ -577,7 +588,7 @@ pub fn populate_artists_genres_table(
                         artist.id
                     );
                     return None;
-                }
+                },
             };
             Some((artist, artist_internal_id))
         })
@@ -616,8 +627,8 @@ pub fn populate_artists_genres_table(
         .map(|_| ())
 }
 
-/// Sets the `last_updated_time` column for the provided user to the provided `update_time`.  Returns the number
-/// of rows updated or an error message.
+/// Sets the `last_updated_time` column for the provided user to the provided `update_time`.
+/// Returns the number of rows updated or an error message.
 pub fn update_user_last_updated(
     user: &User,
     conn: &DbConn,
@@ -740,11 +751,16 @@ pub fn refresh_user_access_token(
         Err(_) => {
             update_user_last_updated(&user, &conn, Utc::now().naive_utc())?;
 
-            // TODO: Disable auto-updates for the user that has removed their permission grant to prevent wasted updates in the future
-            let msg = format!("Failed to refresh user token for user {}; updating last updated timestamp and not updating.", user.username);
+            // TODO: Disable auto-updates for the user that has removed their permission grant to
+            // prevent wasted updates in the future
+            let msg = format!(
+                "Failed to refresh user token for user {}; updating last updated timestamp and \
+                 not updating.",
+                user.username
+            );
             info!("{}", msg);
             return Ok(Some(status::Custom(Status::Unauthorized, msg)));
-        }
+        },
     };
     diesel::update(users::table.filter(users::dsl::id.eq(user.id)))
         .set(users::dsl::token.eq(&updated_access_token))

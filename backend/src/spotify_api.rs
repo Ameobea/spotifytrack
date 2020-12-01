@@ -1,5 +1,4 @@
-use std::ops::Try;
-use std::thread;
+use std::{ops::Try, thread};
 
 use chrono::Utc;
 use crossbeam::channel;
@@ -8,14 +7,16 @@ use fnv::FnvHashMap as HashMap;
 use reqwest;
 use serde::{Deserialize, Serialize};
 
-use crate::conf::CONF;
-use crate::models::{
-    AccessTokenResponse, Artist, ArtistGenrePair, CreatePlaylistRequest, NewArtistHistoryEntry,
-    NewTrackHistoryEntry, Playlist, SpotifyBatchArtistsResponse, SpotifyBatchTracksResponse,
-    SpotifyResponse, StatsSnapshot, TopArtistsResponse, TopTracksResponse, Track, TrackArtistPair,
-    UpdatePlaylistResponse, User, UserProfile,
+use crate::{
+    conf::CONF,
+    models::{
+        AccessTokenResponse, Artist, ArtistGenrePair, CreatePlaylistRequest, NewArtistHistoryEntry,
+        NewTrackHistoryEntry, Playlist, SpotifyBatchArtistsResponse, SpotifyBatchTracksResponse,
+        SpotifyResponse, StatsSnapshot, TopArtistsResponse, TopTracksResponse, Track,
+        TrackArtistPair, UpdatePlaylistResponse, User, UserProfile,
+    },
+    DbConn,
 };
-use crate::DbConn;
 
 const _SPOTIFY_USER_RECENTLY_PLAYED_URL: &str =
     "https://api.spotify.com/v1/me/player/recently-played";
@@ -198,7 +199,7 @@ pub fn fetch_cur_stats(user: &User) -> Result<Option<StatsSnapshot>, String> {
                 for top_track in parsed_res.items.into_iter().filter_map(|x| x) {
                     stats_snapshot.tracks.add_item(timeframe, top_track);
                 }
-            }
+            },
             ("artists", timeframe, res) => {
                 let parsed_res: TopArtistsResponse = res?.json().map_err(|err| -> String {
                     error!("Error parsing top artists response: {:?}", err);
@@ -208,7 +209,7 @@ pub fn fetch_cur_stats(user: &User) -> Result<Option<StatsSnapshot>, String> {
                 for top_artist in parsed_res.items.into_iter() {
                     stats_snapshot.artists.add_item(timeframe, top_artist);
                 }
-            }
+            },
             _ => unreachable!(),
         }
     }
@@ -228,8 +229,8 @@ fn map_timeframe_to_timeframe_id(timeframe: &str) -> u8 {
     }
 }
 
-/// For each track and artist timeframe, store a row in the `track_rank_snapshots` and `artist_rank_snapshots`
-/// tables respectively
+/// For each track and artist timeframe, store a row in the `track_rank_snapshots` and
+/// `artist_rank_snapshots` tables respectively
 pub fn store_stats_snapshot(
     conn: &DbConn,
     user: &User,
@@ -332,20 +333,11 @@ pub fn store_stats_snapshot(
         })
         .collect();
 
-    // Delete all old artist/genre entries for the artists we have here and insert the new ones, making sure that the entries we have are all valid and up-to-date
-    conn.0
-        .transaction::<_, diesel::result::Error, _>(|| {
-            use crate::schema::artists_genres::dsl::*;
-
-            diesel::delete(
-                artists_genres.filter(artist_id.eq_any(mapped_artist_spotify_ids.values())),
-            )
-            .execute(&conn.0)?;
-
-            diesel::insert_into(artists_genres)
-                .values(&artist_genre_pairs)
-                .execute(&conn.0)
-        })
+    // Delete all old artist/genre entries for the artists we have here and insert the new ones,
+    // making sure that the entries we have are all valid and up-to-date
+    diesel::insert_or_ignore_into(crate::schema::artists_genres::table)
+        .values(&artist_genre_pairs)
+        .execute(&conn.0)
         .map_err(|err| -> String {
             error!("Error inserting artist/genre mappings: {:?}", err);
             "Error inserting artist/genre mappings into database".into()

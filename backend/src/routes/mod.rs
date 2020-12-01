@@ -1,30 +1,30 @@
-use std::io::Read;
-use std::sync::Mutex;
+use std::{io::Read, sync::Mutex};
 
 use chrono::{NaiveDate, NaiveDateTime, Utc};
 use diesel::{self, prelude::*};
 use fnv::FnvHashMap as HashMap;
-use rocket::http::{RawStr, Status};
-use rocket::response::status;
-use rocket::{response::Redirect, State};
+use rocket::{
+    http::{RawStr, Status},
+    response::{status, Redirect},
+    State,
+};
 use rocket_contrib::json::Json;
 
-use crate::benchmarking::{mark, start};
-use crate::conf::CONF;
-use crate::db_util;
-use crate::models::{
-    Artist, CreateSharedPlaylistRequest, NewUser, OAuthTokenResponse, Playlist, StatsSnapshot,
-    TimeFrames, Timeline, TimelineEvent, TimelineEventType, Track, User, UserComparison,
+use crate::{
+    benchmarking::{mark, start},
+    conf::CONF,
+    db_util,
+    models::{
+        Artist, CreateSharedPlaylistRequest, NewUser, OAuthTokenResponse, Playlist, StatsSnapshot,
+        TimeFrames, Timeline, TimelineEvent, TimelineEventType, Track, User, UserComparison,
+    },
+    DbConn, SpotifyTokenData,
 };
-use crate::DbConn;
-use crate::SpotifyTokenData;
 
 const SPOTIFY_TOKEN_FETCH_URL: &str = "https://accounts.spotify.com/api/token";
 
 #[get("/")]
-pub fn index() -> &'static str {
-    "Application successfully started!"
-}
+pub fn index() -> &'static str { "Application successfully started!" }
 
 /// Retrieves the current top tracks and artist for the current user
 #[get("/stats/<username>")]
@@ -39,7 +39,7 @@ pub fn get_current_stats(
         Some(user) => user,
         None => {
             return Ok(None);
-        }
+        },
     };
     mark("Finished getting spotify user by id");
 
@@ -94,7 +94,7 @@ pub fn get_artist_stats(
         Some(user) => user,
         None => {
             return Ok(None);
-        }
+        },
     };
     mark("Finished getting spotify user by id");
 
@@ -161,7 +161,7 @@ pub fn get_genre_history(
         Some(user) => user,
         None => {
             return Ok(None);
-        }
+        },
     };
     let spotify_access_token = {
         let token_data = &mut *(&*token_data).lock().unwrap();
@@ -202,7 +202,7 @@ pub fn get_genre_stats(
         Some(user) => user,
         None => {
             return Ok(None);
-        }
+        },
     };
     let spotify_access_token = {
         let token_data = &mut *(&*token_data).lock().unwrap();
@@ -251,7 +251,7 @@ pub fn get_timeline(
         Some(user) => user,
         None => {
             return Ok(None);
-        }
+        },
     };
     let spotify_access_token = {
         let token_data = &mut *(&*token_data).lock().unwrap();
@@ -323,12 +323,10 @@ pub fn get_timeline(
 #[get("/authorize?<playlist_perms>&<state>")]
 pub fn authorize(playlist_perms: Option<&RawStr>, state: Option<&RawStr>) -> Redirect {
     let scopes = match playlist_perms.map(|s| s.as_str()) {
-        None | Some("false") | Some("False") | Some("0") => {
-            "user-read-recently-played%20user-top-read%20user-follow-read"
-        }
-        _ => {
-            "user-read-recently-played%20user-top-read%20user-follow-read%20playlist-modify-public"
-        }
+        None | Some("false") | Some("False") | Some("0") =>
+            "user-read-recently-played%20user-top-read%20user-follow-read",
+        _ =>
+            "user-read-recently-played%20user-top-read%20user-follow-read%20playlist-modify-public",
     };
     let callback_uri = crate::conf::CONF.get_absolute_oauth_cb_uri();
 
@@ -365,13 +363,13 @@ fn generate_shared_playlist(
         Some(user) => user,
         None => {
             return Ok(None);
-        }
+        },
     };
     let (mut user2, conn2) = match user2_res? {
         Some(user) => user,
         None => {
             return Ok(None);
-        }
+        },
     };
 
     let spotify_access_token = {
@@ -455,7 +453,7 @@ pub fn oauth_cb(
         Err(err) => {
             error!("Failed to fetch user tokens from OAuth CB code: {:?}", err);
             return Err("Error parsing response from token fetch endpoint".into());
-        }
+        },
     };
 
     let (access_token, refresh_token) = match res {
@@ -467,7 +465,7 @@ pub fn oauth_cb(
         } => {
             info!("Successfully received token of type: {}", token_type);
             (access_token, refresh_token)
-        }
+        },
         OAuthTokenResponse::Error {
             error,
             error_description,
@@ -477,7 +475,7 @@ pub fn oauth_cb(
                 error, error_description
             );
             return Err("Error fetching user access tokens from Spotify API.".into());
-        }
+        },
     };
 
     info!("Fetched user tokens.  Inserting user into database...");
@@ -520,11 +518,11 @@ pub fn oauth_cb(
                 })?;
 
             info!("Already have a row for user; skipping manual update and redirecting directly.");
-        }
+        },
         Err(err) => {
             error!("Error inserting row: {:?}", err);
             return Err("Error inserting user into database".into());
-        }
+        },
         Ok(_) => {
             // Retrieve the inserted user row
             let user = crate::db_util::get_user_by_spotify_id(&conn1, &user_spotify_id)?
@@ -539,11 +537,11 @@ pub fn oauth_cb(
                         username
                     );
                     return Err("Error fetching user stats from the Spotify API.".into());
-                }
+                },
             };
 
             crate::spotify_api::store_stats_snapshot(&conn1, &user, cur_user_stats)?;
-        }
+        },
     };
 
     match state {
@@ -586,24 +584,26 @@ pub fn oauth_cb(
                                 CONF.website_url, user1_id, user2_id, encoded_playlist
                             );
                             return Ok(Redirect::to(redirect_url));
-                        }
-                        None => {
+                        },
+                        None =>
                             return Err(format!(
                                 "One or both of the supplied users has never {}",
                                 "connected to Spotifytrack before"
-                            ))
-                        }
+                            )),
                     }
-                }
+                },
                 Err(err) => {
-                    warn!("Error parsing JSON body of what we presume is a playlist generation request: {:?}",err);
-                    return Err(
-                        "Error parsing state param for presumed shared playlist generation request"
-                            .into(),
+                    warn!(
+                        "Error parsing JSON body of what we presume is a playlist generation \
+                         request: {:?}",
+                        err
                     );
-                }
+                    return Err("Error parsing state param for presumed shared playlist \
+                                generation request"
+                        .into());
+                },
             }
-        }
+        },
         _ => (),
     }
 
@@ -656,7 +656,7 @@ pub fn update_user(
             })?;
 
             users.filter(spotify_id.eq(user_id.as_ref())).first(&conn.0)
-        }
+        },
         None => users.order_by(last_update_time).first(&conn.0),
     }
     .map_err(|err| -> String {
@@ -690,7 +690,7 @@ pub fn update_user(
                 user
             );
             return Err("No data from Spotify API for that user".into());
-        }
+        },
     };
 
     crate::spotify_api::store_stats_snapshot(&conn, &user, stats)?;
@@ -776,13 +776,13 @@ fn compute_comparison(
         Some(user) => user,
         None => {
             return Ok(None);
-        }
+        },
     };
     let (user2, conn2) = match user2_res? {
         Some(user) => user,
         None => {
             return Ok(None);
-        }
+        },
     };
     let (user1_id, user2_id) = (user1.id, user2.id);
 

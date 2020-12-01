@@ -1,6 +1,4 @@
-use std::default::Default;
-use std::fmt::Debug;
-use std::vec;
+use std::{default::Default, fmt::Debug, vec};
 
 use chrono::{NaiveDate, NaiveDateTime};
 use fnv::FnvHashMap as HashMap;
@@ -165,8 +163,8 @@ impl<T: Serialize> Default for TimeFrames<T> {
 }
 
 impl<T: Serialize> IntoIterator for TimeFrames<T> {
-    type Item = (&'static str, Vec<T>);
     type IntoIter = vec::IntoIter<Self::Item>;
+    type Item = (&'static str, Vec<T>);
 
     fn into_iter(self) -> Self::IntoIter {
         vec![
@@ -258,9 +256,9 @@ pub struct Album {
     pub id: String,
     pub images: Vec<Image>,
     pub name: String,
-    // pub release_date: String,
-    // pub release_date_precision: String,
-    // pub uri: String,
+    /* pub release_date: String,
+     * pub release_date_precision: String,
+     * pub uri: String, */
 }
 
 #[derive(Clone, Deserialize, Debug)]
@@ -297,8 +295,8 @@ pub struct Track {
     pub name: String,
     // pub popularity: usize,
     pub preview_url: Option<String>,
-    // pub track_number: usize,
-    // pub uri: String,
+    /* pub track_number: usize,
+     * pub uri: String, */
 }
 
 #[derive(Clone, Deserialize, Debug)]
@@ -314,8 +312,8 @@ pub struct Artist {
     pub id: String,
     pub images: Option<Vec<Image>>,
     pub name: String,
-    // pub popularity: Option<usize>,
-    // pub uri: String,
+    /* pub popularity: Option<usize>,
+     * pub uri: String, */
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -363,8 +361,8 @@ pub enum SpotifyResponse<T: std::fmt::Debug + Clone> {
 }
 
 impl<T: for<'de> Deserialize<'de> + std::fmt::Debug + Clone> std::ops::Try for SpotifyResponse<T> {
-    type Ok = T;
     type Error = String;
+    type Ok = T;
 
     fn into_result(self) -> Result<Self::Ok, String> {
         match self {
@@ -376,7 +374,7 @@ impl<T: for<'de> Deserialize<'de> + std::fmt::Debug + Clone> std::ops::Try for S
                     .error
                     .message
                     .unwrap_or_else(|| -> String { "No error message supplied".into() }))
-            }
+            },
         }
     }
 
@@ -391,9 +389,7 @@ impl<T: for<'de> Deserialize<'de> + std::fmt::Debug + Clone> std::ops::Try for S
         })
     }
 
-    fn from_ok(val: T) -> Self {
-        SpotifyResponse::Success(val)
-    }
+    fn from_ok(val: T) -> Self { SpotifyResponse::Success(val) }
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -413,15 +409,11 @@ pub trait HasSpotifyId {
 }
 
 impl HasSpotifyId for Artist {
-    fn get_spotify_id(&self) -> &str {
-        &self.id
-    }
+    fn get_spotify_id(&self) -> &str { &self.id }
 }
 
 impl HasSpotifyId for Track {
-    fn get_spotify_id(&self) -> &str {
-        &self.id
-    }
+    fn get_spotify_id(&self) -> &str { &self.id }
 }
 
 #[derive(Serialize)]

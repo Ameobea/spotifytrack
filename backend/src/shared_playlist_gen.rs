@@ -1,7 +1,9 @@
 use rand::prelude::*;
 
-use crate::models::{Track, User};
-use crate::DbConn;
+use crate::{
+    models::{Track, User},
+    DbConn,
+};
 
 pub fn generate_shared_playlist_track_spotify_ids(
     conn1: DbConn,
@@ -101,8 +103,9 @@ pub fn generate_shared_playlist_track_spotify_ids(
         .filter(|track| user2_tracks.iter().any(|o_track| o_track.id == track.id));
     playlist_tracks.extend(tracks_intersection);
 
-    // Then, add the top 3-5 top tracks for each user-artist pair that aren't already in there evn if there is no track-level
-    // intersection, meaning that each user's favorites that for shared artists are included
+    // Then, add the top 3-5 top tracks for each user-artist pair that aren't already in there evn
+    // if there is no track-level intersection, meaning that each user's favorites that for
+    // shared artists are included
     let artists_intersection = user1_artists.iter().filter(|artist| {
         user2_artists
             .iter()

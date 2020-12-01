@@ -5,8 +5,9 @@ use fnv::{FnvHashMap as HashMap, FnvHashSet as HashSet};
 
 use crate::models::{Artist, TimeFrames};
 
-/// This is a pretty arbitrary algorithm with the goal of assigning a score to an item based on how many total items
-/// there are and the item's rank in the collection.  It is used to construct the genres treemap on the frontend.
+/// This is a pretty arbitrary algorithm with the goal of assigning a score to an item based on how
+/// many total items there are and the item's rank in the collection.  It is used to construct the
+/// genres treemap on the frontend.
 fn weight_data_point(total_items: usize, ranking: usize) -> usize {
     (((total_items - ranking) as f32)
         .powf(2.7 * ((total_items - ranking) as f32 / total_items as f32))) as usize

@@ -1,7 +1,6 @@
 //! Functions for interacting with Redis which caches data from the Spotify API.
 
-use r2d2_redis::redis::Commands;
-use r2d2_redis::{r2d2, RedisConnectionManager};
+use r2d2_redis::{r2d2, redis::Commands, RedisConnectionManager};
 use serde::{Deserialize, Serialize};
 use serde_json;
 
@@ -96,16 +95,17 @@ fn cache_set_get() {
     #[derive(Serialize, Deserialize, PartialEq, Debug)]
     struct Foo(String);
 
-    set_hash_items(
-        "__test",
-        &[("key1", Foo("val1".into())), ("key3", Foo("val3".into()))],
-    )
+    set_hash_items("__test", &[
+        ("key1", Foo("val1".into())),
+        ("key3", Foo("val3".into())),
+    ])
     .expect("Error setting hash items");
     let vals: Vec<Option<Foo>> =
         get_hash_items("__test", &["key1", "key2", "key3"]).expect("Error fetching hash values");
 
-    assert_eq!(
-        vals,
-        vec![Some(Foo("val1".into())), None, Some(Foo("val3".into()))]
-    );
+    assert_eq!(vals, vec![
+        Some(Foo("val1".into())),
+        None,
+        Some(Foo("val3".into()))
+    ]);
 }

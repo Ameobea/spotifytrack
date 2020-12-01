@@ -33,10 +33,14 @@ impl Conf {
                 .expect("The `REDIS_URL` environment variable must be set."),
             artists_cache_hash_name: "artists".into(),
             tracks_cache_hash_name: "tracks".into(),
-            min_update_interval: Duration::seconds(env::var("MIN_UPDATE_INTERVAL_SECONDS")
-                .unwrap_or_else(|_| -> String { (60 * 60 * 6).to_string() })
-                .parse()
-                .expect("Invalid value provided for `MIN_UPDATE_INTERVAL_SECONDS`; must be an unsigned integer")
+            min_update_interval: Duration::seconds(
+                env::var("MIN_UPDATE_INTERVAL_SECONDS")
+                    .unwrap_or_else(|_| -> String { (60 * 60 * 6).to_string() })
+                    .parse()
+                    .expect(
+                        "Invalid value provided for `MIN_UPDATE_INTERVAL_SECONDS`; must be an \
+                         unsigned integer",
+                    ),
             ),
             admin_api_token: env::var("ADMIN_API_TOKEN")
                 .expect("The `ADMIN_API_TOKEN` environment variable must be set"),

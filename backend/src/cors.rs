@@ -1,5 +1,8 @@
-use rocket::fairing::{Fairing, Info, Kind};
-use rocket::{http::Method, http::Status, Request, Response};
+use rocket::{
+    fairing::{Fairing, Info, Kind},
+    http::{Method, Status},
+    Request, Response,
+};
 
 pub struct CorsFairing;
 
