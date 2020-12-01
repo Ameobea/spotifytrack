@@ -95,7 +95,7 @@ const ArtistStats: React.FC<ReactRouterRouteProps & { mobile: boolean }> = ({ ma
   return (
     <div className="artist-stats">
       {!artistStats || !series ? (
-        <Loading style={{ height: 525 - 140, marginTop: 140 }} />
+        <Loading style={{ height: 363, marginTop: 140 }} />
       ) : !R.isEmpty(artistStats.topTracks) && !R.isEmpty(artistStats.popularityHistory) ? (
         <>
           <h1 style={mobile ? { marginTop: mobile ? 42 : 32 } : undefined}>
@@ -116,8 +116,8 @@ const ArtistStats: React.FC<ReactRouterRouteProps & { mobile: boolean }> = ({ ma
                 nameLocation: 'center',
                 nameTextStyle: {
                   color: '#ccc',
-                  fontSize: 14,
-                  padding: 12,
+                  fontSize: mobile ? 10 : 14,
+                  padding: mobile ? 16 : 12,
                 },
               },
               yAxis: {
@@ -138,10 +138,11 @@ const ArtistStats: React.FC<ReactRouterRouteProps & { mobile: boolean }> = ({ ma
       ) : (
         <div
           style={{
-            marginTop: 76,
-            marginBottom: 20,
+            marginTop: mobile ? 140 : 100,
+            marginBottom: 0,
             fontSize: mobile ? 18 : 23,
             textAlign: 'center',
+            height: 363,
           }}
         >
           No stats were found for this artist.

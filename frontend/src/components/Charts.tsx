@@ -35,7 +35,7 @@ const InnerLineChart: React.FC<{
   const chartConfig: any = R.mergeDeepRight(
     {
       ...getBaseConfigDefaults(mobile),
-      grid: { bottom: 0, top: 50 } as EChartOption['grid'],
+      grid: { bottom: mobile ? 48 : 40, top: 50 } as EChartOption['grid'],
       series: series.map(({ data, name }, i) => ({
         ...seriesDefaults,
         smooth: 0.3,
@@ -57,6 +57,7 @@ const InnerLineChart: React.FC<{
             const date = new Date(value);
             return `${date.getMonth() + 1}/${date.getDate()}\n${date.getFullYear()}`;
           },
+          fontSize: mobile ? 10 : 12,
         },
         splitLine: splitLineStyle,
       },

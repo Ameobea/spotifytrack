@@ -127,6 +127,9 @@ const StatsContent: React.FC<
   } else if (match.params.genre) {
     return <GenreStats username={username} genre={match.params.genre} />;
   } else {
+    if (!statsForUser?.tracks || !statsForUser.artists) {
+      return <Loading style={{ marginTop: 100 }} />;
+    }
     return <StatsDetails stats={statsForUser!} />;
   }
 };
@@ -196,11 +199,7 @@ const Stats: React.FC<ReactRouterRouteProps> = ({
         </span>
       </div>
 
-      {statsForUser && statsForUser.tracks && statsForUser.artists ? (
-        <StatsContent username={username} match={match} statsForUser={statsForUser} />
-      ) : (
-        <Loading style={{ marginTop: 100 }} />
-      )}
+      <StatsContent username={username} match={match} statsForUser={statsForUser} />
     </main>
   );
 };
