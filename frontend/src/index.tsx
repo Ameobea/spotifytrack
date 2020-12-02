@@ -15,7 +15,7 @@ import './index.scss';
 import OAuthRedirect from './components/OAuthRedirect';
 import Footer from './components/Footer';
 
-Sentry.init({ dsn: 'http://ae5045a642824128860df7fdc2850d35@104.225.217.211:8080/3' });
+Sentry.init({ dsn: 'https://ae5045a642824128860df7fdc2850d35@sentry.ameo.design/3' });
 
 const [Home, Stats, Compare] = [LazyHome, LazyStats, LazyCompare].map((LazyPage) => {
   const Comp = React.lazy(() => LazyPage);
