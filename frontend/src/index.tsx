@@ -3,7 +3,8 @@ import ReactDOM from 'react-dom';
 import { Route, Switch } from 'react-router';
 import { Provider } from 'react-redux';
 import { ConnectedRouter } from 'connected-react-router';
-import * as Sentry from '@sentry/browser';
+import * as Sentry from '@sentry/react';
+import { Integrations } from '@sentry/tracing';
 import { ReactQueryConfigProvider } from 'react-query';
 
 import Loading from 'src/components/Loading';
@@ -15,7 +16,11 @@ import './index.scss';
 import OAuthRedirect from './components/OAuthRedirect';
 import Footer from './components/Footer';
 
-Sentry.init({ dsn: 'https://ae5045a642824128860df7fdc2850d35@sentry.ameo.design/3' });
+Sentry.init({
+  dsn: 'https://d3ca8b37e2eb4573af6046aed3f62428@sentry.ameo.design/4',
+  integrations: [new Integrations.BrowserTracing()],
+  tracesSampleRate: 0.1,
+});
 
 const [Home, Stats, Compare] = [LazyHome, LazyStats, LazyCompare].map((LazyPage) => {
   const Comp = React.lazy(() => LazyPage);
