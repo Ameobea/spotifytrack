@@ -42,6 +42,7 @@ pub fn get_current_stats(
         },
     };
     mark("Finished getting spotify user by id");
+    println!("{:?}", user);
 
     let spotify_access_token = {
         let token_data = &mut *(&*token_data).lock().unwrap();
@@ -50,8 +51,20 @@ pub fn get_current_stats(
     mark("Got spotify access token");
 
     let (artist_stats, track_stats) = match rayon::join(
-        || db_util::get_artist_stats(&user, conn, &spotify_access_token),
-        || db_util::get_track_stats(&user, conn2, &spotify_access_token),
+        || {
+            dbg!(db_util::get_artist_stats(
+                &user,
+                conn,
+                &spotify_access_token
+            ))
+        },
+        || {
+            dbg!(db_util::get_track_stats(
+                &user,
+                conn2,
+                &spotify_access_token
+            ))
+        },
     ) {
         (Err(err), _) | (Ok(_), Err(err)) => return Err(err),
         (Ok(None), _) | (_, Ok(None)) => return Ok(None),

@@ -13,7 +13,7 @@ CREATE TABLE `spotify_homepage`.`tracks_users_first_seen` (
 );
 
 -- Backfill
-INSERT INTO `spotify_homepage`.`artists_users_first_seen` (user_id, mapped_spotify_id, first_seen)
+INSERT IGNORE INTO `spotify_homepage`.`artists_users_first_seen` (user_id, mapped_spotify_id, first_seen)
   SELECT user_id, mapped_spotify_id, update_time
     FROM `spotify_homepage`.`artist_rank_snapshots` a
     WHERE a.update_time = (
@@ -23,7 +23,7 @@ INSERT INTO `spotify_homepage`.`artists_users_first_seen` (user_id, mapped_spoti
         AND a.update_time = b.update_time)
     GROUP BY user_id, mapped_spotify_id;
 
-INSERT INTO `spotify_homepage`.`tracks_users_first_seen` (user_id, mapped_spotify_id, first_seen)
+INSERT IGNORE INTO `spotify_homepage`.`tracks_users_first_seen` (user_id, mapped_spotify_id, first_seen)
   SELECT user_id, mapped_spotify_id, update_time
     FROM `spotify_homepage`.`track_rank_snapshots` a
     WHERE a.update_time = (

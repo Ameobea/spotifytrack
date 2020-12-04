@@ -67,9 +67,21 @@ pub fn get_artist_stats(
         spotify_items::{self, dsl::*},
     };
 
+    let last_update_time: Option<NaiveDateTime> = artist_rank_snapshots
+        .filter(user_id.eq(user.id))
+        .select(update_time)
+        .order_by(update_time.desc())
+        .first(&conn.0)
+        .optional()
+        .map_err(stringify_diesel_err)?;
+    let last_update_time = match last_update_time {
+        Some(last_update_time) => last_update_time,
+        None => return Ok(None),
+    };
+
     let artist_stats = artist_rank_snapshots
         .filter(user_id.eq(user.id))
-        .filter(update_time.eq(user.last_update_time))
+        .filter(update_time.eq(last_update_time))
         .inner_join(spotify_items)
         .select((artist_rank_snapshots::timeframe, spotify_items::spotify_id))
         .load::<StatsQueryResultItem>(&conn.0)
@@ -352,11 +364,23 @@ pub fn get_track_stats(
 ) -> Result<Option<Vec<(u8, Track)>>, String> {
     use crate::schema::{spotify_items::dsl::*, track_rank_snapshots::dsl::*};
 
+    let last_update_time: Option<NaiveDateTime> = track_rank_snapshots
+        .filter(user_id.eq(user.id))
+        .select(update_time)
+        .order_by(update_time.desc())
+        .first(&conn.0)
+        .optional()
+        .map_err(stringify_diesel_err)?;
+    let last_update_time = match last_update_time {
+        Some(last_update_time) => last_update_time,
+        None => return Ok(None),
+    };
+
     let track_stats_opt = diesel_not_found_to_none(
         track_rank_snapshots
             .filter(user_id.eq(user.id))
             // Only include tracks from the most recent update
-            .filter(update_time.eq(user.last_update_time))
+            .filter(update_time.eq(last_update_time))
             .order_by(update_time)
             .inner_join(spotify_items)
             .select((timeframe, spotify_id))

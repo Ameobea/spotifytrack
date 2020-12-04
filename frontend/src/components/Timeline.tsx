@@ -91,7 +91,7 @@ const TimelineDayComp: React.FC<{
     <div
       onClick={onClick}
       className="timeline-day"
-      style={{ backgroundColor: selected ? '#389' : day.isPrevMonth ? '#222' : '#444' }}
+      style={{ backgroundColor: selected ? '#389' : day.isPrevMonth ? '#222' : undefined }}
     >
       <div className="timeline-date">{day.date}</div>
       <div className={`timeline-events event-count-${day.events.length > 4 ? '5-9' : '1-4'}`}>
@@ -326,7 +326,7 @@ const Timeline: React.FC<{ mobile: boolean }> = ({ mobile }) => {
   maybeUpdateMobileSelectedDay(data, mobile, selectedDay, setSelectedDay, weeks, mobileSelectedDay);
 
   return (
-    <div className="timeline">
+    <div className={`timeline${!data ? ' timeline-loading' : ''}`}>
       <div style={{ display: 'flex', flexDirection: 'row', alignContent: 'flex-start' }}>
         <h2 className="title">Timeline</h2>
         <Tooltip

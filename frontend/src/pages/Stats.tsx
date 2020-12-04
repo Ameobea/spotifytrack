@@ -147,15 +147,11 @@ const Stats: React.FC<ReactRouterRouteProps> = ({
       return;
     }
 
-    const {
-      last_update_time,
-      tracks,
-      artists,
-    }: {
-      last_update_time: string;
-      tracks: TimeFrames<Track>;
-      artists: TimeFrames<Artist>;
-    } = await fetchUserStats(username);
+    const userStats = await fetchUserStats(username);
+    if (!userStats) {
+      return;
+    }
+    const { last_update_time, tracks, artists } = userStats;
 
     dispatch(
       actionCreators.entityStore.ADD_TRACKS(

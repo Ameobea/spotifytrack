@@ -13,6 +13,10 @@ impl Fairing for CorsFairing {
             "Access-Control-Allow-Origin",
             "*",
         ));
+        response.set_header(rocket::http::Header::new(
+            "Access-Control-Allow-Headers",
+            "sentry-trace",
+        ));
 
         // Respond to all `OPTIONS` requests with a `204` (no content) status
         if response.status() == Status::NotFound && request.method() == Method::Options {

@@ -1,7 +1,7 @@
 import dayjs from 'dayjs';
 
 import { API_BASE_URL } from 'src/conf';
-import { Artist, TimelineData, Track } from 'src/types';
+import { Artist, TimeFrames, TimelineData, Track } from 'src/types';
 
 export const getUrl = (path: string) => `${API_BASE_URL}${path}`;
 
@@ -21,7 +21,12 @@ export const getJsonEndpoint = <T = any>(url: string) =>
       throw err;
     });
 
-export const fetchUserStats = (username: string) => getJsonEndpoint(getUrl(`/stats/${username}`));
+export const fetchUserStats = (username: string) =>
+  getJsonEndpoint<{
+    last_update_time: string;
+    tracks: TimeFrames<Track>;
+    artists: TimeFrames<Artist>;
+  } | null>(getUrl(`/stats/${username}`));
 
 export const fetchArtistStats = (
   username: string,

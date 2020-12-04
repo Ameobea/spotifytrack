@@ -53,6 +53,7 @@
     .timeline-day {
       height: 126px;
       cursor: pointer;
+      background-color: #444;
 
       .timeline-date {
         position: absolute;
@@ -111,6 +112,12 @@
 
   .timeline-event:hover .timeline-event-tooltip {
     visibility: visible;
+  }
+}
+
+.timeline.timeline-loading {
+  .timeline-day {
+    background-color: #353535;
   }
 }
 
