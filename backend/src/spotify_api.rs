@@ -549,15 +549,25 @@ pub fn create_playlist(
         "https://api.spotify.com/v1/playlists/{playlist_id}/tracks",
         playlist_id = created_playlist.id
     );
-    let body = json!({ "uris": track_spotify_ids });
-    let UpdatePlaylistResponse { snapshot_id } =
-        spotify_user_json_api_request(bearer_token, &url, &body)?;
-    info!(
-        "Successfully added {} items to playlist",
-        track_spotify_ids.len()
-    );
-    created_playlist.snapshot_id = snapshot_id;
-    created_playlist.tracks.total = track_spotify_ids.len();
+    // Can only add up to 100 tracks at a time
+    created_playlist.tracks.total = 0;
+    for track_spotify_ids in track_spotify_ids.chunks(100) {
+        let body = json!({ "uris": track_spotify_ids });
+        info!(
+            "Adding {} tracks to playlist id {}...",
+            track_spotify_ids.len(),
+            created_playlist.id
+        );
+        let UpdatePlaylistResponse { snapshot_id } =
+            spotify_user_json_api_request(bearer_token, &url, &body)?;
+        info!(
+            "Successfully added {} items to playlist id {}",
+            track_spotify_ids.len(),
+            created_playlist.id
+        );
+        created_playlist.snapshot_id = snapshot_id;
+        created_playlist.tracks.total += track_spotify_ids.len();
+    }
 
     Ok(created_playlist)
 }
