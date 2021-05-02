@@ -14,7 +14,7 @@ fn weight_data_point(total_items: usize, ranking: usize) -> usize {
 }
 
 /// Give an array of top artists, extrapolates the most listened-to genres for each update.
-pub fn get_top_genres_by_artists(
+pub(crate) fn get_top_genres_by_artists(
     artists_by_id: &HashMap<String, Artist>,
     updates: &[(NaiveDateTime, TimeFrames<String>)],
     weight: bool,
@@ -67,7 +67,7 @@ pub fn get_top_genres_by_artists(
 
 /// Gets a list of all tracks for a given artist that a user has ever had in their top tracks for
 /// any time period, sorted by their frequency of appearance and ranking when appeared.
-pub fn compute_track_popularity_scores(
+pub(crate) fn compute_track_popularity_scores(
     track_rank_snapshots: &[(NaiveDateTime, TimeFrames<String>)],
 ) -> Vec<(String, usize)> {
     let mut track_scores: HashMap<String, usize> = HashMap::default();
@@ -89,7 +89,7 @@ pub fn compute_track_popularity_scores(
     top_tracks
 }
 
-pub fn compute_genre_ranking_history(
+pub(crate) fn compute_genre_ranking_history(
     updates: Vec<(NaiveDateTime, TimeFrames<crate::db_util::ArtistRanking>)>,
 ) -> (Vec<NaiveDateTime>, Vec<(String, f32)>, TimeFrames<usize>) {
     let timestamps: Vec<NaiveDateTime> = updates.iter().map(|(ts, _)| ts.clone()).collect();

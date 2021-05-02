@@ -4,7 +4,7 @@ use rocket::{
     Request, Response,
 };
 
-pub struct CorsFairing;
+pub(crate) struct CorsFairing;
 
 impl Fairing for CorsFairing {
     fn on_response(&self, request: &Request, response: &mut Response) {

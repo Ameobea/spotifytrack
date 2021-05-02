@@ -1,13 +1,13 @@
 use chrono;
 
-pub struct SpotifyTokenData {
+pub(crate) struct SpotifyTokenData {
     pub token: String,
     pub expiry: chrono::DateTime<chrono::Local>,
 }
 
 impl SpotifyTokenData {
     #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let mut s = SpotifyTokenData {
             token: "".into(),
             expiry: chrono::Local::now(),
@@ -17,7 +17,7 @@ impl SpotifyTokenData {
         s
     }
 
-    pub fn refresh(&mut self) -> Result<(), String> {
+    pub(crate) fn refresh(&mut self) -> Result<(), String> {
         let crate::models::AccessTokenResponse {
             access_token,
             expires_in,
@@ -33,7 +33,7 @@ impl SpotifyTokenData {
         Ok(())
     }
 
-    pub fn get(&mut self) -> Result<String, String> {
+    pub(crate) fn get(&mut self) -> Result<String, String> {
         let now = chrono::Local::now();
         if now > self.expiry {
             info!(

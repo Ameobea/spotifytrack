@@ -21,7 +21,7 @@ use crate::{
     DbConn,
 };
 
-pub fn get_user_by_spotify_id(
+pub(crate) fn get_user_by_spotify_id(
     conn: &DbConn,
     supplied_spotify_id: &str,
 ) -> Result<Option<User>, String> {
@@ -34,12 +34,12 @@ pub fn get_user_by_spotify_id(
     )
 }
 
-pub fn stringify_diesel_err(err: diesel::result::Error) -> String {
+pub(crate) fn stringify_diesel_err(err: diesel::result::Error) -> String {
     error!("Error querying database: {:?}", err);
     String::from("Error querying database")
 }
 
-pub fn diesel_not_found_to_none<T>(
+pub(crate) fn diesel_not_found_to_none<T>(
     res: Result<T, diesel::result::Error>,
 ) -> Result<Option<T>, String> {
     match res {
@@ -57,7 +57,7 @@ struct StatsQueryResultItem {
 
 /// Returns the top artists for the last update for the given user.  Items are returned as
 /// `(timeframe_id, artist)`.
-pub fn get_artist_stats(
+pub(crate) fn get_artist_stats(
     user: &User,
     conn: DbConn,
     spotify_access_token: &str,
@@ -109,7 +109,7 @@ pub fn get_artist_stats(
     Ok(Some(fetched_artists))
 }
 
-pub fn get_artist_rank_history_single_artist(
+pub(crate) fn get_artist_rank_history_single_artist(
     user: &User,
     conn: DbConn,
     artist_spotify_id: &str,
@@ -153,7 +153,7 @@ pub fn get_artist_rank_history_single_artist(
     Ok(Some(output))
 }
 
-pub fn group_updates_by_timestamp<T>(
+pub(crate) fn group_updates_by_timestamp<T>(
     get_timestamp: fn(update: &T) -> NaiveDateTime,
     updates: &[T],
 ) -> HashMap<NaiveDateTime, Vec<&T>> {
@@ -247,7 +247,7 @@ fn get_entity_stats_history<
     return Ok(Some((entities_by_id, updates)));
 }
 
-pub fn get_artist_stats_history(
+pub(crate) fn get_artist_stats_history(
     user: &User,
     conn: DbConn,
     spotify_access_token: &str,
@@ -282,12 +282,12 @@ pub fn get_artist_stats_history(
 }
 
 #[derive(Debug, Serialize)]
-pub struct ArtistRanking {
+pub(crate) struct ArtistRanking {
     pub artist_spotify_id: String,
     pub ranking: u16,
 }
 
-pub fn get_genre_stats_history(
+pub(crate) fn get_genre_stats_history(
     user: &User,
     conn: DbConn,
     spotify_access_token: &str,
@@ -357,7 +357,7 @@ pub fn get_genre_stats_history(
 
 /// Returns a list of track data items for each of the top tracks for the user's most recent update.
 /// The first item of the tuple is the timeframe ID: short, medium, long.
-pub fn get_track_stats(
+pub(crate) fn get_track_stats(
     user: &User,
     conn: DbConn,
     spotify_access_token: &str,
@@ -411,7 +411,7 @@ pub fn get_track_stats(
 /// Retrieves the top tracks for all timeframes for each update for a given user.  Rather than
 /// duplicating track metadata, each timeframe simply stores the track ID and a `HashMap` is
 /// returned which serves as a local lookup tool for the track metadata.
-pub fn get_track_stats_history(
+pub(crate) fn get_track_stats_history(
     user: &User,
     conn: DbConn,
     spotify_access_token: &str,
@@ -463,7 +463,7 @@ pub fn get_track_stats_history(
 
 /// Retrieves a list of the internal mapped Spotify ID for each of the provided spotify IDs,
 /// inserting new entries as needed and taking care of it all behind the scenes.
-pub fn retrieve_mapped_spotify_ids<'a, T: Iterator<Item = &'a String> + Clone>(
+pub(crate) fn retrieve_mapped_spotify_ids<'a, T: Iterator<Item = &'a String> + Clone>(
     conn: &DbConn,
     spotify_ids: T,
 ) -> Result<HashMap<String, i32>, String> {
@@ -506,7 +506,7 @@ pub fn retrieve_mapped_spotify_ids<'a, T: Iterator<Item = &'a String> + Clone>(
 
 /// Using the list of all stored track spotify IDs, retrieves fresh track metadata for all of them
 /// and populates the mapping table with artist-track pairs for all of them
-pub fn populate_tracks_artists_table(
+pub(crate) fn populate_tracks_artists_table(
     conn: &DbConn,
     spotify_access_token: &str,
 ) -> Result<(), String> {
@@ -585,7 +585,7 @@ pub fn populate_tracks_artists_table(
         .map(|_| ())
 }
 
-pub fn populate_artists_genres_table(
+pub(crate) fn populate_artists_genres_table(
     conn: &DbConn,
     spotify_access_token: &str,
 ) -> Result<(), String> {
@@ -681,7 +681,7 @@ pub fn populate_artists_genres_table(
 
 /// Sets the `last_updated_time` column for the provided user to the provided `update_time`.
 /// Returns the number of rows updated or an error message.
-pub fn update_user_last_updated(
+pub(crate) fn update_user_last_updated(
     user: &User,
     conn: &DbConn,
     update_time: NaiveDateTime,
@@ -697,7 +697,7 @@ pub fn update_user_last_updated(
         })
 }
 
-pub fn get_artist_timeline_events(
+pub(crate) fn get_artist_timeline_events(
     conn: &DbConn,
     user_id: i64,
     start_day: NaiveDateTime,
@@ -725,7 +725,7 @@ pub fn get_artist_timeline_events(
         .load(&conn.0)
 }
 
-pub fn get_track_timeline_events(
+pub(crate) fn get_track_timeline_events(
     conn: &DbConn,
     user_id: i64,
     start_day: NaiveDateTime,
@@ -753,7 +753,7 @@ pub fn get_track_timeline_events(
         .load(&conn.0)
 }
 
-pub fn get_all_top_tracks_for_user(
+pub(crate) fn get_all_top_tracks_for_user(
     conn: &DbConn,
     user_id: i64,
 ) -> Result<Vec<(i32, String)>, diesel::result::Error> {
@@ -769,10 +769,11 @@ pub fn get_all_top_tracks_for_user(
             tracks_users_first_seen::dsl::mapped_spotify_id,
             spotify_items::dsl::spotify_id,
         ))
+        .distinct()
         .load(&conn.0)
 }
 
-pub fn get_all_top_artists_for_user(
+pub(crate) fn get_all_top_artists_for_user(
     conn: &DbConn,
     user_id: i64,
 ) -> Result<Vec<(i32, String)>, diesel::result::Error> {
@@ -788,10 +789,11 @@ pub fn get_all_top_artists_for_user(
             artists_users_first_seen::dsl::mapped_spotify_id,
             spotify_items::dsl::spotify_id,
         ))
+        .distinct()
         .load(&conn.0)
 }
 
-pub fn refresh_user_access_token(
+pub(crate) fn refresh_user_access_token(
     conn: &DbConn,
     user: &mut User,
 ) -> Result<Option<status::Custom<String>>, String> {

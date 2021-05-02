@@ -5,7 +5,7 @@ use crate::{
     DbConn,
 };
 
-pub fn generate_shared_playlist_track_spotify_ids(
+pub(crate) fn generate_shared_playlist_track_spotify_ids(
     conn1: DbConn,
     conn2: DbConn,
     conn3: DbConn,

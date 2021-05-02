@@ -3,7 +3,7 @@ use std::env;
 use base64;
 use chrono::Duration;
 
-pub struct Conf {
+pub(crate) struct Conf {
     pub client_id: String,
     pub client_secret: String,
     pub api_server_url: String,
@@ -18,7 +18,7 @@ pub struct Conf {
 }
 
 impl Conf {
-    pub fn build_from_env() -> Self {
+    pub(crate) fn build_from_env() -> Self {
         dotenv::dotenv().expect("dotenv file parsing failed");
 
         Conf {
@@ -47,11 +47,11 @@ impl Conf {
         }
     }
 
-    pub fn get_absolute_oauth_cb_uri(&self) -> String {
+    pub(crate) fn get_absolute_oauth_cb_uri(&self) -> String {
         format!("{}/oauth_cb", CONF.api_server_url)
     }
 
-    pub fn get_authorization_header_content(&self) -> String {
+    pub(crate) fn get_authorization_header_content(&self) -> String {
         format!(
             "Basic {}",
             base64::encode(&format!("{}:{}", self.client_id, self.client_secret))
@@ -60,5 +60,5 @@ impl Conf {
 }
 
 lazy_static! {
-    pub static ref CONF: Conf = Conf::build_from_env();
+    pub(crate) static ref CONF: Conf = Conf::build_from_env();
 }

@@ -12,7 +12,7 @@ use crate::schema::{
 
 #[derive(Insertable)]
 #[table_name = "users"]
-pub struct NewUser {
+pub(crate) struct NewUser {
     pub creation_time: NaiveDateTime,
     pub last_update_time: NaiveDateTime,
     pub spotify_id: String,
@@ -22,7 +22,7 @@ pub struct NewUser {
 }
 
 #[derive(Serialize, Queryable, Clone, Debug)]
-pub struct User {
+pub(crate) struct User {
     pub id: i64,
     pub creation_time: NaiveDateTime,
     pub last_update_time: NaiveDateTime,
@@ -35,7 +35,7 @@ pub struct User {
 #[derive(Serialize, Insertable, Associations)]
 #[belongs_to(User)]
 #[table_name = "track_rank_snapshots"]
-pub struct NewTrackHistoryEntry {
+pub(crate) struct NewTrackHistoryEntry {
     pub user_id: i64,
     pub mapped_spotify_id: i32,
     pub update_time: NaiveDateTime,
@@ -46,7 +46,7 @@ pub struct NewTrackHistoryEntry {
 #[derive(Serialize, Insertable, Associations)]
 #[belongs_to(User)]
 #[table_name = "artist_rank_snapshots"]
-pub struct NewArtistHistoryEntry {
+pub(crate) struct NewArtistHistoryEntry {
     pub user_id: i64,
     pub mapped_spotify_id: i32,
     pub update_time: NaiveDateTime,
@@ -56,40 +56,40 @@ pub struct NewArtistHistoryEntry {
 
 #[derive(Serialize, Associations, Debug, Queryable)]
 #[table_name = "spotify_items"]
-pub struct SpotifyIdMapping {
+pub(crate) struct SpotifyIdMapping {
     pub id: i32,
     pub spotify_id: String,
 }
 
 #[derive(Serialize, Insertable)]
 #[table_name = "spotify_items"]
-pub struct NewSpotifyIdMapping<'a> {
+pub(crate) struct NewSpotifyIdMapping<'a> {
     pub spotify_id: &'a str,
 }
 
 #[derive(Insertable)]
 #[table_name = "tracks_artists"]
-pub struct TrackArtistPair {
+pub(crate) struct TrackArtistPair {
     pub track_id: i32,
     pub artist_id: i32,
 }
 
 #[derive(Insertable)]
 #[table_name = "artists_genres"]
-pub struct ArtistGenrePair {
+pub(crate) struct ArtistGenrePair {
     pub artist_id: i32,
     pub genre: String,
 }
 
 #[derive(Serialize)]
-pub struct TimeFrames<T: Serialize> {
+pub(crate) struct TimeFrames<T: Serialize> {
     pub short: Vec<T>,
     pub medium: Vec<T>,
     pub long: Vec<T>,
 }
 
 impl<T: Serialize> TimeFrames<T> {
-    pub fn add_item(&mut self, timeframe: &str, item: T) {
+    pub(crate) fn add_item(&mut self, timeframe: &str, item: T) {
         let collection = match timeframe {
             "short" => &mut self.short,
             "medium" => &mut self.medium,
@@ -100,7 +100,7 @@ impl<T: Serialize> TimeFrames<T> {
         collection.push(item);
     }
 
-    pub fn set(&mut self, timeframe: &str, items: Vec<T>) {
+    pub(crate) fn set(&mut self, timeframe: &str, items: Vec<T>) {
         let collection = match timeframe {
             "short" => &mut self.short,
             "medium" => &mut self.medium,
@@ -111,7 +111,7 @@ impl<T: Serialize> TimeFrames<T> {
         *collection = items;
     }
 
-    pub fn add_item_by_id(&mut self, timeframe_id: u8, item: T) {
+    pub(crate) fn add_item_by_id(&mut self, timeframe_id: u8, item: T) {
         let collection = match timeframe_id {
             0 => &mut self.short,
             1 => &mut self.medium,
@@ -122,7 +122,7 @@ impl<T: Serialize> TimeFrames<T> {
         collection.push(item);
     }
 
-    pub fn map<U: Serialize>(self, pred: fn(val: T) -> U) -> TimeFrames<U> {
+    pub(crate) fn map<U: Serialize>(self, pred: fn(val: T) -> U) -> TimeFrames<U> {
         TimeFrames {
             short: self.short.into_iter().map(pred).collect(),
             medium: self.medium.into_iter().map(pred).collect(),
@@ -130,7 +130,7 @@ impl<T: Serialize> TimeFrames<T> {
         }
     }
 
-    pub fn flat_map<U: Serialize, I: Iterator<Item = TimeFrames<T>>>(
+    pub(crate) fn flat_map<U: Serialize, I: Iterator<Item = TimeFrames<T>>>(
         timeframes: I,
         pred: fn(items: Vec<T>) -> U,
     ) -> TimeFrames<U> {
@@ -190,7 +190,7 @@ where
 }
 
 impl<'a, T: Serialize> TimeFrames<T> {
-    pub fn iter(&'a self) -> impl Iterator<Item = (&'static str, &'a Vec<T>)> {
+    pub(crate) fn iter(&'a self) -> impl Iterator<Item = (&'static str, &'a Vec<T>)> {
         vec![
             ("short", &self.short),
             ("medium", &self.medium),
@@ -201,14 +201,14 @@ impl<'a, T: Serialize> TimeFrames<T> {
 }
 
 #[derive(Serialize)]
-pub struct StatsSnapshot {
+pub(crate) struct StatsSnapshot {
     pub last_update_time: NaiveDateTime,
     pub tracks: TimeFrames<Track>,
     pub artists: TimeFrames<Artist>,
 }
 
 impl StatsSnapshot {
-    pub fn new(last_update_time: NaiveDateTime) -> Self {
+    pub(crate) fn new(last_update_time: NaiveDateTime) -> Self {
         StatsSnapshot {
             last_update_time,
             tracks: TimeFrames::default(),
@@ -234,20 +234,20 @@ pub enum OAuthTokenResponse {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct Followers {
+pub(crate) struct Followers {
     pub href: Option<String>,
     pub total: usize,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct Image {
+pub(crate) struct Image {
     // pub height: Option<usize>,
     pub url: String,
     // pub width: Option<usize>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct Album {
+pub(crate) struct Album {
     // pub album_group: Option<String>,
     // pub album_type: String,
     pub artists: Vec<Artist>,
@@ -262,12 +262,12 @@ pub struct Album {
 }
 
 #[derive(Clone, Deserialize, Debug)]
-pub struct TopTracksResponse {
+pub(crate) struct TopTracksResponse {
     pub items: Vec<Option<Track>>,
 }
 
 #[derive(Queryable, QueryableByName)]
-pub struct StatsHistoryQueryResItem {
+pub(crate) struct StatsHistoryQueryResItem {
     #[sql_type = "::diesel::sql_types::Text"]
     pub spotify_id: String,
     #[sql_type = "::diesel::sql_types::Datetime"]
@@ -279,14 +279,14 @@ pub struct StatsHistoryQueryResItem {
 }
 
 #[derive(Queryable)]
-pub struct ArtistRankHistoryResItem {
+pub(crate) struct ArtistRankHistoryResItem {
     pub update_time: NaiveDateTime,
     pub ranking: u16,
     pub timeframe: u8,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct Track {
+pub(crate) struct Track {
     pub album: Album,
     pub artists: Vec<Artist>,
     // pub available_markets: Vec<String>,
@@ -304,12 +304,12 @@ pub struct Track {
 }
 
 #[derive(Clone, Deserialize, Debug)]
-pub struct TopArtistsResponse {
+pub(crate) struct TopArtistsResponse {
     pub items: Vec<Artist>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct Artist {
+pub(crate) struct Artist {
     // pub followers: Option<Followers>,
     pub genres: Option<Vec<String>>,
     // pub href: String,
@@ -321,7 +321,7 @@ pub struct Artist {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct UserProfile {
+pub(crate) struct UserProfile {
     pub display_name: String,
     // pub followers: Followers,
     // pub href: String,
@@ -337,12 +337,12 @@ pub struct UserProfile {
 //     }
 // }
 #[derive(Deserialize, Clone, Debug)]
-pub struct SpotifyBatchArtistsResponse {
+pub(crate) struct SpotifyBatchArtistsResponse {
     pub artists: Vec<Artist>,
 }
 
 #[derive(Deserialize, Clone, Debug)]
-pub struct SpotifyErrorInner {
+pub(crate) struct SpotifyErrorInner {
     status: Option<i32>,
     message: Option<String>,
     #[serde(flatten)]
@@ -350,16 +350,16 @@ pub struct SpotifyErrorInner {
 }
 
 #[derive(Deserialize, Clone, Debug)]
-pub struct SpotifyError {
+pub(crate) struct SpotifyError {
     pub error: SpotifyErrorInner,
     #[serde(flatten)]
     other: HashMap<String, Value>,
 }
 
-#[serde(untagged)]
 #[derive(Deserialize, Clone, Debug)]
 #[serde(bound = "T: for<'d> ::serde::Deserialize<'d>")]
-pub enum SpotifyResponse<T: std::fmt::Debug + Clone> {
+#[serde(untagged)]
+pub(crate) enum SpotifyResponse<T: std::fmt::Debug + Clone> {
     Success(T),
     Error(SpotifyError),
 }
@@ -397,12 +397,12 @@ impl<T: for<'de> Deserialize<'de> + std::fmt::Debug + Clone> std::ops::Try for S
 }
 
 #[derive(Deserialize, Clone, Debug)]
-pub struct SpotifyBatchTracksResponse {
+pub(crate) struct SpotifyBatchTracksResponse {
     pub tracks: Vec<Track>,
 }
 
 #[derive(Deserialize, Clone, Debug)]
-pub struct AccessTokenResponse {
+pub(crate) struct AccessTokenResponse {
     pub access_token: String,
     pub token_type: String,
     pub expires_in: usize,
@@ -422,7 +422,7 @@ impl HasSpotifyId for Track {
 
 #[derive(Serialize)]
 #[serde(tag = "type")]
-pub enum TimelineEventType {
+pub(crate) enum TimelineEventType {
     #[serde(rename = "firstUpdate")]
     FirstUpdate,
     #[serde(rename = "artistFirstSeen")]
@@ -432,7 +432,7 @@ pub enum TimelineEventType {
 }
 
 #[derive(Serialize)]
-pub struct TimelineEvent {
+pub(crate) struct TimelineEvent {
     pub date: NaiveDate,
     pub id: usize,
     #[serde(flatten)]
@@ -440,12 +440,12 @@ pub struct TimelineEvent {
 }
 
 #[derive(Serialize)]
-pub struct Timeline {
+pub(crate) struct Timeline {
     pub events: Vec<TimelineEvent>,
 }
 
 #[derive(Serialize)]
-pub struct UserComparison {
+pub(crate) struct UserComparison {
     pub tracks: Vec<Track>,
     pub artists: Vec<Artist>,
     pub genres: Vec<String>,
@@ -454,19 +454,19 @@ pub struct UserComparison {
 }
 
 #[derive(Default, Debug, Clone, Deserialize)]
-pub struct PlaylistExternalUrls {
+pub(crate) struct PlaylistExternalUrls {
     pub spotify: String,
 }
 
 #[derive(Default, Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PlaylistFollowers {
+pub(crate) struct PlaylistFollowers {
     pub href: Option<String>,
     pub total: i64,
 }
 
 #[derive(Default, Debug, Clone, Deserialize)]
-pub struct PlaylistOwner {
+pub(crate) struct PlaylistOwner {
     pub external_urls: PlaylistExternalUrls,
     pub href: String,
     pub id: String,
@@ -476,7 +476,7 @@ pub struct PlaylistOwner {
 }
 
 #[derive(Default, Debug, Clone, Deserialize)]
-pub struct PlaylistTracks {
+pub(crate) struct PlaylistTracks {
     pub href: String,
     pub items: Vec<Track>,
     pub limit: usize,
@@ -487,7 +487,7 @@ pub struct PlaylistTracks {
 }
 
 #[derive(Default, Debug, Clone, Deserialize)]
-pub struct Playlist {
+pub(crate) struct Playlist {
     pub collaborative: bool,
     pub description: Option<String>,
     pub external_urls: PlaylistExternalUrls,
@@ -506,7 +506,7 @@ pub struct Playlist {
 }
 
 #[derive(Serialize, Default, Debug)]
-pub struct CreatePlaylistRequest {
+pub(crate) struct CreatePlaylistRequest {
     pub name: String,
     pub public: Option<bool>,
     pub collaborative: Option<bool>,
@@ -514,12 +514,24 @@ pub struct CreatePlaylistRequest {
 }
 
 #[derive(Deserialize, Debug, Clone)]
-pub struct UpdatePlaylistResponse {
+pub(crate) struct UpdatePlaylistResponse {
     pub snapshot_id: String,
 }
 
 #[derive(Deserialize)]
-pub struct CreateSharedPlaylistRequest {
+pub(crate) struct CreateSharedPlaylistRequest {
     pub user1_id: String,
     pub user2_id: String,
+}
+
+#[derive(Clone, Deserialize, Debug)]
+pub(crate) struct GetRelatedArtistsResponse {
+    pub artists: Vec<Artist>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RelatedArtistsGraph {
+    pub extra_artists: Vec<Artist>,
+    pub related_artists: HashMap<String, Vec<String>>,
 }

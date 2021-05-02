@@ -13,22 +13,24 @@ use rocket_contrib::json::Json;
 use crate::{
     benchmarking::{mark, start},
     conf::CONF,
-    db_util,
+    db_util::{self, get_all_top_artists_for_user},
     models::{
-        Artist, CreateSharedPlaylistRequest, NewUser, OAuthTokenResponse, Playlist, StatsSnapshot,
-        TimeFrames, Timeline, TimelineEvent, TimelineEventType, Track, User, UserComparison,
+        Artist, CreateSharedPlaylistRequest, NewUser, OAuthTokenResponse, Playlist,
+        RelatedArtistsGraph, StatsSnapshot, TimeFrames, Timeline, TimelineEvent, TimelineEventType,
+        Track, User, UserComparison,
     },
+    spotify_api::get_multiple_related_artists,
     DbConn, SpotifyTokenData,
 };
 
 const SPOTIFY_TOKEN_FETCH_URL: &str = "https://accounts.spotify.com/api/token";
 
 #[get("/")]
-pub fn index() -> &'static str { "Application successfully started!" }
+pub(crate) fn index() -> &'static str { "Application successfully started!" }
 
 /// Retrieves the current top tracks and artist for the current user
 #[get("/stats/<username>")]
-pub fn get_current_stats(
+pub(crate) fn get_current_stats(
     conn: DbConn,
     conn2: DbConn,
     username: String,
@@ -87,7 +89,7 @@ pub fn get_current_stats(
 }
 
 #[derive(Serialize)]
-pub struct ArtistStats {
+pub(crate) struct ArtistStats {
     pub artist: Artist,
     pub tracks_by_id: HashMap<String, Track>,
     pub popularity_history: Vec<(NaiveDateTime, [Option<u16>; 3])>,
@@ -95,7 +97,7 @@ pub struct ArtistStats {
 }
 
 #[get("/stats/<username>/artist/<artist_id>")]
-pub fn get_artist_stats(
+pub(crate) fn get_artist_stats(
     conn: DbConn,
     conn2: DbConn,
     token_data: State<Mutex<SpotifyTokenData>>,
@@ -159,13 +161,13 @@ pub fn get_artist_stats(
 }
 
 #[derive(Serialize)]
-pub struct GenresHistory {
+pub(crate) struct GenresHistory {
     pub timestamps: Vec<NaiveDateTime>,
     pub history_by_genre: HashMap<String, Vec<Option<usize>>>,
 }
 
 #[get("/stats/<username>/genre_history")]
-pub fn get_genre_history(
+pub(crate) fn get_genre_history(
     conn: DbConn,
     token_data: State<Mutex<SpotifyTokenData>>,
     username: String,
@@ -197,7 +199,7 @@ pub fn get_genre_history(
 }
 
 #[derive(Serialize)]
-pub struct GenreStats {
+pub(crate) struct GenreStats {
     pub artists_by_id: HashMap<String, Artist>,
     pub top_artists: Vec<(String, f32)>,
     pub timestamps: Vec<NaiveDateTime>,
@@ -205,7 +207,7 @@ pub struct GenreStats {
 }
 
 #[get("/stats/<username>/genre/<genre>")]
-pub fn get_genre_stats(
+pub(crate) fn get_genre_stats(
     conn: DbConn,
     token_data: State<Mutex<SpotifyTokenData>>,
     username: String,
@@ -241,7 +243,7 @@ pub fn get_genre_stats(
 }
 
 #[get("/stats/<username>/timeline?<start_day_id>&<end_day_id>")]
-pub fn get_timeline(
+pub(crate) fn get_timeline(
     conn: DbConn,
     token_data: State<Mutex<SpotifyTokenData>>,
     conn_2: DbConn,
@@ -334,7 +336,7 @@ pub fn get_timeline(
 
 /// Redirects to the Spotify authorization page for the application
 #[get("/authorize?<playlist_perms>&<state>")]
-pub fn authorize(playlist_perms: Option<&RawStr>, state: Option<&RawStr>) -> Redirect {
+pub(crate) fn authorize(playlist_perms: Option<&RawStr>, state: Option<&RawStr>) -> Redirect {
     let scopes = match playlist_perms.map(|s| s.as_str()) {
         None | Some("false") | Some("False") | Some("0") =>
             "user-read-recently-played%20user-top-read%20user-follow-read",
@@ -424,7 +426,7 @@ fn generate_shared_playlist(
 /// authentication request and handles retrieving user tokens, creating an entry for the user in the
 /// users table, and fetching an initial stats snapshot.
 #[get("/oauth_cb?<error>&<code>&<state>")]
-pub fn oauth_cb(
+pub(crate) fn oauth_cb(
     conn1: DbConn,
     conn2: DbConn,
     conn3: DbConn,
@@ -646,7 +648,7 @@ fn validate_api_token(api_token_data: rocket::data::Data) -> Result<bool, String
 /// This route is internal and hit by the cron job that is called to periodically update the stats
 /// for the least recently updated user.
 #[post("/update_user?<user_id>", data = "<api_token_data>")]
-pub fn update_user(
+pub(crate) fn update_user(
     conn: DbConn,
     api_token_data: rocket::data::Data,
     user_id: Option<&RawStr>,
@@ -715,7 +717,7 @@ pub fn update_user(
 }
 
 #[post("/populate_tracks_artists_mapping_table", data = "<api_token_data>")]
-pub fn populate_tracks_artists_mapping_table(
+pub(crate) fn populate_tracks_artists_mapping_table(
     conn: DbConn,
     api_token_data: rocket::data::Data,
     token_data: State<Mutex<SpotifyTokenData>>,
@@ -741,7 +743,7 @@ pub fn populate_tracks_artists_mapping_table(
 }
 
 #[post("/populate_artists_genres_mapping_table", data = "<api_token_data>")]
-pub fn populate_artists_genres_mapping_table(
+pub(crate) fn populate_artists_genres_mapping_table(
     conn: DbConn,
     api_token_data: rocket::data::Data,
     token_data: State<Mutex<SpotifyTokenData>>,
@@ -864,7 +866,7 @@ fn compute_comparison(
 }
 
 #[get("/compare/<user1>/<user2>")]
-pub fn compare_users(
+pub(crate) fn compare_users(
     conn1: DbConn,
     conn2: DbConn,
     conn3: DbConn,
@@ -875,4 +877,57 @@ pub fn compare_users(
 ) -> Result<Option<Json<UserComparison>>, String> {
     compute_comparison(&user1, &user2, conn1, conn2, conn3, conn4, token_data)
         .map(|res| res.map(Json))
+}
+
+#[get("/stats/<user_id>/related_artist_graph")]
+pub(crate) fn get_related_artists_graph(
+    conn: DbConn,
+    user_id: String,
+    token_data: State<Mutex<SpotifyTokenData>>,
+) -> Result<Option<Json<RelatedArtistsGraph>>, String> {
+    let User { id: user_id, .. } = match db_util::get_user_by_spotify_id(&conn, &user_id)? {
+        Some(user) => user,
+        None => {
+            return Ok(None);
+        },
+    };
+    let spotify_access_token = {
+        let token_data = &mut *(&*token_data).lock().unwrap();
+        token_data.get()
+    }?;
+
+    // Start off by getting all artists for the user from all timeframes
+    let all_artists_for_user = get_all_top_artists_for_user(&conn, user_id).map_err(|err| {
+        error!("Error fetching all artists for user: {:?}", err);
+        String::from("Internal DB error")
+    })?;
+    let all_artist_ids_for_user: Vec<&str> = all_artists_for_user
+        .iter()
+        .map(|(_internal_id, spotify_id)| spotify_id.as_str())
+        .collect();
+
+    // Get related artists for all of them
+    let all_artist_ids_for_user_clone = all_artist_ids_for_user.clone();
+    let (extra_artists, related_artists) = rayon::join(
+        move || {
+            // TODO
+            vec![]
+        },
+        move || get_multiple_related_artists(spotify_access_token, &all_artist_ids_for_user_clone),
+    );
+    let related_artists = related_artists?;
+
+    let mut related_artists_by_id = HashMap::default();
+    for (artist_id, related_artists) in all_artist_ids_for_user
+        .into_iter()
+        .zip(related_artists.into_iter())
+    {
+        related_artists_by_id.insert(artist_id.to_owned(), related_artists);
+    }
+    let out = RelatedArtistsGraph {
+        extra_artists,
+        related_artists: related_artists_by_id,
+    };
+
+    Ok(Some(Json(out)))
 }

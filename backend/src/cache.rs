@@ -31,7 +31,14 @@ fn get_conn() -> Result<diesel::r2d2::PooledConnection<RedisConnectionManager>, 
     })
 }
 
-pub fn set_hash_items<T: Serialize>(hash_name: &str, kv_pairs: &[(&str, T)]) -> Result<(), String> {
+pub(crate) fn set_hash_items<T: Serialize>(
+    hash_name: &str,
+    kv_pairs: &[(&str, T)],
+) -> Result<(), String> {
+    if kv_pairs.is_empty() {
+        return Ok(());
+    }
+
     let kv_pairs_serialized = kv_pairs
         .iter()
         .map(|(key, val)| -> Result<(&str, String), String> {
@@ -55,7 +62,7 @@ pub fn set_hash_items<T: Serialize>(hash_name: &str, kv_pairs: &[(&str, T)]) -> 
         })
 }
 
-pub fn get_hash_items<T: for<'de> Deserialize<'de>>(
+pub(crate) fn get_hash_items<T: for<'de> Deserialize<'de>>(
     hash_name: &str,
     keys: &[&str],
 ) -> Result<Vec<Option<T>>, String> {

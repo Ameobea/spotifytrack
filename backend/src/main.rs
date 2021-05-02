@@ -43,7 +43,7 @@ pub mod stats;
 use self::spotify_token::SpotifyTokenData;
 
 #[database("spotify_homepage")]
-pub struct DbConn(diesel::MysqlConnection);
+pub(crate) struct DbConn(diesel::MysqlConnection);
 
 fn main() {
     dotenv::dotenv().expect("dotenv file parsing failed");
@@ -61,6 +61,7 @@ fn main() {
         routes::get_genre_stats,
         routes::get_timeline,
         routes::compare_users,
+        routes::get_related_artists_graph
     ];
 
     rocket::ignite()
