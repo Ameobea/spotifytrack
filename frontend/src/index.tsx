@@ -5,7 +5,7 @@ import { Provider } from 'react-redux';
 import { ConnectedRouter } from 'connected-react-router';
 import * as Sentry from '@sentry/react';
 import { Integrations } from '@sentry/tracing';
-import { ReactQueryConfigProvider } from 'react-query';
+import { QueryClient, QueryClientProvider } from 'react-query';
 
 import Loading from 'src/components/Loading';
 const LazyHome = import('src/pages/Home');
@@ -16,11 +16,13 @@ import './index.scss';
 import OAuthRedirect from './components/OAuthRedirect';
 import Footer from './components/Footer';
 
-Sentry.init({
-  dsn: 'https://d3ca8b37e2eb4573af6046aed3f62428@sentry.ameo.design/4',
-  integrations: [new Integrations.BrowserTracing()],
-  tracesSampleRate: 0.1,
-});
+if (!window.location.host.includes('localhost')) {
+  Sentry.init({
+    dsn: 'https://d3ca8b37e2eb4573af6046aed3f62428@sentry.ameo.design/4',
+    integrations: [new Integrations.BrowserTracing()],
+    tracesSampleRate: 0.1,
+  });
+}
 
 const [Home, Stats, Compare] = [LazyHome, LazyStats, LazyCompare].map((LazyPage) => {
   const Comp = React.lazy(() => LazyPage);
@@ -44,11 +46,15 @@ const App = () => (
   </ConnectedRouter>
 );
 
+const reactQueryClient = new QueryClient({
+  defaultOptions: { queries: { refetchOnWindowFocus: false } },
+});
+
 ReactDOM.render(
   <Provider store={store}>
-    <ReactQueryConfigProvider config={{ queries: { refetchOnWindowFocus: false } }}>
+    <QueryClientProvider client={reactQueryClient}>
       <App />
-    </ReactQueryConfigProvider>
+    </QueryClientProvider>
   </Provider>,
   document.getElementById('root')!
 );

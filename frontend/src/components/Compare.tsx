@@ -23,8 +23,9 @@ const CompareInner: React.FC<{ mobile: boolean }> = ({ mobile }) => {
 
   const { data, error } = useQuery({
     queryKey: ['compare', user1, user2],
-    queryFn: fetchComparison,
-    config: { staleTime: Infinity, refetchOnMount: false },
+    queryFn: () => fetchComparison(user1, user2),
+    staleTime: Infinity,
+    refetchOnMount: false,
   });
 
   useEffect(() => {

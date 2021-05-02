@@ -3,6 +3,7 @@ import { useQuery } from 'react-query';
 import dayjs, { Dayjs } from 'dayjs';
 import { UnimplementedError } from 'ameo-utils';
 import { withMobileOrDesktop, withMobileProp } from 'ameo-utils/dist/responsive';
+import * as R from 'ramda';
 
 import { useUsername } from 'src/store/selectors';
 import { fetchTimelineEvents } from 'src/api';
@@ -139,18 +140,19 @@ interface InnerTimelineProps {
   setSelectedDay: (newSelectedDay: TimelineDay | null) => void;
 }
 
-const DesktopTimeline: React.FC<InnerTimelineProps> = ({ weeks, selectedDay, setSelectedDay }) => (
-  <>
-    {weeks.map((week) => (
-      <DesktopTimelineWeek
-        key={week[0].date}
-        days={week}
-        selectedDay={selectedDay}
-        setSelectedDay={setSelectedDay}
-      />
-    ))}
-  </>
-);
+const DesktopTimeline: React.FC<InnerTimelineProps> = ({ weeks, selectedDay, setSelectedDay }) =>
+  console.log(weeks) || (
+    <>
+      {weeks.map((week) => (
+        <DesktopTimelineWeek
+          key={week[0].date}
+          days={week}
+          selectedDay={selectedDay}
+          setSelectedDay={setSelectedDay}
+        />
+      ))}
+    </>
+  );
 
 const MobileTimelineWeek: React.FC<
   TimelineWeekProps & { isSelected: boolean; onSelect: () => void }
@@ -253,10 +255,9 @@ const Timeline: React.FC<{ mobile: boolean }> = ({ mobile }) => {
   const username = useUsername();
 
   const [curMonth, setCurMonth] = useState(dayjs().startOf('month'));
-  const { data } = useQuery({
-    queryKey: ['timeline', username, curMonth.toString()],
-    queryFn: fetchTimelineEvents,
-  });
+  const { data } = useQuery(['timeline', username, curMonth.toString()], () =>
+    fetchTimelineEvents(username, curMonth.toString())
+  );
 
   const weeks = useMemo(() => {
     const month = curMonth.month();
@@ -270,11 +271,20 @@ const Timeline: React.FC<{ mobile: boolean }> = ({ mobile }) => {
     const startOfPrevMonth = startOfCurMonth.subtract(2, 'day');
     const daysInPrevMonth = startOfPrevMonth.daysInMonth();
     for (let i = 0; i < firstDayOfWeek; i++) {
+      const rawDate = startOfCurMonth.subtract(firstDayOfWeek - i, 'day');
+      const date = rawDate.format('YYYY-MM-DD');
+      const [eventsForDay, rest] = data?.events
+        ? R.partition((evt) => evt.date === date, data.events)
+        : [[], []];
+      if (data?.events) {
+        data.events = rest;
+      }
+
       curWeek.push({
         date: daysInPrevMonth - (firstDayOfWeek - i),
-        rawDate: startOfCurMonth.subtract(firstDayOfWeek - i, 'day'),
+        rawDate,
         isPrevMonth: true,
-        events: [],
+        events: eventsForDay,
       });
     }
 

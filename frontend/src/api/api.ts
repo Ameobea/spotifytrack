@@ -41,11 +41,7 @@ export const fetchArtistStats = (
 export const fetchGenreHistory = (username: string) =>
   getJsonEndpoint(getUrl(`/stats/${username}/genre_history`));
 
-export const fetchTimelineEvents = async (
-  _key: string,
-  username: string | null,
-  startOfCurMonthS: string
-) => {
+export const fetchTimelineEvents = async (username: string | null, startOfCurMonthS: string) => {
   if (!username) {
     return null;
   }
@@ -64,7 +60,6 @@ export const fetchTimelineEvents = async (
 };
 
 export const fetchComparison = (
-  _key: string,
   user1: string,
   user2: string
 ): Promise<{

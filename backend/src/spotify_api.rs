@@ -222,10 +222,10 @@ fn map_timeframe_to_timeframe_id(timeframe: &str) -> u8 {
         "short" => 0,
         "medium" => 1,
         "long" => 2,
-        _ => panic!(format!(
+        _ => panic!(
             "Tried to convert invalid timeframe to id: \"{}\"",
             timeframe
-        )),
+        ),
     }
 }
 
