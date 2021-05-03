@@ -2,7 +2,7 @@ use std::{io::Read, sync::Mutex};
 
 use chrono::{NaiveDate, NaiveDateTime, Utc};
 use diesel::{self, prelude::*};
-use fnv::FnvHashMap as HashMap;
+use fnv::{FnvHashMap as HashMap, FnvHashSet};
 use rocket::{
     http::{RawStr, Status},
     response::{status, Redirect},
@@ -19,7 +19,7 @@ use crate::{
         RelatedArtistsGraph, StatsSnapshot, TimeFrames, Timeline, TimelineEvent, TimelineEventType,
         Track, User, UserComparison,
     },
-    spotify_api::get_multiple_related_artists,
+    spotify_api::{fetch_artists, get_multiple_related_artists},
     DbConn, SpotifyTokenData,
 };
 
@@ -879,7 +879,7 @@ pub(crate) fn compare_users(
         .map(|res| res.map(Json))
 }
 
-#[get("/stats/<user_id>/related_artist_graph")]
+#[get("/stats/<user_id>/related_artists_graph")]
 pub(crate) fn get_related_artists_graph(
     conn: DbConn,
     user_id: String,
@@ -907,23 +907,35 @@ pub(crate) fn get_related_artists_graph(
         .collect();
 
     // Get related artists for all of them
-    let all_artist_ids_for_user_clone = all_artist_ids_for_user.clone();
-    let (extra_artists, related_artists) = rayon::join(
-        move || {
-            // TODO
-            vec![]
-        },
-        move || get_multiple_related_artists(spotify_access_token, &all_artist_ids_for_user_clone),
-    );
-    let related_artists = related_artists?;
+    let related_artists =
+        get_multiple_related_artists(spotify_access_token.clone(), &all_artist_ids_for_user)?;
+
+    let all_artist_ids: FnvHashSet<String> = all_artist_ids_for_user
+        .clone()
+        .into_iter()
+        .map(String::from)
+        .chain(
+            related_artists
+                .iter()
+                .flat_map(|related_artists| related_artists.iter().cloned()),
+        )
+        .collect();
 
     let mut related_artists_by_id = HashMap::default();
     for (artist_id, related_artists) in all_artist_ids_for_user
         .into_iter()
-        .zip(related_artists.into_iter())
+        .zip(related_artists.iter())
     {
-        related_artists_by_id.insert(artist_id.to_owned(), related_artists);
+        related_artists_by_id.insert(artist_id.to_owned(), related_artists.clone());
     }
+
+    let all_artist_ids: Vec<_> = all_artist_ids.iter().map(String::as_str).collect();
+    let extra_artists_list = fetch_artists(&spotify_access_token, &all_artist_ids)?;
+    let mut extra_artists = HashMap::default();
+    for artist in extra_artists_list {
+        extra_artists.insert(artist.id.clone(), artist);
+    }
+
     let out = RelatedArtistsGraph {
         extra_artists,
         related_artists: related_artists_by_id,

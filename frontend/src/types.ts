@@ -97,3 +97,8 @@ export interface TimelineData {
   events: TimelineEvent[];
   // firstUpdate: Date;
 }
+
+export interface RelatedArtistsGraphRes {
+  extraArtists: { [artistID: string]: Artist };
+  relatedArtists: { [artistID: string]: string[] };
+}

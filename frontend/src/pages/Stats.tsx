@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { PropTypesOf } from 'ameo-utils/dist/util/react';
 import { withMobileProp } from 'ameo-utils/dist/responsive';
 
-import { ReactRouterRouteProps, UserStats, TimeFrames, Track, Artist, ValueOf } from 'src/types';
+import { ReactRouterRouteProps, UserStats, Track, Artist, ValueOf } from 'src/types';
 import { useOnce } from 'src/util/hooks';
 import { fetchUserStats } from 'src/api';
 import { mapObj } from 'src/util';
@@ -16,6 +16,7 @@ import Loading from 'src/components/Loading';
 import GenresTreemap from 'src/components/GenresTreemap';
 import { useUsername } from 'src/store/selectors';
 import Timeline from 'src/components/Timeline';
+import { RelatedArtistsGraphForUser } from 'src/components/RelatedArtistsGraph';
 import './Stats.scss';
 
 export const ArtistCards: React.FC<
@@ -78,6 +79,9 @@ const StatsDetailsInner: React.FC<{ stats: UserStats; mobile: boolean }> = ({ st
 
   return (
     <div className="details">
+      <h3 className="image-box-gfid-title">Related Artists Graph</h3>
+      <RelatedArtistsGraphForUser />
+
       <ImageBoxGrid
         renderItem={(i, timeframe) => {
           if (!stats.tracks) {

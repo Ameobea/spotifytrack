@@ -16,7 +16,7 @@ module.exports = {
     filename: 'itallhappened.[name].[contenthash].js',
   },
   mode: 'development',
-  devtool: 'inline-source-map',
+  devtool: 'eval-cheap-module-source-map',
   module: {
     rules: [
       {

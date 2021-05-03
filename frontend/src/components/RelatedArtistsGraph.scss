@@ -1,0 +1,39 @@
+.related-artists-graph {
+  svg {
+    .link {
+      stroke: #9b9b9b;
+      fill: #9b9b9b;
+    }
+
+    rect {
+      fill: rgb(18, 226, 11);
+    }
+
+    .label {
+      font-family: 'PT Sans';
+      font-size: 12px;
+      fill: black;
+      cursor: default;
+    }
+  }
+
+  svg[data-artist-selected='true'] {
+    .link {
+      stroke: #333;
+      fill: #333;
+    }
+
+    rect {
+      fill: rgb(42, 88, 40);
+    }
+
+    .link.selected {
+      stroke: #ccc;
+      fill: #ccc;
+    }
+
+    rect.selected {
+      fill: rgb(18, 226, 11);
+    }
+  }
+}

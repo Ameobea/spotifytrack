@@ -1,7 +1,7 @@
 import dayjs from 'dayjs';
 
 import { API_BASE_URL } from 'src/conf';
-import { Artist, TimeFrames, TimelineData, Track } from 'src/types';
+import { Artist, RelatedArtistsGraphRes, TimeFrames, TimelineData, Track } from 'src/types';
 
 export const getUrl = (path: string) => `${API_BASE_URL}${path}`;
 
@@ -68,3 +68,10 @@ export const fetchComparison = (
   user1_username: string;
   user2_username: string;
 } | null> => getJsonEndpoint(getUrl(`/compare/${user1}/${user2}`));
+
+export const fetchRelatedArtists = async (
+  userID: string
+): Promise<RelatedArtistsGraphRes | null> => {
+  const url = getUrl(`/stats/${userID}/related_artists_graph`);
+  return getJsonEndpoint<RelatedArtistsGraphRes>(url);
+};

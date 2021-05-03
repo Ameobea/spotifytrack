@@ -140,19 +140,18 @@ interface InnerTimelineProps {
   setSelectedDay: (newSelectedDay: TimelineDay | null) => void;
 }
 
-const DesktopTimeline: React.FC<InnerTimelineProps> = ({ weeks, selectedDay, setSelectedDay }) =>
-  console.log(weeks) || (
-    <>
-      {weeks.map((week) => (
-        <DesktopTimelineWeek
-          key={week[0].date}
-          days={week}
-          selectedDay={selectedDay}
-          setSelectedDay={setSelectedDay}
-        />
-      ))}
-    </>
-  );
+const DesktopTimeline: React.FC<InnerTimelineProps> = ({ weeks, selectedDay, setSelectedDay }) => (
+  <>
+    {weeks.map((week) => (
+      <DesktopTimelineWeek
+        key={week[0].date}
+        days={week}
+        selectedDay={selectedDay}
+        setSelectedDay={setSelectedDay}
+      />
+    ))}
+  </>
+);
 
 const MobileTimelineWeek: React.FC<
   TimelineWeekProps & { isSelected: boolean; onSelect: () => void }

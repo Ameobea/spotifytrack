@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import * as R from 'ramda';
 
 import { useSelector, dispatch, actionCreators } from 'src/store';
-import { ReactRouterRouteProps, ArtistStats as ArtistStatsType, Track, Artist } from 'src/types';
+import { ReactRouterRouteProps, ArtistStats as ArtistStatsType } from 'src/types';
 import { fetchArtistStats } from 'src/api';
 import { colors } from 'src/style';
 import Loading from 'src/components/Loading';

@@ -532,6 +532,6 @@ pub(crate) struct GetRelatedArtistsResponse {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct RelatedArtistsGraph {
-    pub extra_artists: Vec<Artist>,
+    pub extra_artists: HashMap<String, Artist>,
     pub related_artists: HashMap<String, Vec<String>>,
 }
