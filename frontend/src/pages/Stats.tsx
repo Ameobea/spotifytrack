@@ -78,46 +78,47 @@ const StatsDetailsInner: React.FC<{ stats: UserStats; mobile: boolean }> = ({ st
   const [playing, setPlaying] = useState<string | false>(false);
 
   return (
-    <div className="details">
+    <>
       <h3 className="image-box-gfid-title">Related Artists Graph</h3>
       <RelatedArtistsGraphForUser />
+      <div className="details">
+        <ImageBoxGrid
+          renderItem={(i, timeframe) => {
+            if (!stats.tracks) {
+              return null;
+            }
+            const trackId = stats.tracks[timeframe][i];
+            if (!trackId) {
+              return null;
+            }
+            const track = tracksCorpus[trackId];
 
-      <ImageBoxGrid
-        renderItem={(i, timeframe) => {
-          if (!stats.tracks) {
-            return null;
-          }
-          const trackId = stats.tracks[timeframe][i];
-          if (!trackId) {
-            return null;
-          }
-          const track = tracksCorpus[trackId];
+            return (
+              <TrackCard
+                key={track.id}
+                title={track.name}
+                artists={track.album.artists}
+                previewUrl={track.preview_url}
+                imageSrc={track.album.images[0].url}
+                playing={playing}
+                setPlaying={setPlaying}
+                mobile={mobile}
+              />
+            );
+          }}
+          getItemCount={(timeframe) => (stats.tracks ? stats.tracks[timeframe].length : 0)}
+          initialItems={mobile ? 9 : 10}
+          title="Tracks"
+        />
 
-          return (
-            <TrackCard
-              key={track.id}
-              title={track.name}
-              artists={track.album.artists}
-              previewUrl={track.preview_url}
-              imageSrc={track.album.images[0].url}
-              playing={playing}
-              setPlaying={setPlaying}
-              mobile={mobile}
-            />
-          );
-        }}
-        getItemCount={(timeframe) => (stats.tracks ? stats.tracks[timeframe].length : 0)}
-        initialItems={mobile ? 9 : 10}
-        title="Tracks"
-      />
+        <ArtistCards mobile={mobile} />
 
-      <ArtistCards mobile={mobile} />
+        <Timeline />
 
-      <Timeline />
-
-      <h3 className="image-box-grid-title">Top Genres</h3>
-      <GenresTreemap />
-    </div>
+        <h3 className="image-box-grid-title">Top Genres</h3>
+        <GenresTreemap />
+      </div>
+    </>
   );
 };
 

@@ -5,7 +5,8 @@
       fill: #9b9b9b;
     }
 
-    rect {
+    rect.node {
+      cursor: pointer;
       fill: rgb(18, 226, 11);
     }
 
@@ -13,7 +14,7 @@
       font-family: 'PT Sans';
       font-size: 12px;
       fill: black;
-      cursor: default;
+      cursor: pointer;
     }
   }
 
@@ -23,7 +24,7 @@
       fill: #333;
     }
 
-    rect {
+    rect.node {
       fill: rgb(42, 88, 40);
     }
 
@@ -32,7 +33,7 @@
       fill: #ccc;
     }
 
-    rect.selected {
+    rect.node.selected {
       fill: rgb(18, 226, 11);
     }
   }

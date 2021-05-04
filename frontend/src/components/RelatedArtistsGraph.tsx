@@ -1,4 +1,4 @@
-import { AsyncOnce } from 'ameo-utils';
+import { AsyncOnce, useWindowSize } from 'ameo-utils';
 import React from 'react';
 import { useEffect } from 'react';
 import { useRef } from 'react';
@@ -36,6 +36,7 @@ class RelatedArtistsRenderer {
   private artistIndexByArtistID: Map<string, number> = new Map();
   private orderedArtists: string[] = [];
   private svg: Selection<SVGSVGElement, any, any, any>;
+  private canvas: Selection<SVGGElement, any, any, any>;
   private allLinksSelection: Selection<any, any, any, any>;
   private allNodesSelection: Selection<any, any, any, any>;
   private allLabelsSelection: Selection<any, any, any, any>;
@@ -95,7 +96,7 @@ class RelatedArtistsRenderer {
     this.links = links as any;
     this.nodes = nodes;
 
-    this.allLinksSelection = this.svg
+    this.allLinksSelection = this.canvas
       .selectAll('.link')
       .data(links)
       .enter()
@@ -106,7 +107,7 @@ class RelatedArtistsRenderer {
         return `link artist-id-${fromArtistID} artist-id-${toArtistID}`;
       });
 
-    this.allNodesSelection = this.svg
+    this.allNodesSelection = this.canvas
       .selectAll('.node')
       .data(nodes)
       .enter()
@@ -122,7 +123,7 @@ class RelatedArtistsRenderer {
       })
       .call(this.d3cola.drag);
 
-    this.allLabelsSelection = this.svg
+    this.allLabelsSelection = this.canvas
       .selectAll('.label')
       .data(nodes)
       .enter()
@@ -152,7 +153,14 @@ class RelatedArtistsRenderer {
     svg.id = randomID;
     canvas.appendChild(svg);
     this.svg = d3.select(`#${randomID}`);
-    this.svg.on('click', () => this.removeSelectedArtist());
+    this.svg
+      .on('click', () => this.removeSelectedArtist())
+      .call(
+        d3.zoom().on('zoom', () => {
+          this.canvas.attr('transform', d3.event.transform);
+        })
+      );
+    this.canvas = this.svg.append('g');
 
     this.d3cola = cola
       .d3adaptor(d3)
@@ -217,20 +225,39 @@ class RelatedArtistsRenderer {
       this.allLabelsSelection.attr('x', (d) => d.x - d.width / 2 + 4).attr('y', (d) => d.y + 4);
     });
   }
+
+  public setSize(width: number, height: number) {
+    console.log({ width, height });
+    this.svg.node()!.setAttribute('width', width.toString());
+    this.svg.node()!.setAttribute('height', height.toString());
+  }
 }
 
 const RelatedArtistsGraph: React.FC<RelatedArtistsGraphProps> = ({ relatedArtists }) => {
   const modules = useRef(Promise.all([D3Module.get(), WebColaModule.get()] as const));
   const container = useRef<HTMLDivElement | null>(null);
+  const windowSize = useWindowSize();
+  const width = windowSize.width - 50;
+  const height = windowSize.height * 0.9;
   useEffect(() => {
     modules.current.then(([d3, webcola]) => {
       if (!container.current) {
         console.error('Loaded modules but container ref is not set');
         return;
       }
-      inst.current = new RelatedArtistsRenderer(d3, webcola, 2800, 2800, container.current);
+      if (inst.current) {
+        return;
+      }
+      inst.current = new RelatedArtistsRenderer(d3, webcola, width, height, container.current);
     });
-  }, []);
+  }, [height, width]);
+  useEffect(() => {
+    if (!inst.current) {
+      return;
+    }
+    inst.current.setSize(width, height);
+  }, [width, height]);
+
   const inst = useRef<RelatedArtistsRenderer | null>(null);
   const didSet = useRef(false);
   useEffect(() => {
@@ -246,16 +273,13 @@ const RelatedArtistsGraph: React.FC<RelatedArtistsGraphProps> = ({ relatedArtist
     <div
       ref={(ref) => {
         if (!ref) {
-          // TODO
           return;
         }
-
         container.current = ref;
-        // TODO
       }}
       className="related-artists-graph"
-      style={{ width: 2800, height: 2800 }}
-    ></div>
+      style={{ width, height }}
+    />
   );
 };
 

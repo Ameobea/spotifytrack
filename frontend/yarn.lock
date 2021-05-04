@@ -1115,10 +1115,10 @@ amdefine@>=0.0.4:
   resolved "https://registry.yarnpkg.com/amdefine/-/amdefine-1.0.1.tgz#4a5282ac164729e93619bcfd3ad151f817ce91f5"
   integrity sha1-SlKCrBZHKek2Gbz9OtFR+BfOkfU=
 
-ameo-utils@>=0.7.1:
-  version "0.7.1"
-  resolved "https://registry.yarnpkg.com/ameo-utils/-/ameo-utils-0.7.1.tgz#4e7e8ce8b76b15ac0ef87b2691c2d37c764de741"
-  integrity sha512-g9N36K8AxWPdQ8jxgIqzFdm6XcPd5HvTp7f0YYs7sa0tUjMaSIVxtN0IqQA0iN/OqqcT/6hBDR80/MGfbpoZqA==
+ameo-utils@>=0.7.2:
+  version "0.7.2"
+  resolved "https://registry.yarnpkg.com/ameo-utils/-/ameo-utils-0.7.2.tgz#488436f6719e976a2fde40581e2df43affeb68b1"
+  integrity sha512-JvgK70Tnm36yqLmuHsUiFMORXjqhkxoZRkIzeaRq1RVAYdiuJNd/3EQuzywJDeiRXoo/WQaxcItCLLy4RboNng==
   dependencies:
     react-responsive "^7.0.0"
 
