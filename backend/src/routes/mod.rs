@@ -879,6 +879,42 @@ pub(crate) fn compare_users(
         .map(|res| res.map(Json))
 }
 
+fn build_related_artists_graph(
+    spotify_access_token: String,
+    artist_ids: &[&str],
+) -> Result<RelatedArtistsGraph, String> {
+    // Get related artists for all of them
+    let related_artists = get_multiple_related_artists(spotify_access_token.clone(), artist_ids)?;
+
+    let all_artist_ids: FnvHashSet<String> = artist_ids
+        .iter()
+        .copied()
+        .map(String::from)
+        .chain(
+            related_artists
+                .iter()
+                .flat_map(|related_artists| related_artists.iter().cloned()),
+        )
+        .collect();
+
+    let mut related_artists_by_id = HashMap::default();
+    for (&artist_id, related_artists) in artist_ids.into_iter().zip(related_artists.iter()) {
+        related_artists_by_id.insert(artist_id.to_owned(), related_artists.clone());
+    }
+
+    let all_artist_ids: Vec<_> = all_artist_ids.iter().map(String::as_str).collect();
+    let extra_artists_list = fetch_artists(&spotify_access_token, &all_artist_ids)?;
+    let mut extra_artists = HashMap::default();
+    for artist in extra_artists_list {
+        extra_artists.insert(artist.id.clone(), artist);
+    }
+
+    Ok(RelatedArtistsGraph {
+        extra_artists,
+        related_artists: related_artists_by_id,
+    })
+}
+
 #[get("/stats/<user_id>/related_artists_graph")]
 pub(crate) fn get_related_artists_graph(
     conn: DbConn,
@@ -906,40 +942,34 @@ pub(crate) fn get_related_artists_graph(
         .map(|(_internal_id, spotify_id)| spotify_id.as_str())
         .collect();
 
-    // Get related artists for all of them
-    let related_artists =
-        get_multiple_related_artists(spotify_access_token.clone(), &all_artist_ids_for_user)?;
+    let out = build_related_artists_graph(spotify_access_token, &all_artist_ids_for_user)?;
+    Ok(Some(Json(out)))
+}
 
-    let all_artist_ids: FnvHashSet<String> = all_artist_ids_for_user
-        .clone()
-        .into_iter()
-        .map(String::from)
-        .chain(
-            related_artists
-                .iter()
-                .flat_map(|related_artists| related_artists.iter().cloned()),
-        )
-        .collect();
+#[get("/related_artists/<artist_id>")]
+pub(crate) fn get_related_artists(
+    artist_id: String,
+    token_data: State<Mutex<SpotifyTokenData>>,
+) -> Result<Option<Json<RelatedArtistsGraph>>, String> {
+    let spotify_access_token = {
+        let token_data = &mut *(&*token_data).lock().unwrap();
+        token_data.get()
+    }?;
 
-    let mut related_artists_by_id = HashMap::default();
-    for (artist_id, related_artists) in all_artist_ids_for_user
-        .into_iter()
-        .zip(related_artists.iter())
-    {
-        related_artists_by_id.insert(artist_id.to_owned(), related_artists.clone());
-    }
-
-    let all_artist_ids: Vec<_> = all_artist_ids.iter().map(String::as_str).collect();
-    let extra_artists_list = fetch_artists(&spotify_access_token, &all_artist_ids)?;
-    let mut extra_artists = HashMap::default();
-    for artist in extra_artists_list {
-        extra_artists.insert(artist.id.clone(), artist);
-    }
-
-    let out = RelatedArtistsGraph {
-        extra_artists,
-        related_artists: related_artists_by_id,
+    let related_artist_ids =
+        get_multiple_related_artists(spotify_access_token.clone(), &[&artist_id])?;
+    let related_artist_ids = match related_artist_ids.into_iter().next() {
+        Some(ids) => ids,
+        None => {
+            error!("Empty vec returned from `get_multiple_related_artists`");
+            return Ok(None);
+        },
     };
+    let related_artist_ids = related_artist_ids
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
 
+    let out = build_related_artists_graph(spotify_access_token, &related_artist_ids)?;
     Ok(Some(Json(out)))
 }

@@ -69,9 +69,16 @@ export const fetchComparison = (
   user2_username: string;
 } | null> => getJsonEndpoint(getUrl(`/compare/${user1}/${user2}`));
 
-export const fetchRelatedArtists = async (
+export const fetchRelatedArtistsForUser = async (
   userID: string
 ): Promise<RelatedArtistsGraphRes | null> => {
   const url = getUrl(`/stats/${userID}/related_artists_graph`);
   return getJsonEndpoint<RelatedArtistsGraphRes>(url);
+};
+
+export const fetchRelatedArtists = async (
+  artistID: string
+): Promise<RelatedArtistsGraphRes | null> => {
+  const url = getUrl(`/related_artists/${artistID}`);
+  return getJsonEndpoint(url);
 };

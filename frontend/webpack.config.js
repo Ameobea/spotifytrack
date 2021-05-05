@@ -17,6 +17,10 @@ module.exports = {
   },
   mode: 'development',
   devtool: 'eval-cheap-module-source-map',
+  experiments: {
+    syncWebAssembly: true,
+    // importAsync: true,
+  },
   module: {
     rules: [
       {

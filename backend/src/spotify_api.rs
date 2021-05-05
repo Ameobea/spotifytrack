@@ -39,69 +39,6 @@ fn get_top_entities_url(entity_type: &str, timeframe: &str) -> String {
     )
 }
 
-pub(crate) fn spotify_user_api_request<T: for<'de> Deserialize<'de> + std::fmt::Debug + Clone>(
-    url: &str,
-    token: &str,
-) -> Result<T, String> {
-    let client = reqwest::blocking::Client::new();
-    let res = client
-        .get(url)
-        .bearer_auth(token)
-        .send()
-        .map_err(|err| -> String {
-            error!("Error fetching user data from Spotify API: {:?}", err);
-            "Error requesting latest user data from the Spotify API".into()
-        })?;
-
-    res.json::<SpotifyResponse<T>>()
-        .map_err(|err| -> String {
-            error!(
-                "Error parsing user data response from Spotify API: {:?}",
-                err
-            );
-            "Error parsing user data response from Spotify API".into()
-        })?
-        .into_result()
-}
-
-pub(crate) fn get_user_profile_info(token: &str) -> Result<UserProfile, String> {
-    spotify_user_api_request(SPOTIFY_USER_PROFILE_INFO_URL, token)
-}
-
-pub(crate) fn spotify_server_api_request<T: for<'de> Deserialize<'de> + std::fmt::Debug + Clone>(
-    url: &str,
-    params: HashMap<&str, &str>,
-) -> Result<T, String> {
-    let client = reqwest::blocking::Client::new();
-
-    info!("Hitting Spotify API at URL {}, params: {:?}", url, params);
-    let res = client
-        .post(url)
-        .header("Authorization", CONF.get_authorization_header_content())
-        .form(&params)
-        .send()
-        .map_err(|err| -> String {
-            error!("Error communicating with Spotify API: {:?}", err);
-            "Error communicating with from the Spotify API".into()
-        })?;
-
-    if !res.status().is_success() {
-        error!(
-            "Got bad status code of {} from Spotify API: {:?}",
-            res.status(),
-            res.text()
-        );
-        return Err("Got bad response from Spotify API".into());
-    }
-
-    res.json::<SpotifyResponse<T>>()
-        .map_err(|err| -> String {
-            error!("Error decoding response from Spotify API: {:?}.", err,);
-            "Error decoding response from Spotify API".into()
-        })?
-        .into_result()
-}
-
 fn process_spotify_res<R: for<'de> Deserialize<'de> + Clone + std::fmt::Debug>(
     url: &str,
     res: Result<reqwest::blocking::Response, reqwest::Error>,
@@ -131,6 +68,50 @@ fn process_spotify_res<R: for<'de> Deserialize<'de> + Clone + std::fmt::Debug>(
             "Error decoding response from Spotify API".into()
         })?
         .into_result()
+}
+
+pub(crate) fn spotify_user_api_request<T: for<'de> Deserialize<'de> + std::fmt::Debug + Clone>(
+    url: &str,
+    token: &str,
+) -> Result<T, String> {
+    let client = reqwest::blocking::Client::new();
+    let res = client.get(url).bearer_auth(token).send();
+
+    match process_spotify_res(&url, res) {
+        Ok(res) => Ok(res),
+        Err(err) if err.contains("Rate Limited") => {
+            sleep(Duration::from_secs(5));
+            spotify_user_api_request(url, token)
+        },
+        Err(err) => Err(err),
+    }
+}
+
+pub(crate) fn get_user_profile_info(token: &str) -> Result<UserProfile, String> {
+    spotify_user_api_request(SPOTIFY_USER_PROFILE_INFO_URL, token)
+}
+
+pub(crate) fn spotify_server_api_request<T: for<'de> Deserialize<'de> + std::fmt::Debug + Clone>(
+    url: &str,
+    params: HashMap<&str, &str>,
+) -> Result<T, String> {
+    let client = reqwest::blocking::Client::new();
+
+    info!("Hitting Spotify API at URL {}, params: {:?}", url, params);
+    let res = client
+        .post(url.clone())
+        .header("Authorization", CONF.get_authorization_header_content())
+        .form(&params)
+        .send();
+
+    match process_spotify_res(&url, res) {
+        Ok(res) => Ok(res),
+        Err(err) if err.contains("Rate Limited") => {
+            sleep(Duration::from_secs(5));
+            spotify_server_api_request(url, params)
+        },
+        Err(err) => Err(err),
+    }
 }
 
 fn spotify_user_json_api_get_request<R: for<'de> Deserialize<'de> + Clone + std::fmt::Debug>(
