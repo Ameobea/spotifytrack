@@ -17,6 +17,7 @@ import { actionCreators, dispatch, getState } from 'src/store';
 import { useUsername } from 'src/store/selectors';
 import './RelatedArtistsGraph.scss';
 import { Artist } from 'src/types';
+import RelatedArtistsGraphCanvasRenderer from './CanvasRenderer';
 
 interface RelatedArtistsGraphProps {
   relatedArtists: { [artistID: string]: string[] };
@@ -32,7 +33,7 @@ const WebColaWasm = new AsyncOnce(async () => {
   return wasm;
 });
 
-interface Node {
+export interface Node {
   artistID: string;
   name: string;
   width: number;
@@ -43,14 +44,14 @@ interface Node {
   isPrimary: boolean;
 }
 
-interface Link {
+export interface Link {
   source: number;
   target: number;
 }
 
-class RelatedArtistsRenderer {
+export class RelatedArtistsRenderer {
   private d3: typeof import('d3');
-  private d3cola: any;
+  private webcolaInst: any;
   /**
    * Mapping of artist spotify ID to index in `orderedArtists`
    */
@@ -73,11 +74,11 @@ class RelatedArtistsRenderer {
   private allLinksSelection: Selection<any, any, any, any>;
   private allNodesSelection: Selection<any, any, any, any>;
   private allLabelsSelection: Selection<any, any, any, any>;
-  private selectedArtistID: string | null = null;
   /**
    * All links that are currently a part of the graph
    */
   private links: { source: Node; target: Node }[] = [];
+  private rawLinks: Link[] = [];
   /**
    * All nodes that are currently a part of the graph
    */
@@ -90,6 +91,7 @@ class RelatedArtistsRenderer {
    * Main database containing all related artist->artist connections
    */
   private backwardsConnections: Map<string, Set<string>> = new Map();
+  private canvasRenderer: RelatedArtistsGraphCanvasRenderer;
 
   /**
    * Populates forwards and backwards connection databases with related artists data
@@ -132,43 +134,11 @@ class RelatedArtistsRenderer {
     return index;
   }
 
-  public removeSelectedArtist() {
-    if (!this.selectedArtistID) {
-      return;
-    }
-
-    this.svg.node()!.setAttribute('data-artist-selected', 'false');
-    document.querySelectorAll('svg .selected').forEach((elem) => elem.classList.remove('selected'));
-  }
-
-  public setSelectedArtistID(artistID: string) {
-    if (this.selectedArtistID) {
-      this.removeSelectedArtist();
-    }
-
-    this.selectedArtistID = artistID;
-    this.svg.node()!.setAttribute('data-artist-selected', 'true');
-
-    const elems = document.querySelectorAll(`svg .artist-id-${artistID}`);
-    elems.forEach((elem) => elem.classList.add('selected'));
-
-    // We need to highlight all nodes connected to this one as well
-    const connectedArtistIDs = this.links
-      .filter((link) => link.source.artistID === artistID || link.target.artistID === artistID)
-      .map((link) =>
-        link.source.artistID === artistID ? link.target.artistID : link.source.artistID
-      );
-    connectedArtistIDs.forEach((artistID) => {
-      const elems = document.querySelectorAll(`svg .node.artist-id-${artistID}`);
-      elems.forEach((elem) => elem.classList.add('selected'));
-    });
-  }
-
   /**
    * Loads all related artists for the selected artist, dynamically adding them into the graph and creating
    * links between artists that don't already exist.
    */
-  private async loadConnections(node: Node) {
+  public async loadConnections(node: Node) {
     const relatedArtists = await (async () => {
       try {
         return await fetchRelatedArtists(node.artistID);
@@ -249,93 +219,87 @@ class RelatedArtistsRenderer {
   }
 
   private updateSelections(newNodes: Node[], newLinks: Link[], isFirst: boolean) {
-    this.nodes.push(...R.clone(newNodes));
+    this.nodes.push(...newNodes);
     this.links.push(
       ...R.clone(newLinks).map((link) => ({
         source: this.nodes[link.source],
         target: this.nodes[link.target],
       }))
     );
+    this.rawLinks.push(...R.clone(newLinks));
+
+    this.canvasRenderer.addNodes(newNodes, this.rawLinks);
 
     if (isFirst) {
-      this.d3cola.start(10, 15, 20);
+      this.webcolaInst.start(10, 15, 20);
     }
 
     this.allLinksSelection = this.canvas
       .selectAll('.link')
       .data(
-        this.d3cola.links() as { source: Node; target: Node }[],
+        this.webcolaInst.links() as { source: Node; target: Node }[],
         (link: { source: Node; target: Node }) =>
           `link-${link.source.artistID}-${link.target.artistID}`
       );
-    this.allLinksSelection
-      .enter()
-      .append('line')
-      .attr('class', (d: { source: Node; target: Node }) => {
-        // console.log('new link: ', d);
-        const fromArtistID = d.source.artistID;
-        const toArtistID = d.target.artistID;
-        return `link artist-id-${fromArtistID} artist-id-${toArtistID}`;
-      });
+    this.allLinksSelection.enter().append('line');
+    // .attr('class', (d: { source: Node; target: Node }) => {
+    //   const fromArtistID = d.source.artistID;
+    //   const toArtistID = d.target.artistID;
+    //   return `link artist-id-${fromArtistID} artist-id-${toArtistID}`;
+    // });
     this.allLinksSelection.exit().remove();
     this.allLinksSelection = this.canvas
       .selectAll('.link')
       .data(
-        this.d3cola.links() as { source: Node; target: Node }[],
+        this.webcolaInst.links() as { source: Node; target: Node }[],
         (link: { source: Node; target: Node }) =>
           `link-${link.source.artistID}-${link.target.artistID}`
       );
 
     this.allNodesSelection = this.canvas
       .selectAll('.node')
-      .data(this.d3cola.nodes(), (node: Node) => `node-${node.artistID}`);
-    this.allNodesSelection
-      .enter()
-      .append('rect')
-      .attr('class', (d) => `node artist-id-${d.artistID}`)
-      .attr('width', (d) => d.width)
-      .attr('height', (d) => d.height)
-      .attr('rx', 5)
-      .attr('ry', 5)
-      .on('click', (d: Node) => {
-        this.d3.event.stopPropagation();
-        this.setSelectedArtistID(d.artistID);
-      })
-      .on('dblclick', (d: Node) => {
-        this.d3.event.stopPropagation();
-        this.loadConnections(d);
-      })
-      .call(this.d3cola.drag);
+      .data(this.webcolaInst.nodes(), (node: Node) => `node-${node.artistID}`);
+    this.allNodesSelection.enter().append('rect');
+    // .attr('class', (d) => `node artist-id-${d.artistID}`)
+    // .attr('width', (d) => d.width)
+    // .attr('height', (d) => d.height)
+    // .attr('rx', 5)
+    // .attr('ry', 5)
+    // .on('click', (d: Node) => {
+    //   this.d3.event.stopPropagation();
+    //   this.setSelectedArtistID(d.artistID);
+    // })
+    // .on('dblclick', (d: Node) => {
+    //   this.d3.event.stopPropagation();
+    //   this.loadConnections(d);
+    // })
+    // .call(this.webcolaInst.drag);
     this.allNodesSelection.exit().remove();
     this.allNodesSelection = this.canvas
       .selectAll('.node')
-      .data(this.d3cola.nodes(), (node: Node) => `node-${node.artistID}`);
+      .data(this.webcolaInst.nodes(), (node: Node) => `node-${node.artistID}`);
 
     this.allLabelsSelection = this.canvas
       .selectAll('.label')
-      .data(this.d3cola.nodes(), (node: Node) => `label-${node.artistID}`);
-    this.allLabelsSelection
-      .enter()
-      .append('text')
-      .attr('class', (d: Node) => `label artist-id-${d.artistID}`)
-      .text((d) => d.name)
-      .on('click', (d: Node) => {
-        this.d3.event.stopPropagation();
-        this.setSelectedArtistID(d.artistID);
-      })
-      .on('dblclick', (d: Node) => {
-        this.d3.event.stopPropagation();
-        this.loadConnections(d);
-      })
-      .call(this.d3cola.drag);
+      .data(this.webcolaInst.nodes(), (node: Node) => `label-${node.artistID}`);
+    this.allLabelsSelection.enter().append('text');
+    // .attr('class', (d: Node) => `label artist-id-${d.artistID}`)
+    // .text((d) => d.name)
+    // .on('click', (d: Node) => {
+    //   this.d3.event.stopPropagation();
+    //   this.setSelectedArtistID(d.artistID);
+    // })
+    // .on('dblclick', (d: Node) => {
+    //   this.d3.event.stopPropagation();
+    //   this.loadConnections(d);
+    // })
+    // .call(this.webcolaInst.drag);
     this.allLabelsSelection.exit().remove();
     this.allLabelsSelection = this.canvas
       .selectAll('.label')
-      .data(this.d3cola.nodes(), (node: Node) => `label-${node.artistID}`);
+      .data(this.webcolaInst.nodes(), (node: Node) => `label-${node.artistID}`);
 
-    console.log(this);
-
-    if (!isFirst) this.d3cola.start();
+    if (!isFirst) this.webcolaInst.start();
   }
 
   constructor(
@@ -344,7 +308,8 @@ class RelatedArtistsRenderer {
     webcolaWasm: PromiseResolveType<ReturnType<typeof WebColaWasm.get>>,
     width: number,
     height: number,
-    canvas: HTMLDivElement
+    container: HTMLDivElement,
+    canvas: HTMLCanvasElement
   ) {
     this.d3 = d3;
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -353,23 +318,29 @@ class RelatedArtistsRenderer {
     let randomID = btoa((Math.random() + Math.random()).toString());
     randomID = randomID.slice(0, randomID.length - 2);
     svg.id = randomID;
-    canvas.appendChild(svg);
+    container.appendChild(svg);
     this.svg = d3.select(`#${randomID}`);
-    this.svg
-      .on('click', () => this.removeSelectedArtist())
-      .call(
-        d3.zoom().on('zoom', () => {
-          this.canvas.attr('transform', d3.event.transform);
-        })
-      );
+    this.svg.call(
+      d3.zoom().on('zoom', () => {
+        this.canvas.attr('transform', d3.event.transform);
+      })
+    );
     this.canvas = this.svg.append('g');
 
-    this.d3cola = cola
-      .d3adaptor(d3)
+    this.webcolaInst = new cola.Layout()
       .linkDistance(300)
       .symmetricDiffLinkLengths(25)
       .size([width, height]);
-    this.d3cola.wasm = webcolaWasm;
+    this.webcolaInst.wasm = webcolaWasm;
+    console.log(this.webcolaInst, cola);
+
+    this.canvasRenderer = new RelatedArtistsGraphCanvasRenderer(
+      canvas,
+      height,
+      width,
+      this.webcolaInst,
+      this
+    );
   }
 
   private static buildNode(
@@ -425,43 +396,45 @@ class RelatedArtistsRenderer {
         .filter(({ source, target }) => !R.isNil(source) && !R.isNil(target));
     });
 
-    this.d3cola.nodes(this.nodes).links(this.links);
+    this.webcolaInst.nodes(this.nodes).links(this.links);
     this.updateSelections(nodes, links, true);
 
-    let didIter = false;
-    this.d3cola.on('tick', () => {
-      this.allLinksSelection.each(function (this: SVGLineElement, d: any) {
-        this.x1.baseVal.value = d.source.x;
-        this.y1.baseVal.value = d.source.y;
-        this.x2.baseVal.value = d.target.x;
-        this.y2.baseVal.value = d.target.y;
-      });
+    // const ctx = this;
+    // this.webcolaInst.on('tick', () => {
+    //   // this.allLinksSelection.each(function (this: SVGLineElement, d: any) {
+    //   //   this.x1.baseVal.value = d.source.x;
+    //   //   this.y1.baseVal.value = d.source.y;
+    //   //   this.x2.baseVal.value = d.target.x;
+    //   //   this.y2.baseVal.value = d.target.y;
+    //   // });
 
-      // this.allLinksSelection
-      //   .attr('x1', (d) => d.source.x)
-      //   .attr('y1', (d) => d.source.y)
-      //   .attr('x2', (d) => d.target.x)
-      //   .attr('y2', (d) => d.target.y);
+    //   // this.allLinksSelection
+    //   //   .attr('x1', (d) => d.source.x)
+    //   //   .attr('y1', (d) => d.source.y)
+    //   //   .attr('x2', (d) => d.target.x)
+    //   //   .attr('y2', (d) => d.target.y);
 
-      // this.allNodesSelection
-      //   .attr('x', (d) => d.x - d.width / 2)
-      //   .attr('y', (d) => d.y - d.height / 2);
-      this.allNodesSelection.each(function (this: SVGRectElement, d: any) {
-        this.x.baseVal.value = d.x - d.width / 2;
-        this.y.baseVal.value = d.y - d.height / 2;
-      });
+    //   // this.allNodesSelection
+    //   //   .attr('x', (d) => d.x - d.width / 2)
+    //   //   .attr('y', (d) => d.y - d.height / 2);
 
-      if (didIter) {
-        this.allLabelsSelection.each(function (this: SVGTextElement, d: any) {
-          this.x.baseVal[0].value = d.x - d.width / 2 + 4;
-          this.y.baseVal[0].value = d.y + 4;
-        });
-      } else {
-        this.allLabelsSelection.attr('x', (d) => d.x - d.width / 2 + 4).attr('y', (d) => d.y + 4);
-      }
+    //   this.allNodesSelection.each(function (this: SVGRectElement, d: any, i) {
+    //     ctx.canvasRenderer.setNodePos(i, d.x - d.width / 2, d.y - d.height / 2);
+    //     // this.x.baseVal.value = d.x - d.width / 2;
+    //     // this.y.baseVal.value = d.y - d.height / 2;
+    //   });
 
-      didIter = true;
-    });
+    //   // if (didIter) {
+    //   //   this.allLabelsSelection.each(function (this: SVGTextElement, d: any) {
+    //   //     this.x.baseVal[0].value = d.x - d.width / 2 + 4;
+    //   //     this.y.baseVal[0].value = d.y + 4;
+    //   //   });
+    //   // } else {
+    //   //   this.allLabelsSelection.attr('x', (d) => d.x - d.width / 2 + 4).attr('y', (d) => d.y + 4);
+    //   // }
+
+    //   didIter = true;
+    // });
   }
 
   public setSize(width: number, height: number) {
@@ -476,12 +449,13 @@ const RelatedArtistsGraph: React.FC<RelatedArtistsGraphProps> = ({ relatedArtist
     Promise.all([D3Module.get(), WebColaModule.get(), WebColaWasm.get()] as const)
   );
   const container = useRef<HTMLDivElement | null>(null);
+  const canvas = useRef<HTMLCanvasElement | null>(null);
   const windowSize = useWindowSize();
   const width = windowSize.width - 50;
   const height = windowSize.height * 0.9;
   useEffect(() => {
     modules.current.then(([d3, webcola, webcolaWasm]) => {
-      if (!container.current) {
+      if (!container.current || !canvas.current) {
         console.error('Loaded modules but container ref is not set');
         return;
       }
@@ -494,7 +468,8 @@ const RelatedArtistsGraph: React.FC<RelatedArtistsGraphProps> = ({ relatedArtist
         webcolaWasm,
         width,
         height,
-        container.current
+        container.current,
+        canvas.current
       );
     });
   }, [height, width]);
@@ -526,7 +501,17 @@ const RelatedArtistsGraph: React.FC<RelatedArtistsGraphProps> = ({ relatedArtist
       }}
       className="related-artists-graph"
       style={{ width, height }}
-    />
+    >
+      <canvas
+        style={{ width, height }}
+        ref={(ref) => {
+          if (!ref) {
+            return;
+          }
+          canvas.current = ref;
+        }}
+      />
+    </div>
   );
 };
 
