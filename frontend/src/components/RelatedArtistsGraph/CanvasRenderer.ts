@@ -1,10 +1,11 @@
 import * as PIXI from 'pixi.js';
 import { Viewport } from 'pixi-viewport';
+import * as R from 'ramda';
 
-import { getState } from 'src/store';
-import { Artist } from 'src/types';
+// import { getState } from 'src/store';
+import type { Artist } from 'src/types';
 import * as conf from './conf';
-import { Link, Node, RelatedArtistsRenderer } from './RelatedArtistsGraph';
+import type { Link, Node, RelatedArtistsRenderer } from './RelatedArtistsGraph';
 
 interface CanvasNode {
   node: Node;
@@ -32,6 +33,13 @@ window.addEventListener('mouseup', (evt) => {
   }
 });
 
+window.addEventListener('touchend', () => {
+  mouseUpListeners.forEach((cb) => cb());
+  while (mouseUpListeners.length) {
+    mouseUpListeners.pop();
+  }
+});
+
 const makeDraggable = (
   g: PIXI.Graphics | PIXI.Container,
   parent: DragState,
@@ -40,8 +48,8 @@ const makeDraggable = (
 ) => {
   g.interactive = true;
   g.on('pointerdown', (evt: PIXI.InteractionEvent) => {
-    console.log('down');
-    if ((evt.data.originalEvent as any).button !== 0 || parent.dragData) {
+    const isTouch = evt.data.originalEvent instanceof TouchEvent;
+    if ((!isTouch && (evt.data.originalEvent as any).button !== 0) || parent.dragData) {
       return;
     }
 
@@ -52,6 +60,7 @@ const makeDraggable = (
       return;
     }
     parent.lastPointerDown = now;
+    parent.onClick?.();
 
     // remove stuck
     mouseUpListeners.forEach((cb) => cb());
@@ -60,7 +69,7 @@ const makeDraggable = (
     }
 
     mouseUpListeners.push(() => {
-      if (node) layout.constructor.dragEnd(node);
+      layout.constructor.dragEnd(node);
       parent.dragData = null;
     });
 
@@ -80,6 +89,10 @@ const makeDraggable = (
 };
 
 export default class RelatedArtistsGraphCanvasRenderer {
+  /**
+   * Passed in so that we don't have to import the Redux store and we can lazy-load this expensive module
+   */
+  private getAllArtists: () => { [artistID: string]: Artist | undefined };
   private app: PIXI.Application;
   private nodes: CanvasNode[] = [];
   private links: { source: CanvasNode; target: CanvasNode }[] = [];
@@ -89,40 +102,96 @@ export default class RelatedArtistsGraphCanvasRenderer {
   private layout: any;
   private parent: RelatedArtistsRenderer;
   private container: Viewport;
+  private selectedArtistID: string | null = null;
+  private selectedLinks: { source: CanvasNode; target: CanvasNode }[] | null = null;
+  private selectedLinksGraphics: PIXI.Graphics | null = null;
+
+  private setSelectedArtistID(newSelectedArtistID: string | null) {
+    this.selectedArtistID = newSelectedArtistID;
+    this.selectedLinks = newSelectedArtistID
+      ? this.links.filter(
+          (link) =>
+            link.source.node.artistID === newSelectedArtistID ||
+            link.target.node.artistID === newSelectedArtistID
+        )
+      : null;
+
+    this.rebuildNodes();
+  }
+
+  private getNodeColor(node: Node) {
+    if (!this.selectedArtistID) {
+      return node.isPrimary
+        ? conf.PRIMARY_NODE_COLOR[R.isNil(node.userIndex) ? 0 : node.userIndex + 1]
+        : conf.SECONDARY_NODE_COLOR;
+    }
+
+    if (this.selectedArtistID === node.artistID) {
+      return conf.SELECTED_NODE_COLOR;
+    }
+
+    const isConnectedToSelectedNode = this.links.some(
+      (link) =>
+        (link.source.node.artistID === node.artistID &&
+          link.target.node.artistID === this.selectedArtistID) ||
+        (link.target.node.artistID === node.artistID &&
+          link.source.node.artistID === this.selectedArtistID)
+    );
+    if (isConnectedToSelectedNode) {
+      return node.isPrimary
+        ? conf.PRIMARY_CONNECTED_TO_SELECTED_NODE_COLOR[
+            R.isNil(node.userIndex) ? 0 : node.userIndex + 1
+          ]
+        : conf.SECONDARY_CONNECTED_TO_SELECTED_NODE_COLOR;
+    }
+
+    return node.isPrimary
+      ? conf.DULL_PRIMARY_NODE_COLOR[R.isNil(node.userIndex) ? 0 : node.userIndex + 1]
+      : conf.DULL_SECONDARY_NODE_COLOR;
+  }
+
+  private buildNodeBackground(node: Node): PIXI.Sprite {
+    const g = new PIXI.Graphics();
+    g.lineStyle({ width: 1, color: 0x0 });
+
+    g.beginFill(0xffffff);
+    g.drawRoundedRect(0, 0, node.width, 20, 4);
+    g.endFill();
+
+    const texture = this.app.renderer.generateTexture(g, undefined, 4);
+    const sprite = new PIXI.Sprite(texture);
+    sprite.tint = this.getNodeColor(node);
+    return sprite;
+  }
 
   private buildNode(
-    ctx2d: CanvasRenderingContext2D,
     allArtists: { [artistID: string]: Artist | undefined },
     node: Node
   ): PIXI.Container {
     const label = allArtists[node.artistID]?.name ?? 'Unknown Artst';
-    const width = ctx2d.measureText(label).width + 8;
-    const g = new PIXI.Graphics();
-    g.lineStyle({ width: 1, color: 0x0 });
-    g.beginFill(conf.NODE_COLOR);
-    g.drawRoundedRect(0, 0, width, 20, 4);
-    g.endFill();
+    const sprite = this.buildNodeBackground(node);
+
     const text = new PIXI.Text(label, { fontSize: 12, fontFamily: 'PT Sans', stroke: 0, fill: 0 });
     text.x = 4;
     text.y = 4;
-    g.x = -width / 2;
-    g.y = -10;
+    sprite.x = -node.width / 2;
+    sprite.y = -10;
 
     const container = new PIXI.Container();
     container.interactive = true;
     container.cursor = 'pointer';
-    container.addChild(g).addChild(text);
-    // \/ this breaks text randomly
-    // container.cacheAsBitmap = true;
-    // container.cacheAsBitmapResolution = 8;
+    container.addChild(sprite).addChild(text);
+    sprite.interactiveChildren = false;
+    text.interactiveChildren = false;
 
     const dragState: DragState = {
       dragData: null,
       handleDrag: (newPos: PIXI.Point) => this.dragHandler(node, newPos),
-      onClick: () => {
-        // TODO
+      onClick: () => this.setSelectedArtistID(node.artistID),
+      onDoubleClick: async () => {
+        await this.parent.loadConnections(node);
+        this.setSelectedArtistID(node.artistID);
       },
-      onDoubleClick: () => this.parent.loadConnections(node),
       lastPointerDown: 0,
     };
     makeDraggable(container, dragState, this.layout, node);
@@ -130,16 +199,53 @@ export default class RelatedArtistsGraphCanvasRenderer {
     return container;
   }
 
+  private rebuildNodes() {
+    this.nodes.forEach((node) => {
+      (node.sprite.children[0] as PIXI.Sprite).tint = this.getNodeColor(node.node);
+    });
+    this.dirtyNodes = true;
+  }
+
   private reRenderEdges() {
+    // We have to do this check before we mutate self with selected edges graphics de/initialization
     const graphicsData = this.edgesGraphics.geometry.graphicsData;
-    if (graphicsData.length === this.links.length) {
+    const canFastpathEdges =
+      graphicsData.length === this.links.length &&
+      !(this.selectedLinks && !this.selectedLinksGraphics) &&
+      !(!this.selectedLinks && this.selectedLinksGraphics);
+
+    // selected edges overlay
+    if (this.selectedLinks) {
+      if (this.selectedLinksGraphics) {
+        this.container.removeChild(this.selectedLinksGraphics);
+        this.selectedLinksGraphics.destroy();
+        this.selectedLinksGraphics = null;
+      }
+
+      this.selectedLinksGraphics = new PIXI.Graphics().lineStyle({
+        width: 2.4,
+        color: conf.EDGE_COLOR,
+        native: false,
+      });
+      this.selectedLinks.forEach(({ source, target }) => {
+        this.selectedLinksGraphics!.moveTo(source.pos!.x, source.pos!.y);
+        this.selectedLinksGraphics!.lineTo(target.pos!.x, target.pos!.y);
+      });
+
+      this.container.addChildAt(this.selectedLinksGraphics, 1);
+    } else if (this.selectedLinksGraphics) {
+      // We remove this here as a way to signal to the above code to disable the optimization where we re-use
+      // the line geometry after switching between selected/not-selected modes
+      this.container.removeChild(this.selectedLinksGraphics);
+      this.selectedLinksGraphics.destroy();
+      this.selectedLinksGraphics = null;
+    }
+
+    // all other edges
+    if (canFastpathEdges) {
       // We can fast-path this by just updating line positions
       this.links.forEach(({ source, target }, i) => {
         const datum = graphicsData[i];
-        // datum.points[0] = source.pos!.x;
-        // datum.points[1] = source.pos!.y;
-        // datum.points[2] = target.pos!.x;
-        // datum.points[3] = target.pos!.y;
 
         (datum.shape as any).points[0] = source.pos!.x;
         (datum.shape as any).points[1] = source.pos!.y;
@@ -151,7 +257,11 @@ export default class RelatedArtistsGraphCanvasRenderer {
     }
 
     const g = new PIXI.Graphics();
-    g.lineStyle({ width: 1, color: conf.EDGE_COLOR, native: this.links.length > 4000 });
+    g.lineStyle({
+      width: this.links.length > 4000 ? 2 : 1.3,
+      color: this.selectedLinks ? conf.DULL_EDGE_COLOR : conf.EDGE_COLOR,
+      native: this.links.length > 4000,
+    });
     this.links.forEach(({ source, target }) => {
       g.moveTo(source.pos!.x, source.pos!.y);
       g.lineTo(target.pos!.x, target.pos!.y);
@@ -162,14 +272,14 @@ export default class RelatedArtistsGraphCanvasRenderer {
     this.container.addChildAt(this.edgesGraphics, 0);
   }
 
-  private buildNodeSprites(nodes: Node[]): CanvasNode[] {
-    const canvas = document.createElement('canvas');
-    const ctx2d = canvas.getContext('2d')!;
-    ctx2d.font = '12px "PT Sans"';
+  private buildNodeSprites(nodes: Node[], addChildren = true): CanvasNode[] {
+    const allArtists = this.getAllArtists();
 
     const sprites = nodes.map((node) => {
-      const sprite = this.buildNode(ctx2d, getState().entityStore.artists, node);
-      this.container.addChild(sprite);
+      const sprite = this.buildNode(allArtists, node);
+      if (addChildren) {
+        this.container.addChild(sprite);
+      }
       return sprite;
     });
 
@@ -181,8 +291,10 @@ export default class RelatedArtistsGraphCanvasRenderer {
     height: number,
     width: number,
     layout: any,
-    parent: RelatedArtistsRenderer
+    parent: RelatedArtistsRenderer,
+    getAllArtists: () => { [artistID: string]: Artist | undefined }
   ) {
+    this.getAllArtists = getAllArtists;
     this.parent = parent;
     this.layout = layout;
     this.dragHandler = (node, pos) => {
@@ -209,6 +321,23 @@ export default class RelatedArtistsGraphCanvasRenderer {
 
     this.container.drag().pinch().wheel();
 
+    let containerPointerDownPos = new PIXI.Point(0, 0);
+    this.container.cursor = 'grab';
+    this.container
+      .on('pointerdown', (evt: PIXI.InteractionEvent) => {
+        this.container.cursor = 'grabbing';
+        containerPointerDownPos = evt.data.getLocalPosition(this.app.stage);
+      })
+      .on('pointerup', (evt: PIXI.InteractionEvent) => {
+        this.container.cursor = 'grab';
+        const newPos = evt.data.getLocalPosition(this.app.stage);
+        if (newPos.x !== containerPointerDownPos.x || newPos.y !== containerPointerDownPos.y) {
+          return;
+        }
+
+        this.setSelectedArtistID(null);
+      });
+
     window.addEventListener(
       'wheel',
       (evt) => {
@@ -217,7 +346,6 @@ export default class RelatedArtistsGraphCanvasRenderer {
         }
 
         evt.preventDefault();
-        // evt.stopPropagation();
       },
       { passive: false }
     );

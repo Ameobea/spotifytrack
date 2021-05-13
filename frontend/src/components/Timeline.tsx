@@ -4,6 +4,8 @@ import dayjs, { Dayjs } from 'dayjs';
 import { UnimplementedError } from 'ameo-utils';
 import { withMobileOrDesktop, withMobileProp } from 'ameo-utils/dist/responsive';
 import * as R from 'ramda';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faInfoCircle } from '@fortawesome/free-solid-svg-icons';
 
 import { useUsername } from 'src/store/selectors';
 import { fetchTimelineEvents } from 'src/api';
@@ -13,8 +15,6 @@ import { truncateWithElipsis } from 'src/util';
 import DayStats from './DayStats';
 import { getProxiedImageURL } from 'src/util/index';
 import Tooltip from './Tooltip';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faInfoCircle } from '@fortawesome/free-solid-svg-icons';
 
 export interface TimelineDay {
   date: number;
@@ -26,17 +26,19 @@ export interface TimelineDay {
 const getViewportWidth = () =>
   Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
 
-const TimelineEventComp: React.FC<{
+interface TimelineEventCompProps {
   event: TimelineEvent;
   image: Image | null | undefined;
   tooltipContent: React.ReactNode | null;
   mobile: boolean;
-}> = ({ image, tooltipContent, mobile }) => (
+}
+
+const TimelineEventComp: React.FC<TimelineEventCompProps> = ({ image, tooltipContent, mobile }) => (
   <div className="timeline-event">
     {image ? (
       <>
         <img
-          src={getProxiedImageURL(mobile ? Math.round(getViewportWidth() / 6) + 10 : 63, image.url)}
+          src={getProxiedImageURL(mobile ? Math.round(getViewportWidth() / 6) + 80 : 63, image.url)}
           height="100%"
           width="100%"
         />
@@ -82,33 +84,33 @@ const TooltipContent: React.FC<{ event: TimelineEvent }> = ({ event: evt }) => {
   }
 };
 
-const TimelineDayComp: React.FC<{
+interface TimelineDayCompProps {
   day: TimelineDay;
   onClick: () => void;
   selected?: boolean;
   mobile: boolean;
-}> = ({ day, onClick, selected, mobile }) => {
-  return (
-    <div
-      onClick={onClick}
-      className="timeline-day"
-      style={{ backgroundColor: selected ? '#389' : day.isPrevMonth ? '#222' : undefined }}
-    >
-      <div className="timeline-date">{day.date}</div>
-      <div className={`timeline-events event-count-${day.events.length > 4 ? '5-9' : '1-4'}`}>
-        {day.events.slice(0, 9).map((event) => (
-          <TimelineEventComp
-            key={event.id}
-            event={event}
-            image={getEventImage(event)}
-            tooltipContent={<TooltipContent event={event} />}
-            mobile={mobile}
-          />
-        ))}
-      </div>
+}
+
+const TimelineDayComp: React.FC<TimelineDayCompProps> = ({ day, onClick, selected, mobile }) => (
+  <div
+    onClick={onClick}
+    className="timeline-day"
+    style={{ backgroundColor: selected ? '#389' : day.isPrevMonth ? '#222' : undefined }}
+  >
+    <div className="timeline-date">{day.date}</div>
+    <div className={`timeline-events event-count-${day.events.length > 4 ? '5-9' : '1-4'}`}>
+      {day.events.slice(0, 9).map((event) => (
+        <TimelineEventComp
+          key={event.id}
+          event={event}
+          image={getEventImage(event)}
+          tooltipContent={<TooltipContent event={event} />}
+          mobile={mobile}
+        />
+      ))}
     </div>
-  );
-};
+  </div>
+);
 
 interface TimelineWeekProps {
   days: TimelineDay[];
@@ -153,9 +155,12 @@ const DesktopTimeline: React.FC<InnerTimelineProps> = ({ weeks, selectedDay, set
   </>
 );
 
-const MobileTimelineWeek: React.FC<
-  TimelineWeekProps & { isSelected: boolean; onSelect: () => void }
-> = ({ days, isSelected, onSelect }) => {
+interface MobileTimelineWeekProps extends TimelineWeekProps {
+  isSelected: boolean;
+  onSelect: () => void;
+}
+
+const MobileTimelineWeek: React.FC<MobileTimelineWeekProps> = ({ days, isSelected, onSelect }) => {
   const allEvents = useMemo(
     () => days.reduce((acc, day) => [...acc, ...day.events], [] as TimelineEvent[]),
     [days]

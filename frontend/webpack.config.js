@@ -5,20 +5,29 @@ const webpack = require('webpack');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const sass = require('node-sass');
 const sassUtils = require('node-sass-utils')(sass);
+const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin;
+const { RetryChunkLoadPlugin } = require('webpack-retry-chunk-load-plugin');
 
 const styles = require('./src/_style');
 
-module.exports = {
+/**
+ * @returns {webpack.Configuration}
+ */
+const buildConfig = () => ({
   entry: './src/index.tsx',
   output: {
     path: path.resolve(__dirname, 'dist'),
     publicPath: '/',
     filename: 'itallhappened.[name].[contenthash].js',
   },
+  resolve: {
+    fallback: { path: false, fs: false },
+  },
+  optimization: {},
   mode: 'development',
   devtool: 'eval-cheap-module-source-map',
   experiments: {
-    syncWebAssembly: true,
+    asyncWebAssembly: true,
     // importAsync: true,
   },
   module: {
@@ -67,16 +76,37 @@ module.exports = {
   plugins: [
     new HtmlWebpackPlugin({
       alwaysWriteToDisk: true,
-      title: 'Personal Spotify Stats',
+      title: 'Spotifytrack - Personal Spotify Stats + History',
       minify: true,
       template: 'index.hbs',
       inject: true,
     }),
     new webpack.EnvironmentPlugin(['REACT_APP_API_BASE_URL']),
+    // new BundleAnalyzerPlugin(),
+    new RetryChunkLoadPlugin({
+      // optional stringified function to get the cache busting query string appended to the script src
+      // if not set will default to appending the string `?cache-bust=true`
+      cacheBust: `function() {
+        return Date.now();
+      }`,
+      // optional value to set the amount of time in milliseconds before trying to load the chunk again. Default is 0
+      retryDelay: 300,
+      // optional value to set the maximum number of retries to load the chunk. Default is 1
+      maxRetries: 5,
+      // optional list of chunks to which retry script should be injected
+      // if not set will add retry script to all chunks that have webpack script loading
+      // chunks: ['chunkName'],
+      // optional code to be executed in the browser context if after all retries chunk is not loaded.
+      // if not set - nothing will happen and error will be returned to the chunk loader.
+      lastResortScript: 'window.location.reload()',
+    }),
   ],
   devServer: {
     historyApiFallback: true,
     port: 9000,
     contentBase: path.join(__dirname, 'public'),
+    disableHostCheck: true,
   },
-};
+});
+
+module.exports = buildConfig();

@@ -1,3 +1,10 @@
 export const BACKGROUND_COLOR = 0x010101;
-export const NODE_COLOR = 0x12e20b;
+export const PRIMARY_NODE_COLOR = [0x0fd108, 0xff3838, 0x3370ff, 0xb545ff];
+export const SECONDARY_NODE_COLOR = 0x6ab9c;
+export const SELECTED_NODE_COLOR = 0xffd700;
+export const PRIMARY_CONNECTED_TO_SELECTED_NODE_COLOR = [0x12e20b, 0xff3838, 0x3370ff, 0xb545ff];
+export const SECONDARY_CONNECTED_TO_SELECTED_NODE_COLOR = 0x6ab9c;
+export const DULL_PRIMARY_NODE_COLOR = [0x2a5828, 0x6c3338, 0x3736aa, 0x501b6c];
+export const DULL_SECONDARY_NODE_COLOR = 0x176960;
 export const EDGE_COLOR = 0x9b9b9b;
+export const DULL_EDGE_COLOR = 0x424242;

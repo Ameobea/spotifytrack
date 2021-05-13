@@ -8,24 +8,25 @@ import { Integrations } from '@sentry/tracing';
 import { QueryClient, QueryClientProvider } from 'react-query';
 
 import Loading from 'src/components/Loading';
-const LazyHome = import('src/pages/Home');
-const LazyStats = import('src/pages/Stats');
-const LazyCompare = import('./components/Compare');
 import { history, store } from 'src/store';
 import './index.scss';
 import OAuthRedirect from './components/OAuthRedirect';
 import Footer from './components/Footer';
+import Home from 'src/pages/Home';
 
 if (!window.location.host.includes('localhost')) {
   Sentry.init({
     dsn: 'https://d3ca8b37e2eb4573af6046aed3f62428@sentry.ameo.design/4',
     integrations: [new Integrations.BrowserTracing()],
-    tracesSampleRate: 0.1,
+    tracesSampleRate: 1,
   });
 }
 
-const [Home, Stats, Compare] = [LazyHome, LazyStats, LazyCompare].map((LazyPage) => {
-  const Comp = React.lazy(() => LazyPage);
+const [Stats, Compare] = [
+  () => import('src/pages/Stats'),
+  () => import('./components/Compare'),
+].map((doImport) => {
+  const Comp = React.lazy(doImport);
   const RenderComp = ({ ...props }: any) => <Comp {...props} />;
   return RenderComp;
 });

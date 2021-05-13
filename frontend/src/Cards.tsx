@@ -3,12 +3,12 @@ import * as R from 'ramda';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPlay, faPause } from '@fortawesome/free-solid-svg-icons';
 import { Link } from 'react-router-dom';
+import { withMobileProp } from 'ameo-utils/dist/responsive';
 
 import { Timeframe } from 'src/types';
 import { truncateWithElipsis, map } from 'src/util';
 import { useUsername } from './store/selectors';
 import './Cards.scss';
-import { withMobileProp } from 'ameo-utils/dist/responsive';
 import { getProxiedImageURL } from './util/index';
 
 interface ImageBoxProps {

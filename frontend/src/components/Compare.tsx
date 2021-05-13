@@ -1,5 +1,5 @@
 import { withMobileProp } from 'ameo-utils/dist/responsive';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery } from 'react-query';
 import { useRouteMatch } from 'react-router';
 import { Link, useLocation } from 'react-router-dom';
@@ -8,6 +8,7 @@ import { fetchComparison } from 'src/api';
 import { ImageBoxGrid, Artist as ArtistCard, Track as TrackCard } from 'src/Cards';
 import { usePush } from 'src/util/hooks';
 import './Compare.scss';
+import { mkFetchAndStoreRelatedArtistsForUser, RelatedArtistsGraph } from './RelatedArtistsGraph';
 
 const CompareInner: React.FC<{ mobile: boolean }> = ({ mobile }) => {
   const {
@@ -27,6 +28,37 @@ const CompareInner: React.FC<{ mobile: boolean }> = ({ mobile }) => {
     staleTime: Infinity,
     refetchOnMount: false,
   });
+
+  const { data: user1RelatedArtists } = useQuery({
+    queryKey: ['relatedArtists', user1],
+    queryFn: mkFetchAndStoreRelatedArtistsForUser(user1),
+    staleTime: Infinity,
+    refetchOnMount: false,
+  });
+  const { data: user2RelatedArtists } = useQuery({
+    queryKey: ['relatedArtists', user2],
+    queryFn: mkFetchAndStoreRelatedArtistsForUser(user2),
+    staleTime: Infinity,
+    refetchOnMount: false,
+  });
+
+  const relatedArtists = useMemo(() => {
+    if (!user1RelatedArtists || !user2RelatedArtists) {
+      return null;
+    }
+
+    const merged: { [artistID: string]: { userIndex: number; relatedArtistIDs: string[] } } = {};
+    Object.entries(user1RelatedArtists).forEach(([artistID, relatedArtistIDs]) => {
+      const userIndex = !!user2RelatedArtists[artistID] ? 2 : 0;
+      merged[artistID] = { userIndex, relatedArtistIDs };
+    });
+    Object.entries(user2RelatedArtists).forEach(([artistID, relatedArtistIDs]) => {
+      const userIndex = !!user1RelatedArtists[artistID] ? 2 : 1;
+      merged[artistID] = { userIndex, relatedArtistIDs };
+    });
+
+    return merged;
+  }, [user1RelatedArtists, user2RelatedArtists]);
 
   useEffect(() => {
     if (!data) {
@@ -161,6 +193,8 @@ const CompareInner: React.FC<{ mobile: boolean }> = ({ mobile }) => {
         title="Artists"
         disableTimeframes
       />
+
+      <RelatedArtistsGraph relatedArtists={relatedArtists} />
     </div>
   );
 };
