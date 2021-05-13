@@ -19,11 +19,36 @@
     margin-left: auto;
     margin-right: auto;
     margin-bottom: 150px;
+    margin-top: 20px;
   }
 }
 
 @media only screen and (max-width: 800px) {
   .stats {
     width: calc(100vw - 14px);
+  }
+}
+
+.stats-details-tabs {
+  display: flex;
+  flex-direction: row;
+
+  .stats-details-tab {
+    font-size: 18px;
+    padding-left: 7px;
+    padding-right: 7px;
+    margin-left: 1px;
+    margin-right: 1px;
+    padding-bottom: 2px;
+    cursor: pointer;
+  }
+
+  .stats-details-tab[data-active='true'] {
+    border-bottom: 2px solid #27b14c;
+    font-weight: bold;
+  }
+
+  .stats-details-tab[data-active='false']:hover {
+    border-bottom: 2px solid #4a6953;
   }
 }

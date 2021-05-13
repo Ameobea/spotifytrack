@@ -23,6 +23,7 @@ type RelatedArtists = { [artistID: string]: { userIndex?: number; relatedArtistI
 
 interface RelatedArtistsGraphProps {
   relatedArtists: RelatedArtists | null | undefined;
+  style?: React.CSSProperties;
 }
 
 const WebColaModule = new AsyncOnce(() => import('webcola'));
@@ -340,7 +341,10 @@ export class RelatedArtistsRenderer {
   }
 }
 
-export const RelatedArtistsGraph: React.FC<RelatedArtistsGraphProps> = ({ relatedArtists }) => {
+export const RelatedArtistsGraph: React.FC<RelatedArtistsGraphProps> = ({
+  relatedArtists,
+  style,
+}) => {
   const modules = useRef(
     Promise.all([WebColaModule.get(), RelatedArtistsGraphCanvasRendererModule.get()] as const)
   );
@@ -386,7 +390,7 @@ export const RelatedArtistsGraph: React.FC<RelatedArtistsGraphProps> = ({ relate
   }, [relatedArtists]);
 
   return (
-    <div className="related-artists-graph">
+    <div className="related-artists-graph" style={style}>
       <canvas
         style={{ width, height }}
         ref={(ref) => {
@@ -417,7 +421,9 @@ export const mkFetchAndStoreRelatedArtistsForUser = (
   return relatedArtists;
 };
 
-export const RelatedArtistsGraphForUser: React.FC = () => {
+export const RelatedArtistsGraphForUser: React.FC<{ style?: React.CSSProperties }> = ({
+  style,
+}) => {
   const username = useUsername();
 
   const { data: rawRelatedArtists } = useQuery(
@@ -438,5 +444,5 @@ export const RelatedArtistsGraphForUser: React.FC = () => {
     );
   }, [rawRelatedArtists]);
 
-  return <RelatedArtistsGraph relatedArtists={relatedArtists} />;
+  return <RelatedArtistsGraph relatedArtists={relatedArtists} style={style} />;
 };

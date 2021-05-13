@@ -8,6 +8,7 @@ import 'echarts/lib/chart/treemap';
 import 'echarts/lib/component/tooltip';
 import 'echarts/lib/component/legend';
 import 'echarts/lib/component/dataZoom';
+import { GridComponent, TitleComponent } from 'echarts/components';
 import { EChartOption } from 'echarts';
 import * as R from 'ramda';
 import { seriesDefaults, getBaseConfigDefaults } from 'ameo-utils/dist/echarts';
@@ -23,8 +24,11 @@ interface Series {
 }
 
 const splitLineStyle = {
+  show: true,
   lineStyle: { color: '#383838' },
 } as const;
+
+echarts.use([GridComponent, TitleComponent]);
 
 const InnerLineChart: React.FC<{
   series: { data: any[]; name: string }[];
@@ -48,6 +52,14 @@ const InnerLineChart: React.FC<{
       backgroundColor: '#111',
       xAxis: {
         splitNumber: 10,
+        axisTick: {
+          show: false,
+        },
+        axisLine: {
+          lineStyle: {
+            color: '#383838',
+          },
+        },
         axisLabel: {
           color: '#ccc',
           showMinLabel: false,
@@ -119,12 +131,28 @@ export const BarChart: React.FC<{
             axisLabel: {
               color: '#ccc',
             },
+            axisLine: {
+              show: true,
+              lineStyle: {
+                color: '#383838',
+              },
+            },
+            axisTick: {
+              show: false,
+            },
           },
           backgroundColor: '#111', // TODO: Dedup these things with the line chart
           yAxis: {
             axisLabel: {
               color: '#ccc',
             },
+            axisLine: {
+              show: true,
+              lineStyle: {
+                color: '#383838',
+              },
+            },
+            splitLine: splitLineStyle,
           },
           series: [
             {

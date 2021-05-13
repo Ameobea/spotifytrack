@@ -19,12 +19,16 @@ import Timeline from 'src/components/Timeline';
 import { RelatedArtistsGraphForUser } from 'src/components/RelatedArtistsGraph';
 import './Stats.scss';
 
-export const ArtistCards: React.FC<
-  {
-    horizontallyScrollable?: boolean;
-    mobile: boolean;
-  } & Partial<PropTypesOf<typeof ImageBoxGrid>>
-> = ({ horizontallyScrollable, mobile, ...props }) => {
+type ArtistCardProps = {
+  horizontallyScrollable?: boolean;
+  mobile: boolean;
+} & Partial<PropTypesOf<typeof ImageBoxGrid>>;
+
+export const ArtistCards: React.FC<ArtistCardProps> = ({
+  horizontallyScrollable,
+  mobile,
+  ...props
+}) => {
   const { artistsCorpus } = useSelector(({ entityStore: { artists } }) => ({
     artistsCorpus: artists,
   }));
@@ -64,13 +68,75 @@ export const ArtistCards: React.FC<
       }}
       getItemCount={(timeframe) => (stats.artists ? stats.artists[timeframe].length : 0)}
       initialItems={mobile ? 9 : 10}
-      title="Artists"
+      disableHeader
       {...props}
     />
   );
 };
 
+enum StatsDetailsTab {
+  Timeline,
+  RelatedArtistsGraph,
+  Tracks,
+  Artists,
+  Genres,
+}
+
+const ALL_TABS: { title: string; value: StatsDetailsTab }[] = [
+  { title: 'Timeline', value: StatsDetailsTab.Timeline },
+  { title: 'Related Artists Graph', value: StatsDetailsTab.RelatedArtistsGraph },
+  { title: 'Top Artists', value: StatsDetailsTab.Artists },
+  { title: 'Top Tracks', value: StatsDetailsTab.Tracks },
+  { title: 'Top Genres', value: StatsDetailsTab.Genres },
+];
+
+interface StatsDetailsTabsProps {
+  selectedTab: StatsDetailsTab;
+  setSelectedTab: (newTab: StatsDetailsTab) => void;
+}
+
+interface StatsDetailsTabCompProps {
+  title: string;
+  onSelect: () => void;
+  isSelected: boolean;
+}
+
+const StatsDetailsTabComp: React.FC<StatsDetailsTabCompProps> = ({
+  title,
+  onSelect,
+  isSelected,
+}) => (
+  <div
+    className="stats-details-tab"
+    data-active={`${isSelected}`}
+    onClick={onSelect}
+    tabIndex={0}
+    role="tab"
+    aria-selected={isSelected}
+  >
+    {title}
+  </div>
+);
+
+const StatsDetailsTabs: React.FC<StatsDetailsTabsProps> = ({ selectedTab, setSelectedTab }) => {
+  return (
+    <div className="stats-details-tabs">
+      {ALL_TABS.map(({ title, value }) => (
+        <StatsDetailsTabComp
+          key={value}
+          title={title}
+          isSelected={selectedTab === value}
+          onSelect={() => setSelectedTab(value)}
+        />
+      ))}
+    </div>
+  );
+};
+
 const StatsDetailsInner: React.FC<{ stats: UserStats; mobile: boolean }> = ({ stats, mobile }) => {
+  // TODO: Default to different default selected tab if we only have one update for the user
+  const [selectedTab, setSelectedTab] = useState(StatsDetailsTab.Timeline);
+
   const { tracksCorpus } = useSelector(({ entityStore: { tracks, artists } }) => ({
     tracksCorpus: tracks,
     artistsCorpus: artists,
@@ -79,45 +145,64 @@ const StatsDetailsInner: React.FC<{ stats: UserStats; mobile: boolean }> = ({ st
 
   return (
     <>
-      <h3 className="image-box-gfid-title">Related Artists Graph</h3>
-      <RelatedArtistsGraphForUser />
-      <div className="details">
-        <ImageBoxGrid
-          renderItem={(i, timeframe) => {
-            if (!stats.tracks) {
-              return null;
-            }
-            const trackId = stats.tracks[timeframe][i];
-            if (!trackId) {
-              return null;
-            }
-            const track = tracksCorpus[trackId];
+      <StatsDetailsTabs selectedTab={selectedTab} setSelectedTab={setSelectedTab} />
 
-            return (
-              <TrackCard
-                key={track.id}
-                title={track.name}
-                artists={track.album.artists}
-                previewUrl={track.preview_url}
-                imageSrc={track.album.images[0].url}
-                playing={playing}
-                setPlaying={setPlaying}
-                mobile={mobile}
+      {(() => {
+        if (selectedTab === StatsDetailsTab.RelatedArtistsGraph) {
+          return <RelatedArtistsGraphForUser style={{ marginTop: 28 }} />;
+        }
+
+        let content: React.ReactNode;
+        switch (selectedTab) {
+          case StatsDetailsTab.Tracks: {
+            content = (
+              <ImageBoxGrid
+                renderItem={(i, timeframe) => {
+                  if (!stats.tracks) {
+                    return null;
+                  }
+                  const trackId = stats.tracks[timeframe][i];
+                  if (!trackId) {
+                    return null;
+                  }
+                  const track = tracksCorpus[trackId];
+
+                  return (
+                    <TrackCard
+                      key={track.id}
+                      title={track.name}
+                      artists={track.album.artists}
+                      previewUrl={track.preview_url}
+                      imageSrc={track.album.images[0].url}
+                      playing={playing}
+                      setPlaying={setPlaying}
+                      mobile={mobile}
+                    />
+                  );
+                }}
+                getItemCount={(timeframe) => (stats.tracks ? stats.tracks[timeframe].length : 0)}
+                initialItems={mobile ? 9 : 10}
+                disableHeader
               />
             );
-          }}
-          getItemCount={(timeframe) => (stats.tracks ? stats.tracks[timeframe].length : 0)}
-          initialItems={mobile ? 9 : 10}
-          title="Tracks"
-        />
+            break;
+          }
+          case StatsDetailsTab.Artists: {
+            content = <ArtistCards mobile={mobile} />;
+            break;
+          }
+          case StatsDetailsTab.Genres: {
+            content = <GenresTreemap />;
+            break;
+          }
+          case StatsDetailsTab.Timeline: {
+            content = <Timeline />;
+            break;
+          }
+        }
 
-        <ArtistCards mobile={mobile} />
-
-        <Timeline />
-
-        <h3 className="image-box-grid-title">Top Genres</h3>
-        <GenresTreemap />
-      </div>
+        return <div className="details">{content}</div>;
+      })()}
     </>
   );
 };

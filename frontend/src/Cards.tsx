@@ -223,7 +223,7 @@ interface ImageBoxGridProps {
   renderItem: (i: number, timeframe: Timeframe) => React.ReactNode;
   getItemCount: (timeframe: string) => number;
   initialItems: number;
-  title: string;
+  title?: string | null;
   horizontallyScrollable?: boolean;
   disableHeader?: boolean;
   hideShowMore?: boolean;
@@ -252,7 +252,7 @@ const ImageBoxGridInner: React.FC<ImageBoxGridProps> = ({
 
   return (
     <div style={style}>
-      {!disableHeader ? <h3 className="image-box-grid-title">{title}</h3> : null}
+      {!disableHeader && !!title ? <h3 className="image-box-grid-title">{title}</h3> : null}
       {!disableTimeframes ? (
         <TimeframeSelector timeframe={timeframe} setTimeframe={setTimeframe} />
       ) : null}

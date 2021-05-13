@@ -96,6 +96,7 @@ const TimelineDayComp: React.FC<TimelineDayCompProps> = ({ day, onClick, selecte
     onClick={onClick}
     className="timeline-day"
     style={{ backgroundColor: selected ? '#389' : day.isPrevMonth ? '#222' : undefined }}
+    data-selected={`${selected}`}
   >
     <div className="timeline-date">{day.date}</div>
     <div className={`timeline-events event-count-${day.events.length > 4 ? '5-9' : '1-4'}`}>
@@ -342,7 +343,6 @@ const Timeline: React.FC<{ mobile: boolean }> = ({ mobile }) => {
   return (
     <div className={`timeline${!data ? ' timeline-loading' : ''}`}>
       <div style={{ display: 'flex', flexDirection: 'row', alignContent: 'flex-start' }}>
-        <h2 className="title">Timeline</h2>
         <Tooltip
           tooltip="Shows the first time that tracks and artists were seen by Spotifytrack"
           style={{ marginLeft: 3 }}

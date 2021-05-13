@@ -53,14 +53,16 @@ const GenresTreemap: React.FC<{ mobile: boolean }> = ({ mobile }) => {
   }
 
   return (
-    <Treemap
-      data={Object.entries(genrePopularityHistory.popularityByGenre).map(([genre, scores]) => ({
-        name: genre,
-        value: R.last(scores),
-      }))}
-      style={{ height: mobile ? 'max(32vh, 430px)' : 'max(68vh, 400px)' }}
-      mobile={mobile}
-    />
+    <div style={{ marginTop: 30 }}>
+      <Treemap
+        data={Object.entries(genrePopularityHistory.popularityByGenre).map(([genre, scores]) => ({
+          name: genre,
+          value: R.last(scores),
+        }))}
+        style={{ height: mobile ? 'max(32vh, 430px)' : 'max(68vh, 400px)' }}
+        mobile={mobile}
+      />
+    </div>
   );
 };
 

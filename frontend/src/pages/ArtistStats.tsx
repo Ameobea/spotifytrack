@@ -85,7 +85,10 @@ const ArtistStats: React.FC<ReactRouterRouteProps & { mobile: boolean }> = ({ ma
           )
         );
       } catch (err) {
-        console.error(`Error fetching artist history for artist id ${artistId} user ${username}`);
+        console.error(
+          `Error fetching artist history for artist id ${artistId} user ${username}: `,
+          err
+        );
         dispatch(actionCreators.entityStore.ADD_TRACKS({}));
         dispatch(actionCreators.userStats.SET_ARTIST_STATS(username, artistId, [], []));
       }
@@ -110,10 +113,12 @@ const ArtistStats: React.FC<ReactRouterRouteProps & { mobile: boolean }> = ({ ma
             series={series}
             otherConfig={{
               title: { text: `Popularity History for ${artist!.name}` },
+              grid: { bottom: mobile ? 48 : 60 },
               xAxis: {
                 type: 'time',
                 name: 'Update Time',
                 nameLocation: 'center',
+                nameGap: 28,
                 nameTextStyle: {
                   color: '#ccc',
                   fontSize: mobile ? 10 : 14,
