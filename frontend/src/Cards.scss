@@ -17,6 +17,7 @@
   overflow-x: auto;
   justify-content: flex-start;
   margin-bottom: 0;
+  max-width: calc(100vw - 22px);
 
   .image-box {
     margin-bottom: 4px;
@@ -91,11 +92,21 @@
 }
 
 @media only screen and (max-width: 800px) {
+  .timeframe-selector {
+    padding-bottom: 10px;
+  }
+
   .image-box-grid {
-    padding: 2px;
+    padding-left: 2px;
+    padding-right: 2px;
+    padding-top: 20px;
     min-height: unset;
-    max-height: 700px;
-    overflow-y: auto;
+    margin-bottom: 20px;
+  }
+
+  .show-more {
+    font-size: 16px !important;
+    margin-top: 15px;
   }
 
   .image-box {

@@ -9,6 +9,7 @@ import { useSelector, actionCreators, dispatch } from 'src/store';
 import Loading from 'src/components/Loading';
 import { useUsername } from 'src/store/selectors';
 import { fetchGenreHistory } from 'src/api';
+import './GenresTreemap.scss';
 
 const GenresTreemap: React.FC<{ mobile: boolean }> = ({ mobile }) => {
   const username = useUsername();
@@ -49,19 +50,30 @@ const GenresTreemap: React.FC<{ mobile: boolean }> = ({ mobile }) => {
   }
 
   if (!genrePopularityHistory) {
-    return <Loading />;
+    return (
+      <div className="genres-treemap-wrapper">
+        <div className="genres-treemap-container">
+          <Loading />
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div style={{ marginTop: 30 }}>
-      <Treemap
-        data={Object.entries(genrePopularityHistory.popularityByGenre).map(([genre, scores]) => ({
-          name: genre,
-          value: R.last(scores),
-        }))}
-        style={{ height: mobile ? 'max(32vh, 430px)' : 'max(68vh, 400px)' }}
-        mobile={mobile}
-      />
+    <div className="genres-treemap-wrapper">
+      <div className="genres-treemap-container">
+        <Treemap
+          data={Object.entries(genrePopularityHistory.popularityByGenre).map(([genre, scores]) => ({
+            name: genre,
+            value: R.last(scores),
+          }))}
+          style={{
+            height: mobile ? 'max(32vh, 430px)' : 'max(68vh, 400px)',
+            // width: mobile ? '100vw' : 'calc(100vw - 80)',
+          }}
+          mobile={mobile}
+        />
+      </div>
     </div>
   );
 };

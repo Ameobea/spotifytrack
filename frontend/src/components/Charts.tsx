@@ -30,12 +30,19 @@ const splitLineStyle = {
 
 echarts.use([GridComponent, TitleComponent]);
 
-const InnerLineChart: React.FC<{
+interface InnerLineChartProps {
   series: { data: any[]; name: string }[];
   otherConfig?: Partial<EChartOption>;
   mobile: boolean;
   style?: React.CSSProperties;
-}> = ({ series, otherConfig = {}, mobile, style }) => {
+}
+
+const InnerLineChart: React.FC<InnerLineChartProps> = ({
+  series,
+  otherConfig = {},
+  mobile,
+  style,
+}) => {
   const chartConfig: any = R.mergeDeepRight(
     {
       ...getBaseConfigDefaults(mobile),
@@ -76,6 +83,8 @@ const InnerLineChart: React.FC<{
       yAxis: {
         axisLabel: {
           color: '#ccc',
+          fontSize: mobile ? 9 : 12,
+          margin: mobile ? 2 : 8,
         },
         splitLine: splitLineStyle,
       },
@@ -107,13 +116,21 @@ const InnerLineChart: React.FC<{
   return <ReactEchartsCore style={style} echarts={echarts} option={chartConfig} />;
 };
 
-export const BarChart: React.FC<{
+interface BarChartProps {
   style?: React.CSSProperties;
   data: number[];
   categories: string[];
   otherConfig?: Partial<EChartOption>;
   mobile: boolean;
-}> = ({ data, categories, style, otherConfig = {} }) => {
+}
+
+export const BarChart: React.FC<BarChartProps> = ({
+  mobile,
+  data,
+  categories,
+  style,
+  otherConfig = {},
+}) => {
   if (data.length !== categories.length) {
     throw new Error('The number of supplied data points and categories must be the same');
   }
@@ -123,13 +140,14 @@ export const BarChart: React.FC<{
       R.mergeDeepRight(
         {
           ...getBaseConfigDefaults(false), // TODO
-          grid: { top: 10, left: 56, right: 10, bottom: 30 },
+          grid: { top: 10, left: mobile ? 30 : 56, right: 10, bottom: 30 },
           dataZoom: undefined,
           xAxis: {
             type: 'category',
             data: categories,
             axisLabel: {
               color: '#ccc',
+              fontSize: mobile ? 9.5 : 12,
             },
             axisLine: {
               show: true,
@@ -145,6 +163,8 @@ export const BarChart: React.FC<{
           yAxis: {
             axisLabel: {
               color: '#ccc',
+              fontSize: mobile ? 9 : 12,
+              margin: mobile ? 2 : 8,
             },
             axisLine: {
               show: true,

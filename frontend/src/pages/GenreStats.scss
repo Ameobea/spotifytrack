@@ -4,15 +4,32 @@
     margin-right: 4vw;
   }
 
+  h1 {
+    margin-top: 0 !important;
+  }
+
   h3 {
     margin-top: 20px;
     padding-top: 0px;
   }
 }
 
+@media only screen and (min-width: 801px) {
+  .genre-stats {
+    width: 95vw;
+    margin-left: auto;
+    margin-right: auto;
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+
 @media only screen and (max-width: 800px) {
   h1 {
     text-align: center;
+    font-size: 21px;
+    line-break: strict;
+    margin-bottom: 10px;
   }
 
   .genre-stats {

@@ -12,6 +12,8 @@ import { useDispatch } from 'react-redux';
 import { actionCreators } from 'src/store';
 import { ANewTab } from 'src/util';
 import './GenreStats.scss';
+import { Link } from 'react-router-dom';
+import { colors } from 'src/style';
 
 interface GenreStats {
   artists_by_id: { [artistId: string]: Artist };
@@ -61,10 +63,17 @@ const GenreStats: React.FC<
     }));
   }, [genreStats]);
 
+  const title = (
+    <h1 style={mobile ? { marginTop: 60 } : undefined}>
+      <Link to={`/stats/${username}/`}>{username}</Link>&apos;s genre stats for{' '}
+      <span style={{ color: colors.pink }}>{genre}</span>
+    </h1>
+  );
+
   if (status === 'loading' || !genreStats || !series) {
     return (
       <div className="genre-stats">
-        <h1 style={mobile ? { marginTop: 60 } : undefined}>{genre}</h1>
+        {title}
         <Loading style={{ marginTop: 180 }} />
       </div>
     );
@@ -72,19 +81,19 @@ const GenreStats: React.FC<
 
   return (
     <div className="genre-stats">
-      <h1 style={mobile ? { marginTop: 60 } : undefined}>{genre}</h1>
+      {title}
       <LineChart
         style={{ height: 300 }}
         series={series}
         otherConfig={{
-          title: { text: `Popularity History for ${genre}` },
+          title: { text: mobile ? '' : `Popularity History for ${genre}` },
           xAxis: {
             type: 'time',
             name: 'Update Time',
             nameLocation: 'center',
             nameTextStyle: {
               color: '#ccc',
-              fontSize: 14,
+              fontSize: mobile ? 10 : 14,
               padding: 12,
             },
           },
@@ -95,7 +104,7 @@ const GenreStats: React.FC<
             nameGap: 50,
             nameTextStyle: {
               color: '#ccc',
-              fontSize: 14,
+              fontSize: mobile ? 10 : 14,
             },
           },
           tooltip: { trigger: 'axis', show: false, formatter: undefined },

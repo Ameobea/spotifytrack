@@ -1,0 +1,12 @@
+.genres-treemap-wrapper {
+  display: flex;
+  flex: 1;
+  justify-content: center;
+
+  .genres-treemap-container {
+    display: block;
+    justify-content: flex-start;
+    margin: auto;
+    min-width: 80vw;
+  }
+}

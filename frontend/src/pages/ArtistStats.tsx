@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import * as R from 'ramda';
 
 import { useSelector, dispatch, actionCreators } from 'src/store';
-import { ReactRouterRouteProps, ArtistStats as ArtistStatsType } from 'src/types';
+import { ReactRouterRouteProps, ArtistStats as ArtistStatsType, Artist } from 'src/types';
 import { fetchArtistStats } from 'src/api';
 import { colors } from 'src/style';
 import Loading from 'src/components/Loading';
@@ -26,17 +26,125 @@ const GenresListing: React.FC<{ genres: string[]; username: string }> = ({ usern
   </div>
 );
 
+interface TopContentProps {
+  mobile: boolean;
+  artistStats: ArtistStatsType | undefined;
+  series:
+    | {
+        name: string;
+        data: [Date, number | null][];
+      }[]
+    | null;
+  artist: Artist | undefined;
+  username: string;
+}
+
+const TopContent: React.FC<TopContentProps> = ({
+  artistStats,
+  series,
+  artist,
+  mobile,
+  username,
+}) => {
+  if (!artistStats || !series) {
+    return <Loading style={{ height: 300, marginTop: 140 }} />;
+  }
+
+  if (!R.isEmpty(artistStats.topTracks) && !R.isEmpty(artistStats.popularityHistory)) {
+    return (
+      <>
+        <p>Top genres:</p>
+        <GenresListing username={username} genres={artist!.genres} />
+
+        <LineChart
+          style={{ height: 300 }}
+          series={series}
+          otherConfig={{
+            title: { text: mobile ? '' : `Popularity History for ${artist!.name}` },
+            grid: { bottom: mobile ? 48 : 60 },
+            xAxis: {
+              type: 'time',
+              name: 'Update Time',
+              nameLocation: 'center',
+              nameGap: mobile ? 15 : 28,
+              nameTextStyle: {
+                color: '#ccc',
+                fontSize: mobile ? 10 : 14,
+                padding: mobile ? 16 : 12,
+              },
+            },
+            yAxis: {
+              type: 'value',
+              inverse: true,
+              name: 'Popularity Ranking',
+              nameLocation: 'middle',
+              nameGap: 50,
+              nameTextStyle: {
+                color: '#ccc',
+                fontSize: 14,
+              },
+            },
+            tooltip: { trigger: 'axis' },
+          }}
+        />
+      </>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        marginTop: mobile ? 140 : 100,
+        marginBottom: 0,
+        fontSize: mobile ? 18 : 23,
+        textAlign: 'center',
+        height: 363,
+      }}
+    >
+      No stats were found for this artist.
+      <br />
+      If you&apos;ve listened to them for the first time recently, it may take a day or two for them
+      to show up here due to Spotify&apos;s delay in reporting stats
+    </div>
+  );
+};
+
+interface BottomContentProps {
+  mobile: boolean;
+  artistStats: ArtistStatsType | undefined;
+}
+
+const BottomContent: React.FC<BottomContentProps> = ({ artistStats, mobile }) => {
+  const topTracksCorpus = useSelector(({ entityStore: { tracks } }) =>
+    artistStats?.topTracks ? R.pick(artistStats.topTracks.map(R.prop('trackId')), tracks) : null
+  );
+
+  if (!artistStats?.topTracks || !topTracksCorpus) {
+    return <Loading style={{ height: 400 }} />;
+  } else if (R.isEmpty(artistStats.topTracks)) {
+    return <div style={{ textAlign: 'center' }}>No top tracks available for artist</div>;
+  }
+
+  return (
+    <BarChart
+      mobile={mobile}
+      data={artistStats.topTracks.map(R.prop('score'))}
+      categories={artistStats.topTracks.map(({ trackId }) => topTracksCorpus[trackId].name)}
+      style={{ height: 400, width: '100%' }}
+      otherConfig={{
+        xAxis: { axisLabel: { interval: 0, rotate: 70 } },
+        grid: { bottom: 200 },
+      }}
+    />
+  );
+};
+
 const ArtistStats: React.FC<ReactRouterRouteProps & { mobile: boolean }> = ({ match, mobile }) => {
   const { username, artistId } = match.params;
   const artistStats: ArtistStatsType | undefined = useSelector(({ userStats }) =>
     R.path([username, 'artistStats', artistId], userStats)
   );
   const artist = useSelector(({ entityStore: { artists } }) => artists[artistId]);
-  const topTracksCorpus = useSelector(({ entityStore: { tracks } }) =>
-    artistStats && artistStats.topTracks
-      ? R.pick(artistStats.topTracks.map(R.prop('trackId')), tracks)
-      : null
-  );
 
   const series = useMemo(
     () =>
@@ -97,65 +205,20 @@ const ArtistStats: React.FC<ReactRouterRouteProps & { mobile: boolean }> = ({ ma
 
   return (
     <div className="artist-stats">
-      {!artistStats || !series ? (
-        <Loading style={{ height: 363, marginTop: 140 }} />
-      ) : !R.isEmpty(artistStats.topTracks) && !R.isEmpty(artistStats.popularityHistory) ? (
-        <>
-          <h1 style={mobile ? { marginTop: mobile ? 42 : 32 } : undefined}>
-            Artist stats for <span style={{ color: colors.pink }}> {artist!.name}</span>
-          </h1>
+      {artist ? (
+        <h1 style={mobile ? { marginTop: mobile ? 42 : 32 } : undefined}>
+          <Link to={`/stats/${username}`}>{username}</Link>&apos;s artist stats for{' '}
+          <span style={{ color: colors.pink }}> {artist.name}</span>
+        </h1>
+      ) : null}
 
-          <p>Top genres:</p>
-          <GenresListing username={username} genres={artist!.genres} />
-
-          <LineChart
-            style={{ height: 300 }}
-            series={series}
-            otherConfig={{
-              title: { text: `Popularity History for ${artist!.name}` },
-              grid: { bottom: mobile ? 48 : 60 },
-              xAxis: {
-                type: 'time',
-                name: 'Update Time',
-                nameLocation: 'center',
-                nameGap: 28,
-                nameTextStyle: {
-                  color: '#ccc',
-                  fontSize: mobile ? 10 : 14,
-                  padding: mobile ? 16 : 12,
-                },
-              },
-              yAxis: {
-                type: 'value',
-                inverse: true,
-                name: 'Popularity Ranking',
-                nameLocation: 'middle',
-                nameGap: 50,
-                nameTextStyle: {
-                  color: '#ccc',
-                  fontSize: 14,
-                },
-              },
-              tooltip: { trigger: 'axis' },
-            }}
-          />
-        </>
-      ) : (
-        <div
-          style={{
-            marginTop: mobile ? 140 : 100,
-            marginBottom: 0,
-            fontSize: mobile ? 18 : 23,
-            textAlign: 'center',
-            height: 363,
-          }}
-        >
-          No stats were found for this artist.
-          <br />
-          If you&apos;ve listened to them for the first time recently, it may take a day or two for
-          them to show up here due to Spotify&apos;s delay in reporting stats
-        </div>
-      )}
+      <TopContent
+        artist={artist}
+        mobile={mobile}
+        username={username}
+        artistStats={artistStats}
+        series={series}
+      />
 
       <ArtistCards
         mobile={mobile}
@@ -166,36 +229,7 @@ const ArtistStats: React.FC<ReactRouterRouteProps & { mobile: boolean }> = ({ ma
         horizontallyScrollable
       />
 
-      {artistStats && artistStats.topTracks && topTracksCorpus ? (
-        <>
-          {R.isEmpty(artistStats.topTracks) ? (
-            <div style={{ textAlign: 'center' }}>No top tracks available for artist</div>
-          ) : (
-            <BarChart
-              mobile={mobile}
-              data={artistStats.topTracks.map(R.prop('score'))}
-              categories={artistStats.topTracks.map(({ trackId }) => topTracksCorpus[trackId].name)}
-              style={{
-                height: 400,
-                width: '100%',
-              }}
-              otherConfig={{
-                xAxis: {
-                  axisLabel: {
-                    interval: 0,
-                    rotate: 70,
-                  },
-                },
-                grid: {
-                  bottom: 200,
-                },
-              }}
-            />
-          )}
-        </>
-      ) : (
-        <Loading style={{ height: 400 }} />
-      )}
+      <BottomContent mobile={mobile} artistStats={artistStats} />
     </div>
   );
 };

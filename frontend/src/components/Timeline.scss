@@ -1,5 +1,4 @@
 .timeline {
-  margin-top: 35px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -124,6 +123,12 @@
 @media only screen and (max-width: 800px) {
   .timeline .day-stats .events-section .image-box-grid-title {
     font-size: 22px;
+  }
+
+  .timeframe-controls {
+    button {
+      height: 34px !important;
+    }
   }
 }
 

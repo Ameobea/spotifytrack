@@ -18,12 +18,14 @@ import { useUsername } from 'src/store/selectors';
 import './RelatedArtistsGraph.scss';
 import { Artist } from 'src/types';
 import type RelatedArtistsGraphCanvasRenderer from './CanvasRenderer';
+import { withMobileProp } from 'ameo-utils/dist/responsive';
 
 type RelatedArtists = { [artistID: string]: { userIndex?: number; relatedArtistIDs: string[] } };
 
 interface RelatedArtistsGraphProps {
   relatedArtists: RelatedArtists | null | undefined;
   style?: React.CSSProperties;
+  mobile: boolean;
 }
 
 const WebColaModule = new AsyncOnce(() => import('webcola'));
@@ -296,7 +298,6 @@ export class RelatedArtistsRenderer {
     ctx2d.font = '12px "PT Sans"';
     const allArtists = getState().entityStore.artists;
 
-    console.log(artistIDs);
     return artistIDs.map(({ artistID, userIndex }) =>
       RelatedArtistsRenderer.buildNode(allArtists, ctx2d, artistID, isPrimary, userIndex)
     );
@@ -341,17 +342,18 @@ export class RelatedArtistsRenderer {
   }
 }
 
-export const RelatedArtistsGraph: React.FC<RelatedArtistsGraphProps> = ({
+const RelatedArtistsGraphInner: React.FC<RelatedArtistsGraphProps> = ({
   relatedArtists,
   style,
+  mobile,
 }) => {
   const modules = useRef(
     Promise.all([WebColaModule.get(), RelatedArtistsGraphCanvasRendererModule.get()] as const)
   );
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const windowSize = useWindowSize();
-  const width = windowSize.width * 0.98;
-  const height = windowSize.height * 0.9;
+  const width = windowSize.width - (mobile ? 0 : 12);
+  const height = windowSize.height - (mobile ? 0 : 63);
 
   const inst = useRef<RelatedArtistsRenderer | null>(null);
   useEffect(() => {
@@ -392,17 +394,24 @@ export const RelatedArtistsGraph: React.FC<RelatedArtistsGraphProps> = ({
   return (
     <div className="related-artists-graph" style={style}>
       <canvas
-        style={{ width, height }}
+        style={{ width, height, userSelect: 'none', marginLeft: -8, marginRight: -8 }}
         ref={(ref) => {
           if (!ref) {
             return;
           }
           canvas.current = ref;
         }}
+        onContextMenu={(evt) => {
+          evt.preventDefault();
+        }}
       />
     </div>
   );
 };
+
+export const RelatedArtistsGraph = withMobileProp({ maxDeviceWidth: 800 })(
+  RelatedArtistsGraphInner
+);
 
 export const mkFetchAndStoreRelatedArtistsForUser = (
   username: string | null | undefined

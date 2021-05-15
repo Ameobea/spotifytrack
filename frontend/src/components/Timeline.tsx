@@ -353,11 +353,11 @@ const Timeline: React.FC<{ mobile: boolean }> = ({ mobile }) => {
 
       <div className="timeframe-controls">
         <button title="Back one month" onClick={() => setCurMonth(curMonth.subtract(1, 'month'))}>
-          {'<'}
+          {'🠔'}
         </button>
         <div className="cur-month">{curMonth.format('MMMM YYYY')}</div>
         <button title="Forward one month" onClick={() => setCurMonth(curMonth.add(1, 'month'))}>
-          {'>'}
+          {'🠖'}
         </button>
       </div>
 

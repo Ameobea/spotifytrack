@@ -18,6 +18,7 @@ import { useUsername } from 'src/store/selectors';
 import Timeline from 'src/components/Timeline';
 import { RelatedArtistsGraphForUser } from 'src/components/RelatedArtistsGraph';
 import './Stats.scss';
+import { colors } from 'src/style';
 
 type ArtistCardProps = {
   horizontallyScrollable?: boolean;
@@ -84,7 +85,7 @@ enum StatsDetailsTab {
 
 const ALL_TABS: { title: string; value: StatsDetailsTab }[] = [
   { title: 'Timeline', value: StatsDetailsTab.Timeline },
-  { title: 'Related Artists Graph', value: StatsDetailsTab.RelatedArtistsGraph },
+  { title: 'Artist Relationship Graph', value: StatsDetailsTab.RelatedArtistsGraph },
   { title: 'Top Artists', value: StatsDetailsTab.Artists },
   { title: 'Top Tracks', value: StatsDetailsTab.Tracks },
   { title: 'Top Genres', value: StatsDetailsTab.Genres },
@@ -136,6 +137,7 @@ const StatsDetailsTabs: React.FC<StatsDetailsTabsProps> = ({ selectedTab, setSel
 const StatsDetailsInner: React.FC<{ stats: UserStats; mobile: boolean }> = ({ stats, mobile }) => {
   // TODO: Default to different default selected tab if we only have one update for the user
   const [selectedTab, setSelectedTab] = useState(StatsDetailsTab.Timeline);
+  const username = useUsername();
 
   const { tracksCorpus } = useSelector(({ entityStore: { tracks, artists } }) => ({
     tracksCorpus: tracks,
@@ -145,15 +147,25 @@ const StatsDetailsInner: React.FC<{ stats: UserStats; mobile: boolean }> = ({ st
 
   return (
     <>
-      <StatsDetailsTabs selectedTab={selectedTab} setSelectedTab={setSelectedTab} />
+      <div className="stats-details-header">
+        <div className="headline-wrapper">
+          <span className="headline">
+            User stats for{' '}
+            <span style={{ color: colors.pink }} className="username">
+              {username}
+            </span>{' '}
+            on Spotifytrack
+          </span>
+        </div>
+        <StatsDetailsTabs selectedTab={selectedTab} setSelectedTab={setSelectedTab} />
+      </div>
 
       {(() => {
-        if (selectedTab === StatsDetailsTab.RelatedArtistsGraph) {
-          return <RelatedArtistsGraphForUser style={{ marginTop: 28 }} />;
-        }
-
         let content: React.ReactNode;
         switch (selectedTab) {
+          case StatsDetailsTab.RelatedArtistsGraph: {
+            return <RelatedArtistsGraphForUser />;
+          }
           case StatsDetailsTab.Tracks: {
             content = (
               <ImageBoxGrid
@@ -192,8 +204,7 @@ const StatsDetailsInner: React.FC<{ stats: UserStats; mobile: boolean }> = ({ st
             break;
           }
           case StatsDetailsTab.Genres: {
-            content = <GenresTreemap />;
-            break;
+            return <GenresTreemap />;
           }
           case StatsDetailsTab.Timeline: {
             content = <Timeline />;
@@ -276,15 +287,6 @@ const Stats: React.FC<ReactRouterRouteProps> = ({
 
   return (
     <main className="stats">
-      <div className="headline-wrapper">
-        <span className="headline" style={{ textAlign: 'center', marginBottom: -62 }}>
-          User stats for{' '}
-          <Link to={`/stats/${username}/`} style={{ textDecorationColor: '#ddd' }}>
-            <span className="username">{username}</span>
-          </Link>
-        </span>
-      </div>
-
       <StatsContent username={username} match={match} statsForUser={statsForUser} />
     </main>
   );

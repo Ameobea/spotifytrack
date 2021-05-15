@@ -30,6 +30,7 @@ main.home {
 
   .example-carousel {
     border-radius: 12px;
+    margin-bottom: 28px;
 
     .carousel {
       margin-left: auto;
@@ -71,12 +72,8 @@ main.home {
 }
 
 footer {
-  width: 100%;
-  position: absolute;
-  left: 0;
   text-align: center;
   font-size: 14px;
-  margin-top: 50px;
   padding-top: 6px;
   padding-bottom: 6px;
   border-top: 1px solid #333;
@@ -84,7 +81,7 @@ footer {
 
 @media only screen and (max-width: 800px) {
   main.home {
-    width: 90vw;
+    width: 95vw;
 
     h1 {
       font-size: 40px;

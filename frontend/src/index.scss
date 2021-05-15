@@ -5,6 +5,9 @@ html {
   background-color: #121212;
   color: #ddd;
   font-family: 'PT Sans', 'Open Sans', 'Roboto', 'Droid Sans', sans-serif;
+  min-height: 100vh;
+  margin-top: 0;
+  margin-bottom: 0;
 
   a {
     color: rgb(43, 43, 223);
@@ -13,6 +16,21 @@ html {
   a:visited {
     color: rgb(79, 63, 242);
   }
+}
+
+@media only screen and (max-width: 800px) {
+  body,
+  html {
+    // margin-left: 2px !important;
+    // margin-right: 2px !important;
+  }
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
 
 * {

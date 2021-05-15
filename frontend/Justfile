@@ -5,5 +5,4 @@ build:
   yarn build
 
 deploy:
-  just build
-  phost update spotify patch ./dist
+  rsync -Prv -e "ssh -o StrictHostKeyChecking=no -o IdentitiesOnly=yes -F /dev/null" ./dist/* debian@ameo.dev:/var/www/spotifytrack.net/

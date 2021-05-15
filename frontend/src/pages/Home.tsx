@@ -14,12 +14,12 @@ const Home: React.FC<ReactRouterRouteProps> = () => (
     <div className="description-container">
       <p className="description">
         Spotifytrack is a tool that allows you to look back on your listening history on Spotify. It
-        keeps track of which trakcs you listen to, the first time you find new artists, how your
+        keeps track of which tracks you listen to, the first time you find new artists, how your
         genre preferences change over time, and much more.
       </p>
       <p>
         It&apos;s 100% free to use, takes seconds to set up, and will automatically update your
-        stats every day. To start, just click &apos;Connect to Spotify&apos; below!
+        stats every day. To start, just click &apos;Connect to Spotify&apos;!
       </p>
     </div>
 
