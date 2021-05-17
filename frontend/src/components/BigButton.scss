@@ -1,0 +1,15 @@
+.big-button {
+  width: 300px;
+  height: 170px;
+  font-size: 34px;
+  color: #ddd;
+  background-color: #0b0b0b;
+  border: 2px solid #444;
+  outline: none;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.big-button:hover {
+  background-color: #141414;
+}

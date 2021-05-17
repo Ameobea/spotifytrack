@@ -1,15 +1,15 @@
 {
-  "name": "spotify-homepage",
+  "name": "spotifytrack",
   "version": "0.1.0",
   "description": "A personal homepage showing users' top songs and artists, providing a shareable link that they can use to show it off to friends.",
   "main": "src/index.tsx",
-  "repository": "https://github.com/Ameobea/spotify-homepage",
-  "author": "Casey Primozic (Ameo) <me@ameo.link>",
+  "repository": "https://github.com/Ameobea/spotifytrack",
+  "author": "Casey Primozic (Ameo) <casey@cprimozic.net>",
   "license": "Blue Oak 1.0.0 (https://blueoakcouncil.org/license/1.0.0#markdown)",
   "private": false,
   "scripts": {
     "start": "webpack serve",
-    "build": "rm -rf dist/* && REACT_APP_API_BASE_URL=https://spotifytrack.ameo.dev/api webpack --config webpack.prod.js && cp -r ./public/* ./dist"
+    "build": "rm -rf dist/* && REACT_APP_API_BASE_URL=https://spotifytrack.net/api REACT_APP_SITE_URL=https://spotifytrack.net webpack --config webpack.prod.js && cp -r ./public/* ./dist"
   },
   "devDependencies": {
     "@babel/core": "^7.14.0",
@@ -50,6 +50,7 @@
     "@fortawesome/fontawesome-svg-core": "^1.2.35",
     "@fortawesome/free-solid-svg-icons": "^5.15.3",
     "@fortawesome/react-fontawesome": "^0.1.14",
+    "@rmwc/icon-button": "^6.1.4",
     "@sentry/react": "^6.3.5",
     "@sentry/tracing": "^6.3.5",
     "@types/react": "^17.0.4",

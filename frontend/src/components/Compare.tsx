@@ -6,14 +6,34 @@ import { Link, useLocation } from 'react-router-dom';
 
 import { fetchComparison } from 'src/api';
 import { ImageBoxGrid, Artist as ArtistCard, Track as TrackCard } from 'src/Cards';
+import { useUsername } from 'src/store/selectors';
 import { usePush } from 'src/util/hooks';
 import './Compare.scss';
 import { mkFetchAndStoreRelatedArtistsForUser, RelatedArtistsGraph } from './RelatedArtistsGraph';
+import * as relatedArtistsGraphConf from './RelatedArtistsGraph/conf';
+
+const ColorCircle: React.FC<{ color: number }> = ({ color }) => (
+  <div className="color-circle" style={{ backgroundColor: `#${color.toString(16)}` }} />
+);
+
+interface LegendItemProps {
+  color: number;
+  label: string;
+}
+
+const LegendItem: React.FC<LegendItemProps> = ({ color, label }) => (
+  <div className="legend-item">
+    <ColorCircle color={color} />
+    <div className="legend-item-label">{label}</div>
+  </div>
+);
 
 const CompareInner: React.FC<{ mobile: boolean }> = ({ mobile }) => {
   const {
     params: { user1, user2 },
   } = useRouteMatch<{ user1: string; user2: string }>();
+  const { displayName: user1DisplayName } = useUsername(user1);
+  const { displayName: user2DisplayName } = useUsername(user2);
   const [playing, setPlaying] = useState<string | false>(false);
   const { search: queryString } = useLocation();
   const push = usePush();
@@ -96,104 +116,123 @@ const CompareInner: React.FC<{ mobile: boolean }> = ({ mobile }) => {
 
   return (
     <div className="compare">
-      <h1>
-        Shared Musical Interests between{' '}
-        <Link to={`/stats/${user1}`}>
-          <span className="username">{data.user1_username}</span>
-        </Link>{' '}
-        and{' '}
-        <Link to={`/stats/${user2}`}>
-          <span className="username">{data.user2_username}</span>
-        </Link>
-      </h1>
+      <div className="compare-content">
+        <h1>
+          Shared Musical Interests between{' '}
+          <Link to={`/stats/${user1}`}>
+            <span className="username">{data.user1_username}</span>
+          </Link>{' '}
+          and{' '}
+          <Link to={`/stats/${user2}`}>
+            <span className="username">{data.user2_username}</span>
+          </Link>
+        </h1>
 
-      {data.tracks.length === 0 && data.artists.length === 0 ? (
-        <>
-          Amazing - there is absolutely no musical overlap between these two people! You&apos;re
-          truly polar opposites of musical taste.
-        </>
-      ) : (
-        (() => {
-          if (generatedPlaylist) {
+        {data.tracks.length === 0 && data.artists.length === 0 ? (
+          <>
+            Amazing - there is absolutely no musical overlap between these two people! You&apos;re
+            truly polar opposites of musical taste.
+          </>
+        ) : (
+          (() => {
+            if (generatedPlaylist) {
+              return (
+                <div style={{ fontSize: 20, textAlign: 'center' }}>
+                  Playlist generated: <b>&quot;{generatedPlaylist.name}&quot;</b>
+                  <br /> It&apos;s in your Spotify right now - give it a listen and share it with
+                  your friend!
+                </div>
+              );
+            } else {
+              return (
+                <>
+                  <p style={{ fontSize: 20, textAlign: 'center' }}>
+                    A shared taste playlist contains tracks that you both enjoy, pulling from the
+                    top tracks and artists from each of your Spotifytrack profiles, plus a little
+                    extra that we think you&apos;ll both enjoy.
+                  </p>
+                  <p style={{ fontSize: 20, textAlign: 'center', marginTop: -4, marginBottom: 20 }}>
+                    Give it a try - you&apos;ll have the playlist in your Spotify in less than 30
+                    seconds!
+                  </p>
+
+                  <button
+                    className="gen-playlist-button"
+                    onClick={() => {
+                      const req = { user1_id: user1, user2_id: user2 };
+                      const url = `/connect?playlist_perms=true&state=${encodeURIComponent(
+                        JSON.stringify(req)
+                      )}`;
+                      push(url);
+                    }}
+                  >
+                    Generate a Shared Taste Playlist
+                  </button>
+                </>
+              );
+            }
+          })()
+        )}
+
+        <ImageBoxGrid
+          renderItem={(i) => {
+            const track = data.tracks[i];
+
             return (
-              <div style={{ fontSize: 20, textAlign: 'center' }}>
-                Playlist generated: <b>&quot;{generatedPlaylist.name}&quot;</b>
-                <br /> It&apos;s in your Spotify right now - give it a listen and share it with your
-                friend!
-              </div>
+              <TrackCard
+                key={track.id}
+                title={track.name}
+                artists={track.album.artists}
+                previewUrl={track.preview_url}
+                imageSrc={track.album.images[0].url}
+                playing={playing}
+                setPlaying={setPlaying}
+                mobile={mobile}
+              />
             );
-          } else {
+          }}
+          getItemCount={() => data.tracks.length}
+          initialItems={Math.min(mobile ? 9 : 10, data.tracks.length)}
+          title="Shared Top Tracks"
+          disableTimeframes
+        />
+
+        <ImageBoxGrid
+          renderItem={(i) => {
+            const artist = data.artists[i];
+
             return (
-              <>
-                <p style={{ fontSize: 20, textAlign: 'center' }}>
-                  A shared taste playlist contains tracks that both of you enjoy, pulling from the
-                  top tracks and artists from both of your Spotifytrack profiles, plus a little
-                  extra that we think you&apos;ll both enjoy. <br />
-                  Give it a try - you&apos;ll have the playlist in your Spotify in less than 30
-                  seconds!
-                </p>
-
-                <button
-                  className="gen-playlist-button"
-                  onClick={() => {
-                    const req = { user1_id: user1, user2_id: user2 };
-                    const url = `/connect?playlist_perms=true&state=${encodeURIComponent(
-                      JSON.stringify(req)
-                    )}`;
-                    push(url);
-                  }}
-                >
-                  Generate a Shared Taste Playlist
-                </button>
-              </>
+              <ArtistCard
+                name={artist.name}
+                genres={artist.genres}
+                imageSrc={artist.images[0]?.url}
+                id={artist.id}
+                mobile={mobile}
+              />
             );
-          }
-        })()
-      )}
+          }}
+          getItemCount={() => data.artists.length}
+          initialItems={Math.min(mobile ? 9 : 10, data.artists.length)}
+          title="Shared Top Artists"
+          disableTimeframes
+          style={{ marginBottom: 30 }}
+        />
+      </div>
 
-      <ImageBoxGrid
-        renderItem={(i) => {
-          const track = data.tracks[i];
-
-          return (
-            <TrackCard
-              key={track.id}
-              title={track.name}
-              artists={track.album.artists}
-              previewUrl={track.preview_url}
-              imageSrc={track.album.images[0].url}
-              playing={playing}
-              setPlaying={setPlaying}
-              mobile={mobile}
-            />
-          );
-        }}
-        getItemCount={() => data.tracks.length}
-        initialItems={Math.min(mobile ? 9 : 10, data.tracks.length)}
-        title="Tracks"
-        disableTimeframes
-      />
-
-      <ImageBoxGrid
-        renderItem={(i) => {
-          const artist = data.artists[i];
-
-          return (
-            <ArtistCard
-              name={artist.name}
-              genres={artist.genres}
-              imageSrc={artist.images[0]?.url}
-              id={artist.id}
-              mobile={mobile}
-            />
-          );
-        }}
-        getItemCount={() => data.artists.length}
-        initialItems={Math.min(mobile ? 9 : 10, data.artists.length)}
-        title="Artists"
-        disableTimeframes
-      />
-
+      <div className="related-artists-legend">
+        <LegendItem
+          color={relatedArtistsGraphConf.PRIMARY_NODE_COLOR[1]}
+          label={`Top artist of ${user1DisplayName ?? user1}`}
+        />
+        <LegendItem
+          color={relatedArtistsGraphConf.PRIMARY_NODE_COLOR[2]}
+          label={`Top artist of ${user2DisplayName ?? user2}`}
+        />
+        <LegendItem
+          color={relatedArtistsGraphConf.PRIMARY_NODE_COLOR[3]}
+          label="Top artist of both people"
+        />
+      </div>
       <RelatedArtistsGraph relatedArtists={relatedArtists} />
     </div>
   );

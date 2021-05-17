@@ -1,18 +1,16 @@
 import React, { useMemo } from 'react';
-import { connect } from 'react-redux';
 import { useQuery } from 'react-query';
+import { Link } from 'react-router-dom';
 import { withMobileProp } from 'ameo-utils/dist/responsive';
+import { useDispatch, useSelector } from 'react-redux';
 
 import { getUrl, getJsonEndpoint } from 'src/api';
 import { Artist, TimeFrames, ReduxStore } from 'src/types';
 import { LineChart } from 'src/components/Charts';
 import Loading from 'src/components/Loading';
 import { ImageBoxGrid, Artist as ArtistCard } from 'src/Cards';
-import { useDispatch } from 'react-redux';
 import { actionCreators } from 'src/store';
-import { ANewTab } from 'src/util';
 import './GenreStats.scss';
-import { Link } from 'react-router-dom';
 import { colors } from 'src/style';
 
 interface GenreStats {
@@ -22,19 +20,22 @@ interface GenreStats {
   popularity_history: TimeFrames<number>;
 }
 
-const EveryNoiseLink = ({ genre }: { genre: string }) => {
-  const to = `http://everynoise.com/engenremap-${genre.replace(/ /g, '')}.html`;
-  return <ANewTab to={to} text={genre} style={{ color: 'white', fontSize: 11 }} />;
-};
+// const EveryNoiseLink = ({ genre }: { genre: string }) => {
+//   const to = `http://everynoise.com/engenremap-${genre.replace(/ /g, '')}.html`;
+//   return <ANewTab to={to} text={genre} style={{ color: 'white', fontSize: 11 }} />;
+// };
 
 const fetchGenreStats = async (username: string, genre: string) =>
   getJsonEndpoint<GenreStats>(getUrl(`/stats/${username}/genre/${genre}`));
 
-const mapStateToProps = (state: ReduxStore) => ({ artistsCorpus: state.entityStore.artists });
+interface GenreStatsProps {
+  username: string;
+  genre: string;
+  mobile: boolean;
+}
 
-const GenreStats: React.FC<
-  { username: string; genre: string; mobile: boolean } & ReturnType<typeof mapStateToProps>
-> = ({ username, genre, artistsCorpus, mobile }) => {
+const GenreStats: React.FC<GenreStatsProps> = ({ username, genre, mobile }) => {
+  const artistsCorpus = useSelector((state: ReduxStore) => state.entityStore.artists);
   const dispatch = useDispatch();
 
   const { data: genreStats, status } = useQuery([genre, { username, genre }], () =>
@@ -94,7 +95,7 @@ const GenreStats: React.FC<
             nameTextStyle: {
               color: '#ccc',
               fontSize: mobile ? 10 : 14,
-              padding: 12,
+              padding: 16,
             },
           },
           yAxis: {
@@ -142,4 +143,4 @@ const GenreStats: React.FC<
   );
 };
 
-export default withMobileProp({ maxDeviceWidth: 800 })(connect(mapStateToProps)(GenreStats));
+export default withMobileProp({ maxDeviceWidth: 800 })(GenreStats);

@@ -415,7 +415,10 @@ fn fetch_batch_entities<'a, T: for<'de> Deserialize<'de>>(
         .get(&url)
         .bearer_auth(token)
         .send()
-        .map_err(|_err| -> String { "Error requesting batch data from the Spotify API".into() })?
+        .map_err(|err| {
+            error!("Error requesting batch data from the Spotify API: {}", err);
+            String::from("Error requesting batch data from the Spotify API")
+        })?
         .json()
         .map_err(|err| -> String {
             error!("Error decoding JSON from Spotify API: {:?}", err);

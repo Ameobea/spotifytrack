@@ -2,6 +2,14 @@
   display: flex;
   flex-direction: column;
 
+  .compare-content {
+    display: flex;
+    flex-direction: column;
+    max-width: 1020px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
   .username {
     color: #b2c;
   }
@@ -49,4 +57,29 @@
 
 .gen-playlist-button:hover {
   background-color: #151515;
+}
+
+.related-artists-legend {
+  display: flex;
+  flex-direction: row;
+  margin-bottom: 10px;
+  margin-left: 8px;
+  margin-right: 8px;
+  margin-top: 16px;
+
+  .legend-item {
+    display: flex;
+    flex-direction: row;
+    margin-right: 12px;
+
+    .legend-item-label {
+      margin-left: 4px;
+    }
+  }
+}
+
+.color-circle {
+  height: 20px;
+  width: 20px;
+  border-radius: 10px;
 }

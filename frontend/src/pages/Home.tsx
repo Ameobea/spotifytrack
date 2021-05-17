@@ -5,6 +5,7 @@ import 'react-responsive-carousel/lib/styles/carousel.min.css';
 
 import { ReactRouterRouteProps } from '../types';
 import './Home.scss';
+import '../components/BigButton.scss';
 
 const Home: React.FC<ReactRouterRouteProps> = () => (
   <main className="home">
@@ -25,11 +26,11 @@ const Home: React.FC<ReactRouterRouteProps> = () => (
 
     <div className="buttons-container">
       <Link to="/connect">
-        <button>Connect to Spotify</button>
+        <button className="big-button">Connect to Spotify</button>
       </Link>
 
       <Link to="/stats/ameobea">
-        <button>View Example User Profile</button>
+        <button className="big-button">View Example User Profile</button>
       </Link>
     </div>
 

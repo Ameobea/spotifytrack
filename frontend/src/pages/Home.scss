@@ -52,22 +52,6 @@ main.home {
     flex-direction: row;
     justify-content: space-around;
     margin-bottom: 6vh;
-
-    button {
-      width: 300px;
-      height: 170px;
-      font-size: 34px;
-      color: #ddd;
-      background-color: #0b0b0b;
-      border: 2px solid #444;
-      outline: none;
-      border-radius: 10px;
-      cursor: pointer;
-    }
-
-    button:hover {
-      background-color: #141414;
-    }
   }
 }
 

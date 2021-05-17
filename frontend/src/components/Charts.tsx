@@ -46,7 +46,12 @@ const InnerLineChart: React.FC<InnerLineChartProps> = ({
   const chartConfig: any = R.mergeDeepRight(
     {
       ...getBaseConfigDefaults(mobile),
-      grid: { bottom: mobile ? 48 : 40, top: 50 } as EChartOption['grid'],
+      grid: {
+        bottom: mobile ? 48 : 44,
+        top: 50,
+        left: mobile ? 40 : 90,
+        right: mobile ? 16 : 40,
+      } as EChartOption['grid'],
       series: series.map(({ data, name }, i) => ({
         ...seriesDefaults,
         smooth: 0.3,
@@ -139,7 +144,7 @@ export const BarChart: React.FC<BarChartProps> = ({
     () =>
       R.mergeDeepRight(
         {
-          ...getBaseConfigDefaults(false), // TODO
+          ...getBaseConfigDefaults(mobile),
           grid: { top: 10, left: mobile ? 30 : 56, right: 10, bottom: 30 },
           dataZoom: undefined,
           xAxis: {
@@ -159,7 +164,7 @@ export const BarChart: React.FC<BarChartProps> = ({
               show: false,
             },
           },
-          backgroundColor: '#111', // TODO: Dedup these things with the line chart
+          backgroundColor: '#111',
           yAxis: {
             axisLabel: {
               color: '#ccc',
@@ -186,7 +191,7 @@ export const BarChart: React.FC<BarChartProps> = ({
         },
         otherConfig
       ),
-    [data, otherConfig, categories]
+    [mobile, categories, data, otherConfig]
   );
 
   return <ReactEchartsCore style={style} echarts={echarts} option={chartConfig as any} />;
@@ -209,6 +214,7 @@ export const Treemap: React.FC<{
     () =>
       R.mergeDeepRight(
         {
+          grid: { left: 280, right: 280 },
           series: [
             {
               type: 'treemap',
@@ -229,6 +235,7 @@ export const Treemap: React.FC<{
       ),
     [otherConfig, mobile, data]
   );
+  console.log({ chartConfig });
 
   return <ReactEchartsCore style={style} echarts={echarts} option={chartConfig} />;
 };

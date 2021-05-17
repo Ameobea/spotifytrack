@@ -48,7 +48,7 @@ const makeDraggable = (
 ) => {
   g.interactive = true;
   g.on('pointerdown', (evt: PIXI.InteractionEvent) => {
-    const isTouch = evt.data.originalEvent instanceof TouchEvent;
+    const isTouch = window.TouchEvent && evt.data.originalEvent instanceof window.TouchEvent;
     if ((!isTouch && (evt.data.originalEvent as any).button !== 0) || parent.dragData) {
       return;
     }

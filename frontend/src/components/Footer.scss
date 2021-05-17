@@ -4,7 +4,6 @@ footer {
   justify-content: center;
   margin-left: -8px;
   margin-right: -8px;
-  width: 100vw;
 
   div {
     margin-left: 18px;
@@ -15,5 +14,6 @@ footer {
 @media only screen and (max-width: 800px) {
   footer {
     font-size: 10px !important;
+    width: 100vw;
   }
 }

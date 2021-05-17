@@ -394,7 +394,14 @@ const RelatedArtistsGraphInner: React.FC<RelatedArtistsGraphProps> = ({
   return (
     <div className="related-artists-graph" style={style}>
       <canvas
-        style={{ width, height, userSelect: 'none', marginLeft: -8, marginRight: -8 }}
+        style={{
+          width,
+          height,
+          userSelect: 'none',
+          marginLeft: -8,
+          marginRight: -8,
+          marginBottom: -4,
+        }}
         ref={(ref) => {
           if (!ref) {
             return;
@@ -433,7 +440,7 @@ export const mkFetchAndStoreRelatedArtistsForUser = (
 export const RelatedArtistsGraphForUser: React.FC<{ style?: React.CSSProperties }> = ({
   style,
 }) => {
-  const username = useUsername();
+  const { username } = useUsername();
 
   const { data: rawRelatedArtists } = useQuery(
     ['relatedArtists', username],

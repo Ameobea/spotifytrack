@@ -55,7 +55,7 @@ export const buildArtistStatsUrl = (username: string, artistId: string): string 
   `/stats/${username}/artist/${artistId}/`;
 
 const ArtistStatsLink: React.FC<{ artistId: string }> = ({ artistId, children }) => {
-  const username = useUsername();
+  const { username } = useUsername();
   if (!username) {
     return <>{children}</>;
   }
@@ -160,7 +160,7 @@ export const Artist: React.FC<ArtistProps> = ({
   preferredGenres = DEFAULT_PREFERRED_GENRES,
   mobile,
 }) => {
-  const username = useUsername();
+  const { username } = useUsername();
   // Make sure that preferred genres show up and aren't trimmed off
   const [preferred, other] = R.partition((genre) => preferredGenres.has(genre), genres);
   const trimmedGenres = [...preferred, ...other].slice(0, 6);

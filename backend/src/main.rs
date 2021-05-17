@@ -62,7 +62,8 @@ fn main() {
         routes::get_timeline,
         routes::compare_users,
         routes::get_related_artists_graph,
-        routes::get_related_artists
+        routes::get_related_artists,
+        routes::get_display_name
     ];
 
     rocket::ignite()

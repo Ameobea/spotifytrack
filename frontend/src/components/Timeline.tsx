@@ -257,7 +257,7 @@ const maybeUpdateMobileSelectedDay = (
 };
 
 const Timeline: React.FC<{ mobile: boolean }> = ({ mobile }) => {
-  const username = useUsername();
+  const { username } = useUsername();
 
   const [curMonth, setCurMonth] = useState(dayjs().startOf('month'));
   const { data } = useQuery(['timeline', username, curMonth.toString()], () =>

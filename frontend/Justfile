@@ -1,5 +1,5 @@
 run:
-  REACT_APP_API_BASE_URL=http://localhost:8000 yarn start
+  REACT_APP_API_BASE_URL=http://localhost:8000 REACT_APP_SITE_URL=http://localhost:9000 yarn start
 
 build:
   yarn build

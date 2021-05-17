@@ -82,3 +82,18 @@ export const fetchRelatedArtists = async (
   const url = getUrl(`/related_artists/${artistID}`);
   return getJsonEndpoint(url);
 };
+
+export const getUserDisplayName = async (username: string): Promise<string> => {
+  const res = await fetch(getUrl(`/display_name/${username}`)).then(async (res) => {
+    if (!res.ok) {
+      console.error('Bad response code when getting user display name: ', res.status);
+      return username;
+    }
+    return res.text();
+  });
+  if (!res) {
+    console.error('Found no display name for username: ', username);
+    return username;
+  }
+  return res;
+};

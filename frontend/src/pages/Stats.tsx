@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import * as R from 'ramda';
-import { Link } from 'react-router-dom';
+import { useHistory } from 'react-router-dom';
 import { PropTypesOf } from 'ameo-utils/dist/util/react';
 import { withMobileProp } from 'ameo-utils/dist/responsive';
 
@@ -19,6 +19,7 @@ import Timeline from 'src/components/Timeline';
 import { RelatedArtistsGraphForUser } from 'src/components/RelatedArtistsGraph';
 import './Stats.scss';
 import { colors } from 'src/style';
+import CompareLanding from './CompareLanding';
 
 type ArtistCardProps = {
   horizontallyScrollable?: boolean;
@@ -33,8 +34,8 @@ export const ArtistCards: React.FC<ArtistCardProps> = ({
   const { artistsCorpus } = useSelector(({ entityStore: { artists } }) => ({
     artistsCorpus: artists,
   }));
-  const username = useUsername()!;
-  const stats = useSelector(({ userStats }) => userStats[username]);
+  const { username } = useUsername()!;
+  const stats = useSelector(({ userStats }) => (username ? userStats[username] : null));
 
   if (!stats) {
     return <Loading />;
@@ -76,11 +77,12 @@ export const ArtistCards: React.FC<ArtistCardProps> = ({
 };
 
 enum StatsDetailsTab {
-  Timeline,
-  RelatedArtistsGraph,
-  Tracks,
-  Artists,
-  Genres,
+  Timeline = 'timeline',
+  RelatedArtistsGraph = 'relatedArtists',
+  Tracks = 'tracks',
+  Artists = 'artists',
+  Genres = 'genres',
+  Compare = 'compare',
 }
 
 const ALL_TABS: { title: string; value: StatsDetailsTab }[] = [
@@ -89,6 +91,7 @@ const ALL_TABS: { title: string; value: StatsDetailsTab }[] = [
   { title: 'Top Artists', value: StatsDetailsTab.Artists },
   { title: 'Top Tracks', value: StatsDetailsTab.Tracks },
   { title: 'Top Genres', value: StatsDetailsTab.Genres },
+  { title: 'Compare', value: StatsDetailsTab.Compare },
 ];
 
 interface StatsDetailsTabsProps {
@@ -119,7 +122,57 @@ const StatsDetailsTabComp: React.FC<StatsDetailsTabCompProps> = ({
   </div>
 );
 
+const RelatedArtistsGraphTooltip: React.FC<{ onClick: () => void }> = ({ onClick }) => (
+  <span className="related-artists-graph-tooltip" onClick={onClick}>
+    What&apos;s This?
+  </span>
+);
+
+const RelatedArtistsGraphModal: React.FC<{ onClose: () => void }> = ({ onClose }) => (
+  <div className="related-artists-graph-modal-backdrop" onClick={onClose}>
+    <div className="related-artists-graph-modal">
+      <div className="close-button" onClick={onClose}>
+        ✕
+      </div>
+      <h2>Artist Relationship Graph</h2>
+
+      <p>
+        This graph shows the relationships between your top artists as shown by listening patterns
+        of other Spotify users. If two artists are connected, it means that listeners of one artist
+        have a high chance of listening to the other as well. This data comes directly from Spotify.
+      </p>
+      <p>
+        Although related artists often make similar types of music that can be classified into the
+        same or similar genres, this is not always the case. Because of this, the related artists
+        graph can be a powerful tool to visualize the world of music outside of a traditional
+        genre-based context.
+      </p>
+
+      <h2>How to Use</h2>
+      <p>
+        You can drag the graph around using your mouse and zoom using the mouse wheel if you&apos;re
+        on a computer. If you&apos;re on a phone or tablet, you can move around by drgging and zoom
+        by pinching.
+      </p>
+      <p>
+        If you double-click or double-tap on any artist, it will load additional all other artists
+        related to it that are not in your personal top artists and add them to the graph.{' '}
+      </p>
+    </div>
+  </div>
+);
+
 const StatsDetailsTabs: React.FC<StatsDetailsTabsProps> = ({ selectedTab, setSelectedTab }) => {
+  const history = useHistory();
+  const mkOnSelect = (value: StatsDetailsTab) => () => {
+    setSelectedTab(value);
+    history.push({
+      pathname: history.location.pathname,
+      search: history.location.search,
+      hash: value,
+    });
+  };
+
   return (
     <div className="stats-details-tabs">
       {ALL_TABS.map(({ title, value }) => (
@@ -127,7 +180,7 @@ const StatsDetailsTabs: React.FC<StatsDetailsTabsProps> = ({ selectedTab, setSel
           key={value}
           title={title}
           isSelected={selectedTab === value}
-          onSelect={() => setSelectedTab(value)}
+          onSelect={mkOnSelect(value)}
         />
       ))}
     </div>
@@ -135,15 +188,25 @@ const StatsDetailsTabs: React.FC<StatsDetailsTabsProps> = ({ selectedTab, setSel
 };
 
 const StatsDetailsInner: React.FC<{ stats: UserStats; mobile: boolean }> = ({ stats, mobile }) => {
+  const history = useHistory();
   // TODO: Default to different default selected tab if we only have one update for the user
-  const [selectedTab, setSelectedTab] = useState(StatsDetailsTab.Timeline);
-  const username = useUsername();
+  const [selectedTab, setSelectedTab] = useState(
+    (() => {
+      const matchingTab = ALL_TABS.find((tab) => `#${tab.value}` === history.location.hash);
+      if (matchingTab) {
+        return matchingTab.value;
+      }
+      return StatsDetailsTab.Timeline;
+    })()
+  );
+  const { displayName } = useUsername();
 
   const { tracksCorpus } = useSelector(({ entityStore: { tracks, artists } }) => ({
     tracksCorpus: tracks,
     artistsCorpus: artists,
   }));
   const [playing, setPlaying] = useState<string | false>(false);
+  const [relatedArtistsGraphModalOpen, setRelatedArtistsGraphModalOpen] = useState(false);
 
   return (
     <>
@@ -152,7 +215,7 @@ const StatsDetailsInner: React.FC<{ stats: UserStats; mobile: boolean }> = ({ st
           <span className="headline">
             User stats for{' '}
             <span style={{ color: colors.pink }} className="username">
-              {username}
+              {displayName}
             </span>{' '}
             on Spotifytrack
           </span>
@@ -164,7 +227,17 @@ const StatsDetailsInner: React.FC<{ stats: UserStats; mobile: boolean }> = ({ st
         let content: React.ReactNode;
         switch (selectedTab) {
           case StatsDetailsTab.RelatedArtistsGraph: {
-            return <RelatedArtistsGraphForUser />;
+            return (
+              <>
+                {relatedArtistsGraphModalOpen ? (
+                  <RelatedArtistsGraphModal
+                    onClose={() => setRelatedArtistsGraphModalOpen(false)}
+                  />
+                ) : null}
+                <RelatedArtistsGraphTooltip onClick={() => setRelatedArtistsGraphModalOpen(true)} />
+                <RelatedArtistsGraphForUser />
+              </>
+            );
           }
           case StatsDetailsTab.Tracks: {
             content = (
@@ -208,6 +281,10 @@ const StatsDetailsInner: React.FC<{ stats: UserStats; mobile: boolean }> = ({ st
           }
           case StatsDetailsTab.Timeline: {
             content = <Timeline />;
+            break;
+          }
+          case StatsDetailsTab.Compare: {
+            content = <CompareLanding />;
             break;
           }
         }

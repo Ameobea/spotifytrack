@@ -13,32 +13,43 @@ const customReducers = {
 
 const middleware = routerMiddleware(history);
 
+interface EntityStoreState {
+  tracks: { [trackId: string]: Track };
+  artists: { [artistId: string]: Artist | undefined };
+  userDisplayNames: { [username: string]: string | null };
+}
+
 const entityStore = {
   ADD_TRACKS: buildActionGroup({
     actionCreator: (tracksById: { [trackId: string]: Track }) => ({
       type: 'ADD_TRACKS',
       tracks: tracksById,
     }),
-    subReducer: (
-      state: {
-        tracks: { [trackId: string]: Track };
-        artists: { [artistId: string]: Artist | undefined };
-      },
-      { tracks }
-    ) => ({ ...state, tracks: { ...state.tracks, ...tracks } }),
+    subReducer: (state: EntityStoreState, { tracks }) => ({
+      ...state,
+      tracks: { ...state.tracks, ...tracks },
+    }),
   }),
   ADD_ARTISTS: buildActionGroup({
     actionCreator: (artistsById: { [artistId: string]: Artist }) => ({
       type: 'ADD_ARTISTS',
       artists: artistsById,
     }),
-    subReducer: (
-      state: {
-        tracks: { [trackId: string]: Track };
-        artists: { [artistId: string]: Artist | undefined };
-      },
-      { artists }
-    ) => ({ ...state, artists: { ...state.artists, ...artists } }),
+    subReducer: (state: EntityStoreState, { artists }) => ({
+      ...state,
+      artists: { ...state.artists, ...artists },
+    }),
+  }),
+  ADD_USER_DISPLAY_NAME: buildActionGroup({
+    actionCreator: (username: string, displayName: string | null) => ({
+      type: 'ADD_USER_DISPLAY_NAME',
+      username,
+      displayName,
+    }),
+    subReducer: (state: EntityStoreState, { username, displayName }) => ({
+      ...state,
+      userDisplayNames: { ...state.userDisplayNames, [username]: displayName },
+    }),
   }),
 };
 
@@ -72,7 +83,10 @@ const userStats = {
         popularityPerTimePeriod: [number | null, number | null, number | null];
       }[]
     ) => ({ type: 'SET_ARTIST_STATS', username, artistId, topTracks, popularityHistory }),
-    subReducer: (state: UserStatsState, { username, artistId, topTracks, popularityHistory }): UserStatsState => {
+    subReducer: (
+      state: UserStatsState,
+      { username, artistId, topTracks, popularityHistory }
+    ): UserStatsState => {
       const existingUserStats: UserStats = state[username] || {};
       const existingArtistStats = existingUserStats.artistStats || {};
 
@@ -113,10 +127,10 @@ const userStats = {
 
 const jantixModules = {
   userStats: buildModule<UserStatsState, typeof userStats>({}, userStats),
-  entityStore: buildModule<
-    { tracks: { [trackId: string]: Track }; artists: { [artistId: string]: Artist | undefined } },
-    typeof entityStore
-  >({ tracks: {}, artists: {} }, entityStore),
+  entityStore: buildModule<EntityStoreState, typeof entityStore>(
+    { tracks: {}, artists: {}, userDisplayNames: {} },
+    entityStore
+  ),
 };
 
 export const { dispatch, getState, actionCreators, useSelector, store } = buildStore<

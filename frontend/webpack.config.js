@@ -81,7 +81,7 @@ const buildConfig = () => ({
       template: 'index.hbs',
       inject: true,
     }),
-    new webpack.EnvironmentPlugin(['REACT_APP_API_BASE_URL']),
+    new webpack.EnvironmentPlugin(['REACT_APP_API_BASE_URL', 'REACT_APP_SITE_URL']),
     // new BundleAnalyzerPlugin(),
     new RetryChunkLoadPlugin({
       // optional stringified function to get the cache busting query string appended to the script src

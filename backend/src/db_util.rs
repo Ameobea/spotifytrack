@@ -623,7 +623,7 @@ pub(crate) fn populate_artists_genres_table(
     }
 
     // Fetch artist metadata for each of them
-    println!("{:?}", all_artist_spotify_ids);
+    // println!("{:?}", all_artist_spotify_ids);
     let mut artists =
         crate::spotify_api::fetch_artists(spotify_access_token, &all_artist_spotify_ids)?;
     artists.sort_unstable_by(|a, b| a.id.cmp(&b.id));

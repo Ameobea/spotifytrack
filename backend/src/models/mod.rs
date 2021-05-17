@@ -524,6 +524,11 @@ pub(crate) struct CreateSharedPlaylistRequest {
     pub user2_id: String,
 }
 
+#[derive(Deserialize)]
+pub(crate) struct CompareToRequest {
+    pub compare_to: String,
+}
+
 #[derive(Clone, Deserialize, Debug)]
 pub(crate) struct GetRelatedArtistsResponse {
     pub artists: Vec<Artist>,

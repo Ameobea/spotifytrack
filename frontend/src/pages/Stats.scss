@@ -65,8 +65,8 @@ main.stats {
 }
 
 @media only screen and (max-width: 800px) {
-  .stats {
-    // width: calc(100vw - 14px);
+  .details {
+    max-width: calc(100vw - 16px) !important;
   }
 
   .stats-details-tabs {
@@ -74,12 +74,12 @@ main.stats {
     flex-wrap: wrap;
     justify-content: space-around;
     gap: 6px;
-    padding-bottom: 4px;
 
     .stats-details-tab {
       font-size: 12px;
       padding-left: 3px;
       padding-right: 3px;
+      border-bottom: 2px solid #56665b42;
     }
   }
 
@@ -91,4 +91,95 @@ main.stats {
 .stats-details-header {
   display: flex;
   flex-direction: column;
+}
+
+.related-artists-graph-tooltip {
+  cursor: pointer;
+  text-align: right;
+  border-radius: 4px;
+}
+
+@media only screen and (min-width: 801px) {
+  .related-artists-graph-tooltip {
+    position: absolute;
+    right: 7px;
+    top: 51px;
+    font-size: 14px;
+    width: 75px;
+    padding: 3px 2px;
+    border: 1px solid #ccc;
+  }
+  .related-artists-graph-tooltip:hover {
+    background-color: #cccccc18;
+  }
+}
+
+@media only screen and (max-width: 800px) {
+  .related-artists-graph-tooltip {
+    font-size: 12px;
+    width: 65px;
+    padding: 1px;
+    border: 1px solid #444;
+    margin-top: 4px;
+    margin-bottom: 3px;
+    margin-left: auto;
+  }
+}
+
+.related-artists-graph-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100%;
+  z-index: 10000;
+  background-color: #33333370;
+}
+
+.related-artists-graph-modal {
+  width: 80vw;
+  height: 70vh;
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 10vh;
+  margin-bottom: 5vh;
+  background-color: #121212;
+  padding: 16px;
+  border-radius: 7px;
+  border: 1px solid #888;
+  box-sizing: border-box;
+
+  p {
+    box-sizing: border-box;
+    padding-left: 8%;
+    padding-right: 8%;
+    font-size: 17px;
+  }
+
+  .close-button {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-end;
+    margin-top: -4px;
+    font-size: 25px;
+    font-weight: bold;
+    cursor: pointer;
+  }
+
+  h2 {
+    font-size: 28px;
+    margin-top: 5px;
+    text-align: center;
+  }
+}
+
+@media only screen and (max-width: 800px) {
+  .related-artists-graph-modal {
+    font-size: 12px;
+    margin-top: 4vh;
+    margin-bottom: 2vh;
+    width: 94vw;
+    height: 90vh;
+    overflow-y: auto;
+  }
 }

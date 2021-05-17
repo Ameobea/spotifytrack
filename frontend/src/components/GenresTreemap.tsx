@@ -12,7 +12,7 @@ import { fetchGenreHistory } from 'src/api';
 import './GenresTreemap.scss';
 
 const GenresTreemap: React.FC<{ mobile: boolean }> = ({ mobile }) => {
-  const username = useUsername();
+  const { username } = useUsername();
 
   useOnChange(username, async (username: string | null) => {
     if (!username) {
@@ -68,7 +68,7 @@ const GenresTreemap: React.FC<{ mobile: boolean }> = ({ mobile }) => {
             value: R.last(scores),
           }))}
           style={{
-            height: mobile ? 'max(32vh, 430px)' : 'max(68vh, 400px)',
+            height: mobile ? 'max(32vh, 430px)' : 'max(80vh, 400px)',
             // width: mobile ? '100vw' : 'calc(100vw - 80)',
           }}
           mobile={mobile}

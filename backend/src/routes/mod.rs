@@ -15,9 +15,9 @@ use crate::{
     conf::CONF,
     db_util::{self, get_all_top_artists_for_user},
     models::{
-        Artist, CreateSharedPlaylistRequest, NewUser, OAuthTokenResponse, Playlist,
-        RelatedArtistsGraph, StatsSnapshot, TimeFrames, Timeline, TimelineEvent, TimelineEventType,
-        Track, User, UserComparison,
+        Artist, CompareToRequest, CreateSharedPlaylistRequest, NewUser, OAuthTokenResponse,
+        Playlist, RelatedArtistsGraph, StatsSnapshot, TimeFrames, Timeline, TimelineEvent,
+        TimelineEventType, Track, User, UserComparison,
     },
     spotify_api::{fetch_artists, get_multiple_related_artists},
     DbConn, SpotifyTokenData,
@@ -44,7 +44,7 @@ pub(crate) fn get_current_stats(
         },
     };
     mark("Finished getting spotify user by id");
-    println!("{:?}", user);
+    // println!("{:?}", user);
 
     let spotify_access_token = {
         let token_data = &mut *(&*token_data).lock().unwrap();
@@ -53,20 +53,8 @@ pub(crate) fn get_current_stats(
     mark("Got spotify access token");
 
     let (artist_stats, track_stats) = match rayon::join(
-        || {
-            dbg!(db_util::get_artist_stats(
-                &user,
-                conn,
-                &spotify_access_token
-            ))
-        },
-        || {
-            dbg!(db_util::get_track_stats(
-                &user,
-                conn2,
-                &spotify_access_token
-            ))
-        },
+        || db_util::get_artist_stats(&user, conn, &spotify_access_token),
+        || db_util::get_track_stats(&user, conn2, &spotify_access_token),
     ) {
         (Err(err), _) | (Ok(_), Err(err)) => return Err(err),
         (Ok(None), _) | (_, Ok(None)) => return Ok(None),
@@ -338,10 +326,8 @@ pub(crate) fn get_timeline(
 #[get("/authorize?<playlist_perms>&<state>")]
 pub(crate) fn authorize(playlist_perms: Option<&RawStr>, state: Option<&RawStr>) -> Redirect {
     let scopes = match playlist_perms.map(|s| s.as_str()) {
-        None | Some("false") | Some("False") | Some("0") =>
-            "user-read-recently-played%20user-top-read%20user-follow-read",
-        _ =>
-            "user-read-recently-played%20user-top-read%20user-follow-read%20playlist-modify-public",
+        None | Some("false") | Some("False") | Some("0") => "user-top-read",
+        _ => "user-top-read%20playlist-modify-public",
     };
     let callback_uri = crate::conf::CONF.get_absolute_oauth_cb_uri();
 
@@ -354,6 +340,7 @@ pub(crate) fn authorize(playlist_perms: Option<&RawStr>, state: Option<&RawStr>)
     ))
 }
 
+/// The playlist will be generated on the account of user2
 fn generate_shared_playlist(
     conn1: DbConn,
     conn2: DbConn,
@@ -561,14 +548,12 @@ pub(crate) fn oauth_cb(
 
     match state {
         Some(s) if !s.is_empty() => {
-            match serde_json::from_str(
-                s.percent_decode()
-                    .map_err(|_| {
-                        error!("Invalid URL-Encoded `state` param; dropping");
-                        "Invalid URL-encoded `state` param provided; can't parse.".to_string()
-                    })?
-                    .as_ref(),
-            ) {
+            let percent_decoded = s.percent_decode().map_err(|_| {
+                error!("Invalid URL-Encoded `state` param; dropping");
+                "Invalid URL-encoded `state` param provided; can't parse.".to_string()
+            })?;
+
+            match serde_json::from_str(percent_decoded.as_ref()) {
                 Ok(CreateSharedPlaylistRequest { user1_id, user2_id }) => {
                     let playlist = generate_shared_playlist(
                         conn1,
@@ -608,6 +593,16 @@ pub(crate) fn oauth_cb(
                     }
                 },
                 Err(err) => {
+                    if let Ok(CompareToRequest { compare_to }) =
+                        serde_json::from_str(percent_decoded.as_ref())
+                    {
+                        let redirect_url = format!(
+                            "{}/compare/{}/{}",
+                            CONF.website_url, compare_to, user_spotify_id
+                        );
+                        return Ok(Redirect::to(redirect_url));
+                    }
+
                     warn!(
                         "Error parsing JSON body of what we presume is a playlist generation \
                          request: {:?}",
@@ -972,4 +967,12 @@ pub(crate) fn get_related_artists(
 
     let out = build_related_artists_graph(spotify_access_token, &related_artist_ids)?;
     Ok(Some(Json(out)))
+}
+
+#[get("/display_name/<username>")]
+pub(crate) fn get_display_name(conn: DbConn, username: String) -> Result<Option<String>, String> {
+    match db_util::get_user_by_spotify_id(&conn, &username)? {
+        Some(user) => Ok(Some(user.username)),
+        None => Ok(None),
+    }
 }

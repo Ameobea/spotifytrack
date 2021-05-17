@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import * as R from 'ramda';
+import { withMobileProp } from 'ameo-utils/dist/responsive';
 
 import { useSelector, dispatch, actionCreators } from 'src/store';
 import { ReactRouterRouteProps, ArtistStats as ArtistStatsType, Artist } from 'src/types';
@@ -10,7 +11,7 @@ import Loading from 'src/components/Loading';
 import { LineChart, BarChart } from 'src/components/Charts';
 import { ArtistCards } from 'src/pages/Stats';
 import './ArtistStats.scss';
-import { withMobileProp } from 'ameo-utils/dist/responsive';
+import { useUsername } from 'src/store/selectors';
 
 const GenreChip: React.FC<{ username: string; genre: string }> = ({ username, genre }) => (
   <Link className="genre-chip-link" to={`/stats/${username}/genre/${genre}/`}>
@@ -145,6 +146,7 @@ const ArtistStats: React.FC<ReactRouterRouteProps & { mobile: boolean }> = ({ ma
     R.path([username, 'artistStats', artistId], userStats)
   );
   const artist = useSelector(({ entityStore: { artists } }) => artists[artistId]);
+  const { displayName } = useUsername();
 
   const series = useMemo(
     () =>
@@ -159,6 +161,7 @@ const ArtistStats: React.FC<ReactRouterRouteProps & { mobile: boolean }> = ({ ma
         : null,
     [artistStats]
   );
+  console.log({ series, artistStats });
 
   const fetchedStatsFor = useRef<string | null>(null);
   useEffect(() => {
@@ -179,6 +182,7 @@ const ArtistStats: React.FC<ReactRouterRouteProps & { mobile: boolean }> = ({ ma
 
         const { artist, top_tracks, popularity_history, tracks_by_id } = res;
 
+        console.log('dispatching');
         dispatch(actionCreators.entityStore.ADD_TRACKS(tracks_by_id));
         dispatch(actionCreators.entityStore.ADD_ARTISTS({ [artist.id]: artist }));
         dispatch(
@@ -207,7 +211,7 @@ const ArtistStats: React.FC<ReactRouterRouteProps & { mobile: boolean }> = ({ ma
     <div className="artist-stats">
       {artist ? (
         <h1 style={mobile ? { marginTop: mobile ? 42 : 32 } : undefined}>
-          <Link to={`/stats/${username}`}>{username}</Link>&apos;s artist stats for{' '}
+          <Link to={`/stats/${username}`}>{displayName}</Link>&apos;s artist stats for{' '}
           <span style={{ color: colors.pink }}> {artist.name}</span>
         </h1>
       ) : null}
