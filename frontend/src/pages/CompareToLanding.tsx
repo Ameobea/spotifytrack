@@ -11,9 +11,15 @@ const CompareToLanding: React.FC = () => {
 
   return (
     <div className="compare-to-landing">
+      <Link to="/" style={{ textDecorationColor: '#ccc' }}>
+        <div className="compare-to-landing-header">
+          <img src="/spotifytrack.png" alt="spotifytrack logo" />
+          <h2>Spotifytrack</h2>
+        </div>
+      </Link>
       <h1>
         Compare your musical taste to{' '}
-        <span style={{ color: colors.pink }}>{displayName ?? '...'}</span>
+        <span style={{ color: colors.pink, whiteSpace: 'nowrap' }}>{displayName ?? '...'}</span>
       </h1>
 
       <div className="content-embed">
@@ -26,9 +32,13 @@ const CompareToLanding: React.FC = () => {
           access to your account is granted.
         </p>
 
-        <Link to={`/connect?state=${encodeURIComponent(JSON.stringify({ compare_to: username }))}`}>
-          <button className="big-button">Connect to Spotify</button>
-        </Link>
+        <div style={{ textAlign: 'center' }}>
+          <Link
+            to={`/connect?state=${encodeURIComponent(JSON.stringify({ compare_to: username }))}`}
+          >
+            <button className="big-button">Connect to Spotify</button>
+          </Link>
+        </div>
       </div>
     </div>
   );

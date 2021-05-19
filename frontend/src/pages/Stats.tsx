@@ -20,6 +20,7 @@ import { RelatedArtistsGraphForUser } from 'src/components/RelatedArtistsGraph';
 import './Stats.scss';
 import { colors } from 'src/style';
 import CompareLanding from './CompareLanding';
+import ShareIcons from 'src/components/ShareIcons';
 
 type ArtistCardProps = {
   horizontallyScrollable?: boolean;
@@ -212,13 +213,14 @@ const StatsDetailsInner: React.FC<{ stats: UserStats; mobile: boolean }> = ({ st
     <>
       <div className="stats-details-header">
         <div className="headline-wrapper">
-          <span className="headline">
+          <div className="headline">
             User stats for{' '}
             <span style={{ color: colors.pink }} className="username">
               {displayName}
             </span>{' '}
             on Spotifytrack
-          </span>
+          </div>
+          {selectedTab === StatsDetailsTab.Compare ? null : <ShareIcons />}
         </div>
         <StatsDetailsTabs selectedTab={selectedTab} setSelectedTab={setSelectedTab} />
       </div>

@@ -288,7 +288,7 @@ pub(crate) fn store_stats_snapshot(
                         mapped_spotify_id: mapped_artist_spotify_ids[&artist_spotify_id],
                         update_time,
                         timeframe: map_timeframe_to_timeframe_id(&artist_timeframe),
-                        ranking: artist_ranking as u16,
+                        ranking: artist_ranking as u8,
                     }
                 })
         })
@@ -375,7 +375,7 @@ pub(crate) fn store_stats_snapshot(
                         mapped_spotify_id: mapped_track_spotify_ids[&track_spotify_id],
                         update_time,
                         timeframe: map_timeframe_to_timeframe_id(&track_timeframe),
-                        ranking: track_ranking as u16,
+                        ranking: track_ranking as u8,
                     },
                 )
         })
@@ -605,6 +605,7 @@ pub(crate) fn get_related_artists(
     Ok(res.artists)
 }
 
+/// `artist_ids` must not have any duplicates
 pub(crate) fn get_multiple_related_artists(
     bearer_token: String,
     artist_ids: &[&str],

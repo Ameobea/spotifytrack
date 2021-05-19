@@ -15,8 +15,9 @@ use serde::Serialize;
 use crate::{
     benchmarking::mark,
     models::{
-        Artist, ArtistGenrePair, ArtistRankHistoryResItem, HasSpotifyId, NewSpotifyIdMapping,
-        SpotifyIdMapping, StatsHistoryQueryResItem, TimeFrames, Track, TrackArtistPair, User,
+        Artist, ArtistGenrePair, ArtistRankHistoryResItem, HasSpotifyId, NewRelatedArtistEntry,
+        NewSpotifyIdMapping, SpotifyIdMapping, StatsHistoryQueryResItem, TimeFrames, Track,
+        TrackArtistPair, User,
     },
     DbConn,
 };
@@ -113,7 +114,7 @@ pub(crate) fn get_artist_rank_history_single_artist(
     user: &User,
     conn: DbConn,
     artist_spotify_id: &str,
-) -> Result<Option<Vec<(NaiveDateTime, [Option<u16>; 3])>>, String> {
+) -> Result<Option<Vec<(NaiveDateTime, [Option<u8>; 3])>>, String> {
     use crate::schema::{artist_rank_snapshots::dsl::*, spotify_items::dsl::*};
 
     let query = artist_rank_snapshots
@@ -134,9 +135,9 @@ pub(crate) fn get_artist_rank_history_single_artist(
         return Ok(None);
     }
 
-    let mut output: Vec<(NaiveDateTime, [Option<u16>; 3])> = Vec::new();
+    let mut output: Vec<(NaiveDateTime, [Option<u8>; 3])> = Vec::new();
 
-    let mut cur_update: (NaiveDateTime, [Option<u16>; 3]) =
+    let mut cur_update: (NaiveDateTime, [Option<u8>; 3]) =
         (res.first().unwrap().update_time.clone(), [None; 3]);
     for update in res {
         if update.update_time != cur_update.0 {
@@ -284,7 +285,7 @@ pub(crate) fn get_artist_stats_history(
 #[derive(Debug, Serialize)]
 pub(crate) struct ArtistRanking {
     pub artist_spotify_id: String,
-    pub ranking: u16,
+    pub ranking: u8,
 }
 
 pub(crate) fn get_genre_stats_history(
@@ -826,4 +827,32 @@ pub(crate) fn refresh_user_access_token(
     user.token = updated_access_token;
 
     Ok(None)
+}
+
+pub(crate) fn insert_related_artists(
+    conn: &DbConn,
+    related_artists: &[NewRelatedArtistEntry],
+) -> QueryResult<()> {
+    use crate::schema::related_artists;
+
+    let all_artist_ids: Vec<i32> = related_artists
+        .iter()
+        .map(|entry| entry.artist_spotify_id)
+        .collect();
+
+    conn.0.transaction(move || -> QueryResult<()> {
+        diesel::delete(
+            related_artists::table
+                .filter(related_artists::dsl::artist_spotify_id.eq_any(all_artist_ids)),
+        )
+        .execute(&conn.0)?;
+
+        diesel::insert_into(related_artists::table)
+            .values(related_artists)
+            .execute(&conn.0)?;
+
+        Ok(())
+    })?;
+
+    Ok(())
 }

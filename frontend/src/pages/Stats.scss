@@ -53,10 +53,15 @@ main.stats {
 .headline-wrapper {
   display: flex;
   margin-bottom: 18px;
+  justify-content: space-between;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 8px;
 
   .headline {
     font-size: 25px;
     z-index: 3;
+    min-width: 300px;
 
     .username {
       font-weight: 600;
@@ -80,6 +85,12 @@ main.stats {
       padding-left: 3px;
       padding-right: 3px;
       border-bottom: 2px solid #56665b42;
+    }
+  }
+
+  .headline-wrapper {
+    .share-icons a {
+      margin-right: 10px;
     }
   }
 

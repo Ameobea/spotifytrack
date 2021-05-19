@@ -24,7 +24,7 @@ lazy_static! {
     };
 }
 
-fn get_conn() -> Result<diesel::r2d2::PooledConnection<RedisConnectionManager>, String> {
+pub fn get_redis_conn() -> Result<diesel::r2d2::PooledConnection<RedisConnectionManager>, String> {
     REDIS_CONN_POOL.get().map_err(|err| -> String {
         error!("Error getting client from connection pool: {:?}", err);
         "Error connecting to Spotify metadata cache".into()
@@ -51,7 +51,7 @@ pub(crate) fn set_hash_items<T: Serialize>(
         })
         .collect::<Result<Vec<_>, String>>()?;
 
-    get_conn()?
+    get_redis_conn()?
         .hset_multiple::<&str, &str, String, ()>(hash_name, &kv_pairs_serialized)
         .map_err(|err| -> String {
             error!(
@@ -70,7 +70,7 @@ pub(crate) fn get_hash_items<T: for<'de> Deserialize<'de>>(
         return Ok(Vec::new());
     }
 
-    let mut conn = get_conn()?;
+    let mut conn = get_redis_conn()?;
 
     let mut cmd = redis::cmd("HMGET");
     let cmd = keys

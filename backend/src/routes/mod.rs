@@ -3,6 +3,7 @@ use std::{io::Read, sync::Mutex};
 use chrono::{NaiveDate, NaiveDateTime, Utc};
 use diesel::{self, prelude::*};
 use fnv::{FnvHashMap as HashMap, FnvHashSet};
+use redis::Commands;
 use rocket::{
     http::{RawStr, Status},
     response::{status, Redirect},
@@ -12,12 +13,15 @@ use rocket_contrib::json::Json;
 
 use crate::{
     benchmarking::{mark, start},
+    cache::get_redis_conn,
     conf::CONF,
-    db_util::{self, get_all_top_artists_for_user},
+    db_util::{
+        self, get_all_top_artists_for_user, insert_related_artists, retrieve_mapped_spotify_ids,
+    },
     models::{
-        Artist, CompareToRequest, CreateSharedPlaylistRequest, NewUser, OAuthTokenResponse,
-        Playlist, RelatedArtistsGraph, StatsSnapshot, TimeFrames, Timeline, TimelineEvent,
-        TimelineEventType, Track, User, UserComparison,
+        Artist, CompareToRequest, CreateSharedPlaylistRequest, NewRelatedArtistEntry, NewUser,
+        OAuthTokenResponse, Playlist, RelatedArtistsGraph, StatsSnapshot, TimeFrames, Timeline,
+        TimelineEvent, TimelineEventType, Track, User, UserComparison,
     },
     spotify_api::{fetch_artists, get_multiple_related_artists},
     DbConn, SpotifyTokenData,
@@ -80,7 +84,7 @@ pub(crate) fn get_current_stats(
 pub(crate) struct ArtistStats {
     pub artist: Artist,
     pub tracks_by_id: HashMap<String, Track>,
-    pub popularity_history: Vec<(NaiveDateTime, [Option<u16>; 3])>,
+    pub popularity_history: Vec<(NaiveDateTime, [Option<u8>; 3])>,
     pub top_tracks: Vec<(String, usize)>,
 }
 
@@ -975,4 +979,126 @@ pub(crate) fn get_display_name(conn: DbConn, username: String) -> Result<Option<
         Some(user) => Ok(Some(user.username)),
         None => Ok(None),
     }
+}
+
+#[post("/dump_redis_related_artists_to_database", data = "<api_token_data>")]
+pub(crate) fn dump_redis_related_artists_to_database(
+    conn: DbConn,
+    api_token_data: rocket::Data,
+) -> Result<status::Custom<String>, String> {
+    if !validate_api_token(api_token_data)? {
+        return Ok(status::Custom(
+            Status::Unauthorized,
+            "Invalid API token supplied".into(),
+        ));
+    }
+
+    let mut redis_conn = get_redis_conn()?;
+    let all_values: Vec<String> = redis_conn.hgetall("related_artists").map_err(|err| {
+        error!("Error with HGETALL on related artists data: {:?}", err);
+        String::from("Redis error")
+    })?;
+
+    let mapped_spotify_ids =
+        retrieve_mapped_spotify_ids(&conn, all_values.chunks_exact(2).map(|chunk| &chunk[0]))
+            .map_err(|err| {
+                error!("Error mapping spotify ids: {:?}", err);
+                String::from("Error mapping spotify ids")
+            })?;
+
+    let entries: Vec<NewRelatedArtistEntry> = all_values
+        .chunks_exact(2)
+        .map(|val| {
+            let artist_spotify_id = &val[0];
+            let related_artists_json = val[1].clone();
+            let artist_spotify_id = *mapped_spotify_ids
+                .get(artist_spotify_id)
+                .expect("Spotify ID didn't get mapped");
+
+            NewRelatedArtistEntry {
+                artist_spotify_id,
+                related_artists_json,
+            }
+        })
+        .collect();
+
+    insert_related_artists(&conn, &entries).map_err(|err| {
+        error!("DB error inserting related artist into DB: {:?}", err);
+        String::from("DB error")
+    })?;
+
+    Ok(status::Custom(
+        Status::Ok,
+        String::from("Successfully dumped all related artists from Redis to MySQL"),
+    ))
+}
+
+#[post("/crawl_related_artists", data = "<api_token_data>")]
+pub(crate) fn crawl_related_artists(
+    api_token_data: rocket::Data,
+    token_data: State<Mutex<SpotifyTokenData>>,
+) -> Result<status::Custom<String>, String> {
+    if !validate_api_token(api_token_data)? {
+        return Ok(status::Custom(
+            Status::Unauthorized,
+            "Invalid API token supplied".into(),
+        ));
+    }
+
+    let spotify_access_token = {
+        let token_data = &mut *(&*token_data).lock().unwrap();
+        token_data.get()
+    }?;
+
+    let mut redis_conn = get_redis_conn()?;
+    let artist_ids: Vec<String> = redis::cmd("HRANDFIELD")
+        .arg("related_artists")
+        .arg("8")
+        .query::<Vec<String>>(&mut *redis_conn)
+        .map_err(|err| {
+            error!(
+                "Error getting random related artist keys from DB: {:?}",
+                err
+            );
+            String::from("Redis error")
+        })?;
+
+    let mut all_related_artists: Vec<String> = Vec::new();
+
+    for artist_id in artist_ids {
+        let related_artists_json: String =
+            redis_conn
+                .hget("related_artists", artist_id)
+                .map_err(|err| {
+                    error!("Error getting related artist from Redis: {:?}", err);
+                    String::from("Redis error")
+                })?;
+
+        let related_artist_ids: Vec<String> =
+            serde_json::from_str(&related_artists_json).map_err(|_err| {
+                error!(
+                    "Invalid entry in related artists Redis; can't parse into array of strings; \
+                     found={}",
+                    related_artists_json
+                );
+                String::from("Internal error")
+            })?;
+
+        all_related_artists.extend(related_artist_ids.into_iter());
+    }
+
+    info!("Crawling {} related artists...", all_related_artists.len());
+    let mut all_related_artists: Vec<&str> =
+        all_related_artists.iter().map(String::as_str).collect();
+    all_related_artists.sort_unstable();
+    all_related_artists.dedup();
+
+    let fetched = get_multiple_related_artists(spotify_access_token.clone(), &all_related_artists)?;
+    Ok(status::Custom(
+        Status::Ok,
+        format!(
+            "Successfully fetched {} related artists to poulate related artists Redis hash",
+            fetched.len()
+        ),
+    ))
 }

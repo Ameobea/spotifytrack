@@ -21,7 +21,7 @@ table! {
         update_time -> Datetime,
         mapped_spotify_id -> Integer,
         timeframe -> Unsigned<Tinyint>,
-        ranking -> Unsigned<Smallint>,
+        ranking -> Unsigned<Tinyint>,
     }
 }
 
@@ -32,6 +32,13 @@ table! {
         followers -> Unsigned<Bigint>,
         popularity -> Unsigned<Bigint>,
         uri -> Text,
+    }
+}
+
+table! {
+    related_artists (artist_spotify_id) {
+        artist_spotify_id -> Integer,
+        related_artists_json -> Text,
     }
 }
 
@@ -65,7 +72,7 @@ table! {
         update_time -> Datetime,
         mapped_spotify_id -> Integer,
         timeframe -> Unsigned<Tinyint>,
-        ranking -> Unsigned<Smallint>,
+        ranking -> Unsigned<Tinyint>,
     }
 }
 
@@ -93,6 +100,7 @@ table! {
 joinable!(artist_rank_snapshots -> spotify_items (mapped_spotify_id));
 joinable!(artist_rank_snapshots -> users (user_id));
 joinable!(artists_genres -> spotify_items (artist_id));
+joinable!(related_artists -> spotify_items (artist_spotify_id));
 joinable!(track_rank_snapshots -> spotify_items (mapped_spotify_id));
 joinable!(track_rank_snapshots -> users (user_id));
 
@@ -101,6 +109,7 @@ allow_tables_to_appear_in_same_query!(
     artists_users_first_seen,
     artist_rank_snapshots,
     artist_stats_history,
+    related_artists,
     spotify_items,
     tracks_artists,
     tracks_users_first_seen,

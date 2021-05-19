@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::schema::{
-    artist_rank_snapshots, artists_genres, spotify_items, track_rank_snapshots, tracks_artists,
-    users,
+    artist_rank_snapshots, artists_genres, related_artists, spotify_items, track_rank_snapshots,
+    tracks_artists, users,
 };
 
 #[derive(Insertable)]
@@ -40,7 +40,7 @@ pub(crate) struct NewTrackHistoryEntry {
     pub mapped_spotify_id: i32,
     pub update_time: NaiveDateTime,
     pub timeframe: u8,
-    pub ranking: u16,
+    pub ranking: u8,
 }
 
 #[derive(Serialize, Insertable, Associations)]
@@ -51,7 +51,7 @@ pub(crate) struct NewArtistHistoryEntry {
     pub mapped_spotify_id: i32,
     pub update_time: NaiveDateTime,
     pub timeframe: u8,
-    pub ranking: u16,
+    pub ranking: u8,
 }
 
 #[derive(Serialize, Associations, Debug, Queryable)]
@@ -272,8 +272,8 @@ pub(crate) struct StatsHistoryQueryResItem {
     pub spotify_id: String,
     #[sql_type = "::diesel::sql_types::Datetime"]
     pub update_time: NaiveDateTime,
-    #[sql_type = "::diesel::sql_types::Unsigned<::diesel::sql_types::SmallInt>"]
-    pub ranking: u16,
+    #[sql_type = "::diesel::sql_types::Unsigned<::diesel::sql_types::TinyInt>"]
+    pub ranking: u8,
     #[sql_type = "::diesel::sql_types::Unsigned<::diesel::sql_types::TinyInt>"]
     pub timeframe: u8,
 }
@@ -281,7 +281,7 @@ pub(crate) struct StatsHistoryQueryResItem {
 #[derive(Queryable)]
 pub(crate) struct ArtistRankHistoryResItem {
     pub update_time: NaiveDateTime,
-    pub ranking: u16,
+    pub ranking: u8,
     pub timeframe: u8,
 }
 
@@ -539,4 +539,11 @@ pub(crate) struct GetRelatedArtistsResponse {
 pub(crate) struct RelatedArtistsGraph {
     pub extra_artists: HashMap<String, Artist>,
     pub related_artists: HashMap<String, Vec<String>>,
+}
+
+#[derive(Insertable)]
+#[table_name = "related_artists"]
+pub(crate) struct NewRelatedArtistEntry {
+    pub artist_spotify_id: i32,
+    pub related_artists_json: String,
 }

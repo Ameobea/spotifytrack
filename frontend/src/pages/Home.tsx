@@ -9,7 +9,7 @@ import '../components/BigButton.scss';
 
 const Home: React.FC<ReactRouterRouteProps> = () => (
   <main className="home">
-    <h1>SpotifyTrack</h1>
+    <h1>Spotifytrack</h1>
     <h2>Hub for Spotify Statistics + Musical Taste Analysis</h2>
 
     <div className="description-container">
