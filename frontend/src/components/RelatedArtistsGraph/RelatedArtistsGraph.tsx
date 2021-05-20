@@ -245,7 +245,6 @@ export class RelatedArtistsRenderer {
       .linkDistance(300)
       .symmetricDiffLinkLengths(25)
       .size([width, height]);
-    // this.webcolaInst.wasm = webcolaWasm;
 
     this.canvasRenderer = new RelatedArtistsGraphCanvasRenderer(
       canvas,
@@ -337,7 +336,7 @@ export class RelatedArtistsRenderer {
   }
 
   public setSize(width: number, height: number) {
-    console.log({ width, height });
+    // console.log({ width, height });
     // TODO
   }
 }
@@ -347,6 +346,7 @@ const RelatedArtistsGraphInner: React.FC<RelatedArtistsGraphProps> = ({
   style,
   mobile,
 }) => {
+  console.log({ inner: relatedArtists });
   const modules = useRef(
     Promise.all([WebColaModule.get(), RelatedArtistsGraphCanvasRendererModule.get()] as const)
   );
@@ -355,6 +355,13 @@ const RelatedArtistsGraphInner: React.FC<RelatedArtistsGraphProps> = ({
   const width = windowSize.width - (mobile ? 0 : 12);
   const height = windowSize.height - (mobile ? 0 : 63);
 
+  // The effect that initializes the renderer is async.  If initialization takes longer than it takes to
+  // fetch related artists, we need to be able to grab the latest related artists prop without
+  // capturing so we use `latestRelatedArtists` for this purpose.
+  const latestRelatedArtists = useRef<RelatedArtists | null | undefined>(null);
+  useEffect(() => {
+    latestRelatedArtists.current = relatedArtists;
+  }, [relatedArtists]);
   const inst = useRef<RelatedArtistsRenderer | null>(null);
   useEffect(() => {
     modules.current.then(([webcola, RelatedArtistsGraphCanvasRenderer]) => {
@@ -372,10 +379,10 @@ const RelatedArtistsGraphInner: React.FC<RelatedArtistsGraphProps> = ({
         width,
         height,
         canvas.current,
-        relatedArtists
+        latestRelatedArtists.current
       );
     });
-  }, [height, relatedArtists, width]);
+  }, [height, width]);
   useEffect(() => {
     if (!inst.current) {
       return;

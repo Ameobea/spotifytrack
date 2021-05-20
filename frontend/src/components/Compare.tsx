@@ -37,10 +37,11 @@ const CompareInner: React.FC<{ mobile: boolean }> = ({ mobile }) => {
   const [playing, setPlaying] = useState<string | false>(false);
   const { search: queryString } = useLocation();
   const push = usePush();
-  const [generatedPlaylist, setGeneratedPlaylist] = useState<{
-    name: string;
-    track_count: number;
-  } | null>(null);
+  const [generatedPlaylist, setGeneratedPlaylist] =
+    useState<{
+      name: string;
+      track_count: number;
+    } | null>(null);
 
   const { data, error } = useQuery({
     queryKey: ['compare', user1, user2],
@@ -79,6 +80,7 @@ const CompareInner: React.FC<{ mobile: boolean }> = ({ mobile }) => {
 
     return merged;
   }, [user1RelatedArtists, user2RelatedArtists]);
+  console.log(relatedArtists);
 
   useEffect(() => {
     if (!data) {

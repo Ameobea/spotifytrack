@@ -46,11 +46,10 @@ const reactQueryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false } },
 });
 
-ReactDOM.render(
+ReactDOM.createRoot(document.getElementById('root')!).render(
   <Provider store={store}>
     <QueryClientProvider client={reactQueryClient}>
       <App />
     </QueryClientProvider>
-  </Provider>,
-  document.getElementById('root')!
+  </Provider>
 );
