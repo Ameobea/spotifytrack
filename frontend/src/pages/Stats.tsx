@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import * as R from 'ramda';
-import { useHistory } from 'react-router-dom';
+import { Link, useHistory } from 'react-router-dom';
 import { PropTypesOf } from 'ameo-utils/dist/util/react';
 import { withMobileProp } from 'ameo-utils/dist/responsive';
 
@@ -21,6 +21,7 @@ import './Stats.scss';
 import { colors } from 'src/style';
 import CompareLanding from './CompareLanding';
 import ShareIcons from 'src/components/ShareIcons';
+import { getSentry } from 'src/sentry';
 
 type ArtistCardProps = {
   horizontallyScrollable?: boolean;
@@ -165,6 +166,7 @@ const RelatedArtistsGraphModal: React.FC<{ onClose: () => void }> = ({ onClose }
 
 const StatsDetailsTabs: React.FC<StatsDetailsTabsProps> = ({ selectedTab, setSelectedTab }) => {
   const history = useHistory();
+  const username = useUsername();
   const mkOnSelect = (value: StatsDetailsTab) => () => {
     setSelectedTab(value);
     history.push({
@@ -172,6 +174,8 @@ const StatsDetailsTabs: React.FC<StatsDetailsTabsProps> = ({ selectedTab, setSel
       search: history.location.search,
       hash: value,
     });
+
+    getSentry()?.captureMessage('stats page tab select', { extra: { username, newTab: value } });
   };
 
   return (
@@ -214,11 +218,20 @@ const StatsDetailsInner: React.FC<{ stats: UserStats; mobile: boolean }> = ({ st
       <div className="stats-details-header">
         <div className="headline-wrapper">
           <div className="headline">
-            User stats for{' '}
-            <span style={{ color: colors.pink }} className="username">
-              {displayName}
-            </span>{' '}
-            on Spotifytrack
+            <Link to="/">
+              <img
+                alt="spotifytrack logo"
+                src="/spotifytrack-smaller.jpg"
+                style={{ height: 34, width: 34, marginRight: 6, marginLeft: -4, marginTop: -2 }}
+              />
+            </Link>
+            <div>
+              User stats for{' '}
+              <span style={{ color: colors.pink }} className="username">
+                {displayName}
+              </span>{' '}
+              on Spotifytrack
+            </div>
           </div>
           {selectedTab === StatsDetailsTab.Compare ? null : <ShareIcons />}
         </div>
@@ -236,7 +249,14 @@ const StatsDetailsInner: React.FC<{ stats: UserStats; mobile: boolean }> = ({ st
                     onClose={() => setRelatedArtistsGraphModalOpen(false)}
                   />
                 ) : null}
-                <RelatedArtistsGraphTooltip onClick={() => setRelatedArtistsGraphModalOpen(true)} />
+                <RelatedArtistsGraphTooltip
+                  onClick={() => {
+                    setRelatedArtistsGraphModalOpen(true);
+                    getSentry()?.captureMessage("related artists what's this tooltip click", {
+                      extra: { href: window.location.href },
+                    });
+                  }}
+                />
                 <RelatedArtistsGraphForUser />
               </>
             );
@@ -353,10 +373,10 @@ const Stats: React.FC<ReactRouterRouteProps> = ({
       actionCreators.userStats.ADD_USER_STATS(username, {
         last_update_time,
         // TODO: Fix this type hackery when you're less lazy and ennui-riddled
-        tracks: mapObj((tracks as any) as { [key: string]: { id: string }[] }, (tracks) =>
+        tracks: mapObj(tracks as any as { [key: string]: { id: string }[] }, (tracks) =>
           tracks.map(R.prop('id'))
         ) as any,
-        artists: mapObj((artists as any) as { [key: string]: { id: string }[] }, (artists) =>
+        artists: mapObj(artists as any as { [key: string]: { id: string }[] }, (artists) =>
           artists.map(R.prop('id'))
         ) as any,
         artistStats: {},

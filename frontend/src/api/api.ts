@@ -1,6 +1,7 @@
 import dayjs from 'dayjs';
 
 import { API_BASE_URL } from 'src/conf';
+import { getSentry } from 'src/sentry';
 import { Artist, RelatedArtistsGraphRes, TimeFrames, TimelineData, Track } from 'src/types';
 
 export const getUrl = (path: string) => `${API_BASE_URL}${path}`;
@@ -80,6 +81,15 @@ export const fetchRelatedArtists = async (
   artistID: string
 ): Promise<RelatedArtistsGraphRes | null> => {
   const url = getUrl(`/related_artists/${artistID}`);
+
+  try {
+    getSentry()?.captureMessage('Load related artists via double click', {
+      extra: { href: window.location.href, artistID },
+    });
+  } catch (err) {
+    //
+  }
+
   return getJsonEndpoint(url);
 };
 

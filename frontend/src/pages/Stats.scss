@@ -59,6 +59,8 @@ main.stats {
   gap: 8px;
 
   .headline {
+    display: flex;
+    flex-direction: row;
     font-size: 25px;
     z-index: 3;
     min-width: 300px;

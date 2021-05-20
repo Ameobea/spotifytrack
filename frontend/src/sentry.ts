@@ -10,3 +10,5 @@ export const initSentry = () => {
     });
   }
 };
+
+export const getSentry = () => (window.location.host.includes('localhost') ? null : Sentry);

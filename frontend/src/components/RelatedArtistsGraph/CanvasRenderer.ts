@@ -6,6 +6,7 @@ import * as R from 'ramda';
 import type { Artist } from 'src/types';
 import * as conf from './conf';
 import type { Link, Node, RelatedArtistsRenderer } from './RelatedArtistsGraph';
+import { getSentry } from 'src/sentry';
 
 interface CanvasNode {
   node: Node;
@@ -117,6 +118,13 @@ export default class RelatedArtistsGraphCanvasRenderer {
       : null;
 
     this.rebuildNodes();
+
+    getSentry()?.captureMessage('setSelectedArtistID', {
+      extra: {
+        href: window.location.href,
+        newSelectedArtistID,
+      },
+    });
   }
 
   private getNodeColor(node: Node) {

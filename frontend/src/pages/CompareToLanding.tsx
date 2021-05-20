@@ -13,7 +13,11 @@ const CompareToLanding: React.FC = () => {
     <div className="compare-to-landing">
       <Link to="/" style={{ textDecorationColor: '#ccc' }}>
         <div className="compare-to-landing-header">
-          <img src="/spotifytrack.png" alt="spotifytrack logo" />
+          <img
+            src="/spotifytrack-smaller.jpg"
+            style={{ height: 34, width: 34, marginRight: 6, marginLeft: -4, marginTop: -2 }}
+            alt="spotifytrack logo"
+          />
           <h2>Spotifytrack</h2>
         </div>
       </Link>

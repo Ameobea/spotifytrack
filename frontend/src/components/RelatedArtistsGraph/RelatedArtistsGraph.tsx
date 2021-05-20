@@ -11,6 +11,7 @@ import { useRef } from 'react';
 import { useQuery } from 'react-query';
 import * as R from 'ramda';
 import type { Layout } from 'webcola';
+import { withMobileProp } from 'ameo-utils/dist/responsive';
 
 import { fetchRelatedArtists, fetchRelatedArtistsForUser } from 'src/api';
 import { actionCreators, dispatch, getState } from 'src/store';
@@ -18,7 +19,6 @@ import { useUsername } from 'src/store/selectors';
 import './RelatedArtistsGraph.scss';
 import { Artist } from 'src/types';
 import type RelatedArtistsGraphCanvasRenderer from './CanvasRenderer';
-import { withMobileProp } from 'ameo-utils/dist/responsive';
 
 type RelatedArtists = { [artistID: string]: { userIndex?: number; relatedArtistIDs: string[] } };
 
@@ -420,22 +420,21 @@ export const RelatedArtistsGraph = withMobileProp({ maxDeviceWidth: 800 })(
   RelatedArtistsGraphInner
 );
 
-export const mkFetchAndStoreRelatedArtistsForUser = (
-  username: string | null | undefined
-) => async () => {
-  if (!username) {
-    return null;
-  }
+export const mkFetchAndStoreRelatedArtistsForUser =
+  (username: string | null | undefined) => async () => {
+    if (!username) {
+      return null;
+    }
 
-  const res = await fetchRelatedArtistsForUser(username);
-  if (!res) {
-    return null;
-  }
+    const res = await fetchRelatedArtistsForUser(username);
+    if (!res) {
+      return null;
+    }
 
-  const { extraArtists, relatedArtists } = res;
-  dispatch(actionCreators.entityStore.ADD_ARTISTS(extraArtists));
-  return relatedArtists;
-};
+    const { extraArtists, relatedArtists } = res;
+    dispatch(actionCreators.entityStore.ADD_ARTISTS(extraArtists));
+    return relatedArtists;
+  };
 
 export const RelatedArtistsGraphForUser: React.FC<{ style?: React.CSSProperties }> = ({
   style,

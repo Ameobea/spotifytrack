@@ -5,7 +5,7 @@ import { UnimplementedError } from 'ameo-utils';
 import { withMobileOrDesktop, withMobileProp } from 'ameo-utils/dist/responsive';
 import * as R from 'ramda';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faInfoCircle } from '@fortawesome/free-solid-svg-icons';
+import { faInfoCircle, faChevronLeft, faChevronRight } from '@fortawesome/free-solid-svg-icons';
 
 import { useUsername } from 'src/store/selectors';
 import { fetchTimelineEvents } from 'src/api';
@@ -15,6 +15,7 @@ import { truncateWithElipsis } from 'src/util';
 import DayStats from './DayStats';
 import { getProxiedImageURL } from 'src/util/index';
 import Tooltip from './Tooltip';
+import { getSentry } from 'src/sentry';
 
 export interface TimelineDay {
   date: number;
@@ -334,9 +335,8 @@ const Timeline: React.FC<{ mobile: boolean }> = ({ mobile }) => {
     return weeks;
   }, [data, curMonth]);
   const [selectedDay, setSelectedDay] = useState<TimelineDay | null>(null);
-  const mobileSelectedDay = useRef<{ lastSelectedDay: TimelineDay; mergedDay: TimelineDay } | null>(
-    null
-  );
+  const mobileSelectedDay =
+    useRef<{ lastSelectedDay: TimelineDay; mergedDay: TimelineDay } | null>(null);
 
   maybeUpdateMobileSelectedDay(data, mobile, selectedDay, setSelectedDay, weeks, mobileSelectedDay);
 
@@ -352,12 +352,30 @@ const Timeline: React.FC<{ mobile: boolean }> = ({ mobile }) => {
       </div>
 
       <div className="timeframe-controls">
-        <button title="Back one month" onClick={() => setCurMonth(curMonth.subtract(1, 'month'))}>
-          {'🠔'}
+        <button
+          title="Back one month"
+          onClick={() => {
+            const newCurMonth = curMonth.subtract(1, 'month');
+            setCurMonth(newCurMonth);
+            getSentry()?.captureMessage('timeframe arrow left', {
+              extra: { href: window.location.href, newCurMonth: newCurMonth.format('YYYY-MM') },
+            });
+          }}
+        >
+          <FontAwesomeIcon icon={faChevronLeft} size="sm" />
         </button>
         <div className="cur-month">{curMonth.format('MMMM YYYY')}</div>
-        <button title="Forward one month" onClick={() => setCurMonth(curMonth.add(1, 'month'))}>
-          {'🠖'}
+        <button
+          title="Forward one month"
+          onClick={() => {
+            const newCurMonth = curMonth.add(1, 'month');
+            setCurMonth(newCurMonth);
+            getSentry()?.captureMessage('timeframe arrow right', {
+              extra: { href: window.location.href, newCurMonth: newCurMonth.format('YYYY-MM') },
+            });
+          }}
+        >
+          <FontAwesomeIcon icon={faChevronRight} size="sm" />
         </button>
       </div>
 
