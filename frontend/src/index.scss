@@ -18,14 +18,6 @@ html {
   }
 }
 
-@media only screen and (max-width: 800px) {
-  body,
-  html {
-    // margin-left: 2px !important;
-    // margin-right: 2px !important;
-  }
-}
-
 #root {
   min-height: 100vh;
   display: flex;

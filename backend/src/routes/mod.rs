@@ -13,17 +13,18 @@ use rocket_contrib::json::Json;
 
 use crate::{
     benchmarking::{mark, start},
-    cache::get_redis_conn,
+    cache::{get_hash_items, get_redis_conn, set_hash_items},
     conf::CONF,
     db_util::{
         self, get_all_top_artists_for_user, insert_related_artists, retrieve_mapped_spotify_ids,
     },
     models::{
-        Artist, CompareToRequest, CreateSharedPlaylistRequest, NewRelatedArtistEntry, NewUser,
-        OAuthTokenResponse, Playlist, RelatedArtistsGraph, StatsSnapshot, TimeFrames, Timeline,
-        TimelineEvent, TimelineEventType, Track, User, UserComparison,
+        Artist, ArtistSearchResult, CompareToRequest, CreateSharedPlaylistRequest,
+        NewRelatedArtistEntry, NewUser, OAuthTokenResponse, Playlist, RelatedArtistsGraph,
+        StatsSnapshot, TimeFrames, Timeline, TimelineEvent, TimelineEventType, Track, User,
+        UserComparison,
     },
-    spotify_api::{fetch_artists, get_multiple_related_artists},
+    spotify_api::{fetch_artists, get_multiple_related_artists, search_artists},
     DbConn, SpotifyTokenData,
 };
 
@@ -1101,4 +1102,44 @@ pub(crate) fn crawl_related_artists(
             fetched.len()
         ),
     ))
+}
+
+#[get("/search_artist?<q>")]
+pub(crate) fn search_artist(
+    token_data: State<Mutex<SpotifyTokenData>>,
+    q: String,
+) -> Result<Json<Vec<ArtistSearchResult>>, String> {
+    let spotify_access_token = {
+        let token_data = &mut *(&*token_data).lock().unwrap();
+        token_data.get()
+    }?;
+
+    // First check cache
+    let cached_item = get_hash_items::<Vec<ArtistSearchResult>>("artistSearch", &[&q])
+        .map_err(|err| {
+            error!("Error checking cache for artist search results: {}", err);
+            String::from("Internal error with cache")
+        })?
+        .into_iter()
+        .next()
+        .flatten();
+
+    if let Some(cached_item) = cached_item {
+        info!("Found hit in cache for artist search query={}", q);
+        return Ok(Json(cached_item));
+    }
+
+    // Hit the Spotify API and store in the cache
+    let search_results = search_artists(spotify_access_token, &q)?;
+    set_hash_items::<Vec<ArtistSearchResult>>("artistSearch", &[(&q, search_results.clone())])
+        .map_err(|err| {
+            error!("Error storing artist search in cache: {}", err);
+            String::from("Internal error with cache")
+        })?;
+    info!(
+        "Successfully hit Spotify API for artist search query={:?} and stored in cache",
+        q
+    );
+
+    Ok(Json(search_results))
 }

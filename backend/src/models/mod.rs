@@ -547,3 +547,10 @@ pub(crate) struct NewRelatedArtistEntry {
     pub artist_spotify_id: i32,
     pub related_artists_json: String,
 }
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtistSearchResult {
+    pub spotify_id: String,
+    pub name: String,
+}

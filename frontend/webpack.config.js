@@ -14,7 +14,10 @@ const styles = require('./src/_style');
  * @returns {webpack.Configuration}
  */
 const buildConfig = () => ({
-  entry: './src/index.tsx',
+  entry: {
+    index: './src/index.tsx',
+    graph: './src/graphStandalone.tsx',
+  },
   output: {
     path: path.resolve(__dirname, 'dist'),
     publicPath: '/',
@@ -79,7 +82,18 @@ const buildConfig = () => ({
       title: 'Spotifytrack - Personal Spotify Stats + History',
       minify: true,
       template: 'index.hbs',
+      filename: 'index.html',
       inject: true,
+      chunks: ['index'],
+    }),
+    new HtmlWebpackPlugin({
+      alwaysWriteToDisk: true,
+      title: 'Spotify Artist Relationship Graph',
+      minify: true,
+      template: 'graph-standalone.hbs',
+      filename: 'graph.html',
+      inject: true,
+      chunks: ['graph'],
     }),
     new webpack.EnvironmentPlugin(['REACT_APP_API_BASE_URL', 'REACT_APP_SITE_URL']),
     // new BundleAnalyzerPlugin(),

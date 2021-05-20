@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     conf::CONF,
     models::{
-        AccessTokenResponse, Artist, ArtistGenrePair, CreatePlaylistRequest,
+        AccessTokenResponse, Artist, ArtistGenrePair, ArtistSearchResult, CreatePlaylistRequest,
         GetRelatedArtistsResponse, NewArtistHistoryEntry, NewTrackHistoryEntry, Playlist,
         SpotifyBatchArtistsResponse, SpotifyBatchTracksResponse, SpotifyResponse, StatsSnapshot,
         TopArtistsResponse, TopTracksResponse, Track, TrackArtistPair, UpdatePlaylistResponse,
@@ -97,7 +97,10 @@ pub(crate) fn spotify_server_api_request<T: for<'de> Deserialize<'de> + std::fmt
 ) -> Result<T, String> {
     let client = reqwest::blocking::Client::new();
 
-    info!("Hitting Spotify API at URL {}, params: {:?}", url, params);
+    info!(
+        "Hitting Spotify API POST at URL {}, params: {:?}",
+        url, params
+    );
     let res = client
         .post(url.clone())
         .header("Authorization", CONF.get_authorization_header_content())
@@ -109,6 +112,28 @@ pub(crate) fn spotify_server_api_request<T: for<'de> Deserialize<'de> + std::fmt
         Err(err) if err.contains("Rate Limited") => {
             sleep(Duration::from_secs(5));
             spotify_server_api_request(url, params)
+        },
+        Err(err) => Err(err),
+    }
+}
+
+pub(crate) fn spotify_server_get_request<T: for<'de> Deserialize<'de> + std::fmt::Debug + Clone>(
+    bearer_token: &str,
+    url: &str,
+) -> Result<T, String> {
+    let client = reqwest::blocking::Client::new();
+
+    info!("Hitting Spotify API GET at URL {}", url,);
+    let res = client
+        .get(url.clone())
+        .header("Authorization", format!("Bearer {}", bearer_token))
+        .send();
+
+    match process_spotify_res(&url, res) {
+        Ok(res) => Ok(res),
+        Err(err) if err.contains("Rate Limited") => {
+            sleep(Duration::from_secs(5));
+            spotify_server_get_request(bearer_token, url)
         },
         Err(err) => Err(err),
     }
@@ -715,6 +740,38 @@ pub(crate) fn get_multiple_related_artists(
                 "All artists must have been filled in at this point by either the cache or \
                  dynamic fetching",
             )
+        })
+        .collect())
+}
+
+pub(crate) fn search_artists(
+    bearer_token: String,
+    query: &str,
+) -> Result<Vec<ArtistSearchResult>, String> {
+    #[derive(Clone, Debug, Deserialize)]
+    struct SpotifyArtistsSearchResponseInner {
+        pub href: String,
+        pub items: Vec<Artist>,
+    }
+
+    #[derive(Clone, Debug, Deserialize)]
+    struct SpotifyArtistsSearchResponse {
+        pub artists: SpotifyArtistsSearchResponseInner,
+    }
+
+    let url = format!(
+        "https://api.spotify.com/v1/search?q={}&type=artist",
+        rocket::http::uri::Uri::percent_encode(query)
+    );
+    let res = spotify_server_get_request::<SpotifyArtistsSearchResponse>(&bearer_token, &url)?;
+
+    Ok(res
+        .artists
+        .items
+        .into_iter()
+        .map(|artist| ArtistSearchResult {
+            spotify_id: artist.id,
+            name: artist.name,
         })
         .collect())
 }

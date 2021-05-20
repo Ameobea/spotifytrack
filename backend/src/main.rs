@@ -65,7 +65,8 @@ fn main() {
         routes::get_related_artists,
         routes::get_display_name,
         routes::dump_redis_related_artists_to_database,
-        routes::crawl_related_artists
+        routes::crawl_related_artists,
+        routes::search_artist
     ];
 
     rocket::ignite()
