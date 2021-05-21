@@ -186,7 +186,7 @@ const CompareInner: React.FC<{ mobile: boolean }> = ({ mobile }) => {
                 title={track.name}
                 artists={track.album.artists}
                 previewUrl={track.preview_url}
-                imageSrc={track.album.images[0].url}
+                imageSrc={track.album.images[0]?.url}
                 playing={playing}
                 setPlaying={setPlaying}
                 mobile={mobile}

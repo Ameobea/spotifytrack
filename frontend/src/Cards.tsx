@@ -12,7 +12,7 @@ import './Cards.scss';
 import { getProxiedImageURL } from './util/index';
 
 interface ImageBoxProps {
-  imageSrc: string;
+  imageSrc: string | null | undefined;
   imgAlt: string;
   linkTo?: string;
   mobile: boolean;
@@ -22,7 +22,7 @@ const ImageBox: React.FC<ImageBoxProps> = ({ imageSrc, imgAlt, children, linkTo,
   const image = (
     <img
       alt={imgAlt}
-      src={getProxiedImageURL(mobile ? 90 : 160, imageSrc)}
+      src={imageSrc ? getProxiedImageURL(mobile ? 90 : 160, imageSrc) : ''}
       className="image-container"
     />
   );
@@ -45,7 +45,7 @@ interface TrackProps {
     id: string;
   }[];
   previewUrl: string;
-  imageSrc: string;
+  imageSrc?: string | null;
   playing: string | false;
   setPlaying: (currentlyPlayingPreviewUrl: string | false) => void;
   mobile: boolean;
