@@ -346,7 +346,6 @@ const RelatedArtistsGraphInner: React.FC<RelatedArtistsGraphProps> = ({
   style,
   mobile,
 }) => {
-  console.log({ inner: relatedArtists });
   const modules = useRef(
     Promise.all([WebColaModule.get(), RelatedArtistsGraphCanvasRendererModule.get()] as const)
   );

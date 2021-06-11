@@ -89,6 +89,8 @@ const makeDraggable = (
   });
 };
 
+const NodeBackgroundCache: Map<number, PIXI.Texture> = new Map();
+
 export default class RelatedArtistsGraphCanvasRenderer {
   /**
    * Passed in so that we don't have to import the Redux store and we can lazy-load this expensive module
@@ -159,15 +161,26 @@ export default class RelatedArtistsGraphCanvasRenderer {
   }
 
   private buildNodeBackground(node: Node): PIXI.Sprite {
-    const g = new PIXI.Graphics();
-    g.lineStyle({ width: 1, color: 0x0 });
+    const roundedWidth = Math.round(node.width);
+    const cached = NodeBackgroundCache.get(roundedWidth);
+    const sprite = (() => {
+      if (cached) {
+        return new PIXI.Sprite(cached);
+      }
 
-    g.beginFill(0xffffff);
-    g.drawRoundedRect(0, 0, node.width, 20, 4);
-    g.endFill();
+      const g = new PIXI.Graphics();
+      g.lineStyle({ width: 1, color: 0x0 });
 
-    const texture = this.app.renderer.generateTexture(g, undefined, 4);
-    const sprite = new PIXI.Sprite(texture);
+      g.beginFill(0xffffff);
+      g.drawRoundedRect(0, 0, node.width, 20, 4);
+      g.endFill();
+
+      const texture = this.app.renderer.generateTexture(g, undefined, 4);
+      NodeBackgroundCache.set(roundedWidth, texture);
+
+      return new PIXI.Sprite(texture);
+    })();
+
     sprite.tint = this.getNodeColor(node);
     return sprite;
   }
