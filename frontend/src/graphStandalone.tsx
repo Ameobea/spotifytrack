@@ -1,16 +1,29 @@
 import ReactDOM from 'react-dom';
 import React from 'react';
+import { QueryClient, QueryClientProvider } from 'react-query';
+import { Provider } from 'react-redux';
 
 import './index.scss';
-import { RelatedArtistsGraph } from './components/RelatedArtistsGraph';
+import './graphStandalone.scss';
+import { RelatedArtistsGraphForUser } from './components/RelatedArtistsGraph';
+import { store } from 'src/store';
+
+const reactQueryClient = new QueryClient({
+  defaultOptions: { queries: { refetchOnWindowFocus: false } },
+});
 
 const GraphStandalone: React.FC = () => {
   return (
     <div className="graph-standalone">
-      <RelatedArtistsGraph relatedArtists={{}} />
+      <RelatedArtistsGraphForUser fullHeight username="ameobea" />
     </div>
   );
 };
 
-console.log(ReactDOM);
-ReactDOM.createRoot(document.getElementById('root')).render(<GraphStandalone />);
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <Provider store={store}>
+    <QueryClientProvider client={reactQueryClient}>
+      <GraphStandalone />
+    </QueryClientProvider>
+  </Provider>
+);

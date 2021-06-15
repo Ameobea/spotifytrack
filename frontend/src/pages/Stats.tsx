@@ -204,7 +204,7 @@ const StatsDetailsInner: React.FC<{ stats: UserStats; mobile: boolean }> = ({ st
       return StatsDetailsTab.Timeline;
     })()
   );
-  const { displayName } = useUsername();
+  const { displayName, username } = useUsername();
 
   const { tracksCorpus } = useSelector(({ entityStore: { tracks, artists } }) => ({
     tracksCorpus: tracks,
@@ -212,6 +212,10 @@ const StatsDetailsInner: React.FC<{ stats: UserStats; mobile: boolean }> = ({ st
   }));
   const [playing, setPlaying] = useState<string | false>(false);
   const [relatedArtistsGraphModalOpen, setRelatedArtistsGraphModalOpen] = useState(false);
+
+  if (!username) {
+    return null;
+  }
 
   return (
     <>
@@ -257,7 +261,7 @@ const StatsDetailsInner: React.FC<{ stats: UserStats; mobile: boolean }> = ({ st
                     });
                   }}
                 />
-                <RelatedArtistsGraphForUser />
+                <RelatedArtistsGraphForUser username={username} />
               </>
             );
           }

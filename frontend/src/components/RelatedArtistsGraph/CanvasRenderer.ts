@@ -340,6 +340,11 @@ export default class RelatedArtistsGraphCanvasRenderer {
       interaction: this.app.renderer.plugins.interaction,
     });
 
+    // Hack for the embedded standalone graph which is locked to my personal artists
+    if (window.location.href.includes('graph.html')) {
+      this.container.setTransform(575, 400, 0.75, 0.75);
+    }
+
     this.container.drag().pinch().wheel();
 
     let containerPointerDownPos = new PIXI.Point(0, 0);

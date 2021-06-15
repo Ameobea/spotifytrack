@@ -15,7 +15,6 @@ import { withMobileProp } from 'ameo-utils/dist/responsive';
 
 import { fetchRelatedArtists, fetchRelatedArtistsForUser } from 'src/api';
 import { actionCreators, dispatch, getState } from 'src/store';
-import { useUsername } from 'src/store/selectors';
 import './RelatedArtistsGraph.scss';
 import { Artist } from 'src/types';
 import type RelatedArtistsGraphCanvasRenderer from './CanvasRenderer';
@@ -26,6 +25,7 @@ interface RelatedArtistsGraphProps {
   relatedArtists: RelatedArtists | null | undefined;
   style?: React.CSSProperties;
   mobile: boolean;
+  fullHeight?: boolean;
 }
 
 const WebColaModule = new AsyncOnce(() => import('webcola'));
@@ -345,6 +345,7 @@ const RelatedArtistsGraphInner: React.FC<RelatedArtistsGraphProps> = ({
   relatedArtists,
   style,
   mobile,
+  fullHeight,
 }) => {
   const modules = useRef(
     Promise.all([WebColaModule.get(), RelatedArtistsGraphCanvasRendererModule.get()] as const)
@@ -352,7 +353,7 @@ const RelatedArtistsGraphInner: React.FC<RelatedArtistsGraphProps> = ({
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const windowSize = useWindowSize();
   const width = windowSize.width - (mobile ? 0 : 12);
-  const height = windowSize.height - (mobile ? 0 : 63);
+  const height = fullHeight ? windowSize.height : windowSize.height - (mobile ? 0 : 63);
 
   // The effect that initializes the renderer is async.  If initialization takes longer than it takes to
   // fetch related artists, we need to be able to grab the latest related artists prop without
@@ -442,11 +443,17 @@ export const mkFetchAndStoreRelatedArtistsForUser =
     return relatedArtists;
   };
 
-export const RelatedArtistsGraphForUser: React.FC<{ style?: React.CSSProperties }> = ({
-  style,
-}) => {
-  const { username } = useUsername();
+interface RelatedArtistsGraphForUserProps {
+  style?: React.CSSProperties;
+  username: string;
+  fullHeight?: boolean;
+}
 
+export const RelatedArtistsGraphForUser: React.FC<RelatedArtistsGraphForUserProps> = ({
+  style,
+  username,
+  fullHeight,
+}) => {
   const { data: rawRelatedArtists } = useQuery(
     ['relatedArtists', username],
     mkFetchAndStoreRelatedArtistsForUser(username)
@@ -465,5 +472,7 @@ export const RelatedArtistsGraphForUser: React.FC<{ style?: React.CSSProperties 
     );
   }, [rawRelatedArtists]);
 
-  return <RelatedArtistsGraph relatedArtists={relatedArtists} style={style} />;
+  return (
+    <RelatedArtistsGraph relatedArtists={relatedArtists} style={style} fullHeight={fullHeight} />
+  );
 };
