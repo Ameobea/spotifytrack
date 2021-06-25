@@ -342,7 +342,7 @@ export default class RelatedArtistsGraphCanvasRenderer {
 
     // Hack for the embedded standalone graph which is locked to my personal artists
     if (window.location.href.includes('graph.html')) {
-      this.container.setTransform(575, 400, 0.75, 0.75);
+      this.container.setTransform(575, 400, 0.82, 0.82);
     }
 
     this.container.drag().pinch().wheel();

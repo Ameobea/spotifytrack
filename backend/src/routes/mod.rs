@@ -1023,10 +1023,12 @@ pub(crate) fn dump_redis_related_artists_to_database(
         })
         .collect();
 
-    insert_related_artists(&conn, &entries).map_err(|err| {
-        error!("DB error inserting related artist into DB: {:?}", err);
-        String::from("DB error")
-    })?;
+    for entries in entries.chunks(500) {
+        insert_related_artists(&conn, &entries).map_err(|err| {
+            error!("DB error inserting related artist into DB: {:?}", err);
+            String::from("DB error")
+        })?;
+    }
 
     Ok(status::Custom(
         Status::Ok,
