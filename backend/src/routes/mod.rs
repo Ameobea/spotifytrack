@@ -1000,19 +1000,27 @@ pub(crate) fn dump_redis_related_artists_to_database(
         String::from("Redis error")
     })?;
 
-    let mapped_spotify_ids =
-        retrieve_mapped_spotify_ids(&conn, all_values.chunks_exact(2).map(|chunk| &chunk[0]))
-            .map_err(|err| {
-                error!("Error mapping spotify ids: {:?}", err);
-                String::from("Error mapping spotify ids")
-            })?;
+    let mut all_mapped_spotify_ids: HashMap<String, i32> = HashMap::default();
+
+    for chunk in all_values.chunks(200) {
+        let mapped_spotify_ids =
+            retrieve_mapped_spotify_ids(&conn, chunk.chunks_exact(2).map(|chunk| &chunk[0]))
+                .map_err(|err| {
+                    error!("Error mapping spotify ids: {:?}", err);
+                    String::from("Error mapping spotify ids")
+                })?;
+
+        for (k, v) in mapped_spotify_ids {
+            all_mapped_spotify_ids.insert(k, v);
+        }
+    }
 
     let entries: Vec<NewRelatedArtistEntry> = all_values
         .chunks_exact(2)
         .map(|val| {
             let artist_spotify_id = &val[0];
             let related_artists_json = val[1].clone();
-            let artist_spotify_id = *mapped_spotify_ids
+            let artist_spotify_id = *all_mapped_spotify_ids
                 .get(artist_spotify_id)
                 .expect("Spotify ID didn't get mapped");
 
@@ -1023,8 +1031,8 @@ pub(crate) fn dump_redis_related_artists_to_database(
         })
         .collect();
 
-    for entries in entries.chunks(500) {
-        insert_related_artists(&conn, &entries).map_err(|err| {
+    for chunk in entries.chunks(200) {
+        insert_related_artists(&conn, chunk).map_err(|err| {
             error!("DB error inserting related artist into DB: {:?}", err);
             String::from("DB error")
         })?;
