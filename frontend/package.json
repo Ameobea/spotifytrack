@@ -25,6 +25,7 @@
     "@types/react-router": "^5.1.13",
     "@typescript-eslint/eslint-plugin": "^4.22.0",
     "@typescript-eslint/parser": "^4.22.0",
+    "@webpack-cli/serve": "^1.5.1",
     "babel-eslint": "^10.1.0",
     "babel-loader": "^8.2.2",
     "css-loader": "^5.2.4",

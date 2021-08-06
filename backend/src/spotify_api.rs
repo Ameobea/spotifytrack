@@ -1,16 +1,13 @@
-use std::{
-    ops::Try,
-    sync::{Arc, Mutex},
-    thread::{self, sleep},
-    time::Duration,
-};
+use std::{sync::Arc, time::Duration};
 
 use chrono::Utc;
 use crossbeam::channel;
 use diesel::prelude::*;
 use fnv::FnvHashMap as HashMap;
 use reqwest::{self, StatusCode};
+use rocket::http::RawStr;
 use serde::{Deserialize, Serialize};
+use tokio::{sync::Mutex, task::block_in_place};
 
 use crate::{
     conf::CONF,
@@ -39,9 +36,9 @@ fn get_top_entities_url(entity_type: &str, timeframe: &str) -> String {
     )
 }
 
-fn process_spotify_res<R: for<'de> Deserialize<'de> + Clone + std::fmt::Debug>(
+async fn process_spotify_res<R: for<'de> Deserialize<'de> + Clone + std::fmt::Debug>(
     url: &str,
-    res: Result<reqwest::blocking::Response, reqwest::Error>,
+    res: Result<reqwest::Response, reqwest::Error>,
 ) -> Result<R, String> {
     let res = res.map_err(|err| -> String {
         error!("Error communicating with Spotify API: {:?}", err);
@@ -57,12 +54,13 @@ fn process_spotify_res<R: for<'de> Deserialize<'de> + Clone + std::fmt::Debug>(
         error!(
             "Got bad status code of {} from Spotify API: {:?}",
             res.status(),
-            res.text()
+            res.text().await
         );
         return Err("Got bad response from Spotify API".into());
     }
 
     res.json::<SpotifyResponse<R>>()
+        .await
         .map_err(|err| -> String {
             error!("Error decoding response from Spotify API: {:?}.", err,);
             "Error decoding response from Spotify API".into()
@@ -70,94 +68,118 @@ fn process_spotify_res<R: for<'de> Deserialize<'de> + Clone + std::fmt::Debug>(
         .into_result()
 }
 
-pub(crate) fn spotify_user_api_request<T: for<'de> Deserialize<'de> + std::fmt::Debug + Clone>(
+pub(crate) async fn spotify_user_api_request<
+    T: for<'de> Deserialize<'de> + std::fmt::Debug + Clone,
+>(
     url: &str,
     token: &str,
 ) -> Result<T, String> {
-    let client = reqwest::blocking::Client::new();
-    let res = client.get(url).bearer_auth(token).send();
+    let client = reqwest::Client::new();
 
-    match process_spotify_res(&url, res) {
-        Ok(res) => Ok(res),
-        Err(err) if err.contains("Rate Limited") => {
-            sleep(Duration::from_secs(5));
-            spotify_user_api_request(url, token)
-        },
-        Err(err) => Err(err),
+    loop {
+        let res = client.get(url).bearer_auth(token).send().await;
+
+        match process_spotify_res(&url, res).await {
+            Ok(res) => return Ok(res),
+            Err(err) if err.contains("Rate Limited") => {
+                tokio::time::sleep(Duration::from_secs(5)).await;
+            },
+            Err(err) => return Err(err),
+        }
     }
 }
 
-pub(crate) fn get_user_profile_info(token: &str) -> Result<UserProfile, String> {
-    spotify_user_api_request(SPOTIFY_USER_PROFILE_INFO_URL, token)
+pub(crate) async fn get_user_profile_info(token: &str) -> Result<UserProfile, String> {
+    spotify_user_api_request(SPOTIFY_USER_PROFILE_INFO_URL, token).await
 }
 
-pub(crate) fn spotify_server_api_request<T: for<'de> Deserialize<'de> + std::fmt::Debug + Clone>(
+pub(crate) async fn spotify_server_api_request<
+    T: for<'de> Deserialize<'de> + std::fmt::Debug + Clone,
+>(
     url: &str,
     params: HashMap<&str, &str>,
 ) -> Result<T, String> {
-    let client = reqwest::blocking::Client::new();
+    let client = reqwest::Client::new();
 
-    info!(
-        "Hitting Spotify API POST at URL {}, params: {:?}",
-        url, params
-    );
-    let res = client
-        .post(url.clone())
-        .header("Authorization", CONF.get_authorization_header_content())
-        .form(&params)
-        .send();
+    loop {
+        info!(
+            "Hitting Spotify API POST at URL {}, params: {:?}",
+            url, params
+        );
+        let res = client
+            .post(url.clone())
+            .header("Authorization", CONF.get_authorization_header_content())
+            .form(&params)
+            .send()
+            .await;
 
-    match process_spotify_res(&url, res) {
-        Ok(res) => Ok(res),
-        Err(err) if err.contains("Rate Limited") => {
-            sleep(Duration::from_secs(5));
-            spotify_server_api_request(url, params)
-        },
-        Err(err) => Err(err),
+        match process_spotify_res(&url, res).await {
+            Ok(res) => return Ok(res),
+            Err(err) if err.contains("Rate Limited") => {
+                tokio::time::sleep(Duration::from_secs(5)).await;
+            },
+            Err(err) => return Err(err),
+        }
     }
 }
 
-pub(crate) fn spotify_server_get_request<T: for<'de> Deserialize<'de> + std::fmt::Debug + Clone>(
+pub(crate) async fn spotify_server_get_request<
+    T: for<'de> Deserialize<'de> + std::fmt::Debug + Clone,
+>(
     bearer_token: &str,
     url: &str,
 ) -> Result<T, String> {
-    let client = reqwest::blocking::Client::new();
+    let client = reqwest::Client::new();
 
-    info!("Hitting Spotify API GET at URL {}", url,);
-    let res = client
-        .get(url.clone())
-        .header("Authorization", format!("Bearer {}", bearer_token))
-        .send();
+    loop {
+        info!("Hitting Spotify API GET at URL {}", url,);
+        let res = client
+            .get(url.clone())
+            .header("Authorization", format!("Bearer {}", bearer_token))
+            .send()
+            .await;
 
-    match process_spotify_res(&url, res) {
-        Ok(res) => Ok(res),
-        Err(err) if err.contains("Rate Limited") => {
-            sleep(Duration::from_secs(5));
-            spotify_server_get_request(bearer_token, url)
-        },
-        Err(err) => Err(err),
+        match process_spotify_res(&url, res).await {
+            Ok(res) => return Ok(res),
+            Err(err) if err.contains("Rate Limited") => {
+                warn!(
+                    "Rate limited when hitting url={}, waiting 5 seconds before retrying...",
+                    url
+                );
+                tokio::time::sleep(Duration::from_secs(5)).await;
+            },
+            Err(err) => return Err(err),
+        }
     }
 }
 
-fn spotify_user_json_api_get_request<R: for<'de> Deserialize<'de> + Clone + std::fmt::Debug>(
+async fn spotify_user_json_api_get_request<
+    R: for<'de> Deserialize<'de> + Clone + std::fmt::Debug,
+>(
     bearer_token: &str,
     url: String,
 ) -> Result<R, String> {
-    let client = reqwest::blocking::Client::new();
-    info!("Hitting Spotify API at URL {}", url);
+    let client = reqwest::Client::new();
 
-    let res = client.get(&url).bearer_auth(bearer_token).send();
-    match process_spotify_res(&url, res) {
-        Ok(res) => Ok(res),
-        Err(err) if err.contains("Rate Limited") => {
-            sleep(Duration::from_secs(5));
-            spotify_user_json_api_get_request(bearer_token, url)
-        },
-        Err(err) => Err(err),
+    loop {
+        info!("Hitting Spotify API at URL {}", url);
+
+        let res = client.get(&url).bearer_auth(bearer_token).send().await;
+        match process_spotify_res(&url, res).await {
+            Ok(res) => return Ok(res),
+            Err(err) if err.contains("Rate Limited") => {
+                warn!(
+                    "Rate limited when hitting url={}, waiting 5 seconds before retrying...",
+                    url
+                );
+                tokio::time::sleep(Duration::from_secs(5)).await;
+            },
+            Err(err) => return Err(err),
+        }
     }
 }
 
-pub(crate) fn spotify_user_json_api_request<
+pub(crate) async fn spotify_user_json_api_request<
     T: Serialize + std::fmt::Debug,
     R: for<'de> Deserialize<'de> + Clone + std::fmt::Debug,
 >(
@@ -165,7 +187,7 @@ pub(crate) fn spotify_user_json_api_request<
     url: &str,
     body: &T,
 ) -> Result<R, String> {
-    let client = reqwest::blocking::Client::new();
+    let client = reqwest::Client::new();
 
     info!(
         "Hitting Spotify API at URL {}, params: {:?}, bearer_token={}",
@@ -175,49 +197,52 @@ pub(crate) fn spotify_user_json_api_request<
         .post(url.clone())
         .header("Authorization", format!("Bearer {}", bearer_token))
         .json(body)
-        .send();
+        .send()
+        .await;
 
-    process_spotify_res(url, res)
+    process_spotify_res(url, res).await
 }
 
-pub(crate) fn fetch_auth_token() -> Result<AccessTokenResponse, String> {
+pub(crate) async fn fetch_auth_token() -> Result<AccessTokenResponse, String> {
     let mut params = HashMap::default();
     params.insert("grant_type", "client_credentials");
 
-    spotify_server_api_request(SPOTIFY_APP_TOKEN_URL, params)
+    spotify_server_api_request(SPOTIFY_APP_TOKEN_URL, params).await
 }
 
-pub(crate) fn refresh_user_token(refresh_token: &str) -> Result<String, String> {
+pub(crate) async fn refresh_user_token(refresh_token: &str) -> Result<String, String> {
     let mut params = HashMap::default();
     params.insert("grant_type", "refresh_token");
     params.insert("refresh_token", refresh_token);
 
-    let res: AccessTokenResponse = spotify_server_api_request(SPOTIFY_APP_TOKEN_URL, params)?;
+    let res: AccessTokenResponse =
+        spotify_server_api_request(SPOTIFY_APP_TOKEN_URL, params).await?;
     Ok(res.access_token)
 }
 
-pub(crate) fn fetch_cur_stats(user: &User) -> Result<Option<StatsSnapshot>, String> {
+pub(crate) async fn fetch_cur_stats(user: &User) -> Result<Option<StatsSnapshot>, String> {
     // Use the user's token to fetch their current stats
     let (tx, rx) = channel::unbounded::<(
         &'static str,
         &'static str,
-        Result<reqwest::blocking::Response, String>,
+        Result<reqwest::Response, String>,
     )>();
 
-    // Create threads for each of the inner requests (we have to make 6; one for each of the three
+    // Create tasks for each of the inner requests (we have to make 6; one for each of the three
     // timeframes, and then that multiplied by each of the two entities (tracks and artists)).
-    info!("Kicking off 6 API requests on separate threads...");
+    info!("Kicking off 6 API requests on separate tokio tasks...");
     for entity_type in &["tracks", "artists"] {
         for timeframe in &["short", "medium", "long"] {
             let token = user.token.clone();
             let tx = tx.clone();
 
-            thread::spawn(move || {
-                let client = reqwest::blocking::Client::new();
-                let res: Result<reqwest::blocking::Response, String> = client
+            tokio::task::spawn(async move {
+                let client = reqwest::Client::new();
+                let res: Result<reqwest::Response, String> = client
                     .get(&get_top_entities_url(entity_type, timeframe))
                     .bearer_auth(token)
                     .send()
+                    .await
                     .map_err(|_err| -> String {
                         "Error requesting latest user stats from the Spotify API".into()
                     });
@@ -234,7 +259,7 @@ pub(crate) fn fetch_cur_stats(user: &User) -> Result<Option<StatsSnapshot>, Stri
     for _ in 0..6 {
         match rx.recv().unwrap() {
             ("tracks", timeframe, res) => {
-                let parsed_res: TopTracksResponse = res?.json().map_err(|err| -> String {
+                let parsed_res: TopTracksResponse = res?.json().await.map_err(|err| -> String {
                     error!("Error parsing top tracks response: {:?}", err);
                     "Error parsing response from Spotify".into()
                 })?;
@@ -244,10 +269,11 @@ pub(crate) fn fetch_cur_stats(user: &User) -> Result<Option<StatsSnapshot>, Stri
                 }
             },
             ("artists", timeframe, res) => {
-                let parsed_res: TopArtistsResponse = res?.json().map_err(|err| -> String {
-                    error!("Error parsing top artists response: {:?}", err);
-                    "Error parsing response from Spotify".into()
-                })?;
+                let parsed_res: TopArtistsResponse =
+                    res?.json().await.map_err(|err| -> String {
+                        error!("Error parsing top artists response: {:?}", err);
+                        "Error parsing response from Spotify".into()
+                    })?;
 
                 for top_artist in parsed_res.items.into_iter() {
                     stats_snapshot.artists.add_item(timeframe, top_artist);
@@ -274,7 +300,7 @@ fn map_timeframe_to_timeframe_id(timeframe: &str) -> u8 {
 
 /// For each track and artist timeframe, store a row in the `track_rank_snapshots` and
 /// `artist_rank_snapshots` tables respectively
-pub(crate) fn store_stats_snapshot(
+pub(crate) async fn store_stats_snapshot(
     conn: &DbConn,
     user: &User,
     stats: StatsSnapshot,
@@ -297,7 +323,7 @@ pub(crate) fn store_stats_snapshot(
             acc
         });
     let mapped_artist_spotify_ids =
-        crate::db_util::retrieve_mapped_spotify_ids(conn, genres_by_artist_id.keys())?;
+        crate::db_util::retrieve_mapped_spotify_ids(conn, genres_by_artist_id.keys()).await?;
 
     let artist_entries: Vec<NewArtistHistoryEntry> = stats
         .artists
@@ -319,13 +345,16 @@ pub(crate) fn store_stats_snapshot(
         })
         .collect();
 
-    diesel::insert_into(crate::schema::artist_rank_snapshots::table)
-        .values(&artist_entries)
-        .execute(&conn.0)
-        .map_err(|err| -> String {
-            println!("Error inserting row: {:?}", err);
-            "Error inserting user into database".into()
-        })?;
+    conn.run(move |conn| {
+        diesel::insert_into(crate::schema::artist_rank_snapshots::table)
+            .values(&artist_entries)
+            .execute(conn)
+    })
+    .await
+    .map_err(|err| -> String {
+        println!("Error inserting row: {:?}", err);
+        "Error inserting user into database".into()
+    })?;
 
     let track_spotify_ids: Vec<String> = stats
         .tracks
@@ -333,7 +362,7 @@ pub(crate) fn store_stats_snapshot(
         .flat_map(|(_artist_timeframe, tracks)| tracks.iter().map(|track| track.id.clone()))
         .collect::<Vec<_>>();
     let mapped_track_spotify_ids =
-        crate::db_util::retrieve_mapped_spotify_ids(conn, track_spotify_ids.iter())?;
+        crate::db_util::retrieve_mapped_spotify_ids(conn, track_spotify_ids.iter()).await?;
 
     // Create track/artist mapping entries for each (track, artist) pair
     let track_artist_pairs: Vec<TrackArtistPair> = stats
@@ -354,13 +383,16 @@ pub(crate) fn store_stats_snapshot(
             })
         })
         .collect();
-    diesel::insert_or_ignore_into(crate::schema::tracks_artists::table)
-        .values(&track_artist_pairs)
-        .execute(&conn.0)
-        .map_err(|err| -> String {
-            error!("Error inserting track/artist mappings: {:?}", err);
-            "Error inserting track/artist metadata into database".into()
-        })?;
+    conn.run(move |conn| {
+        diesel::insert_or_ignore_into(crate::schema::tracks_artists::table)
+            .values(&track_artist_pairs)
+            .execute(conn)
+    })
+    .await
+    .map_err(|err| -> String {
+        error!("Error inserting track/artist mappings: {:?}", err);
+        "Error inserting track/artist metadata into database".into()
+    })?;
 
     // Create artist/genre mapping entries for each (artist, genre) pair
     let artist_genre_pairs: Vec<ArtistGenrePair> = genres_by_artist_id
@@ -378,9 +410,10 @@ pub(crate) fn store_stats_snapshot(
 
     // Delete all old artist/genre entries for the artists we have here and insert the new ones,
     // making sure that the entries we have are all valid and up-to-date
-    diesel::insert_or_ignore_into(crate::schema::artists_genres::table)
-        .values(&artist_genre_pairs)
-        .execute(&conn.0)
+    let query = diesel::insert_or_ignore_into(crate::schema::artists_genres::table)
+        .values(artist_genre_pairs);
+    conn.run(move |conn| query.execute(conn))
+        .await
         .map_err(|err| -> String {
             error!("Error inserting artist/genre mappings: {:?}", err);
             "Error inserting artist/genre mappings into database".into()
@@ -406,16 +439,20 @@ pub(crate) fn store_stats_snapshot(
         })
         .collect();
 
-    diesel::insert_into(crate::schema::track_rank_snapshots::table)
-        .values(&track_entries)
-        .execute(&conn.0)
-        .map_err(|err| -> String {
-            error!("Error inserting row: {:?}", err);
-            "Error inserting user into database".into()
-        })?;
+    conn.run(move |conn| {
+        diesel::insert_into(crate::schema::track_rank_snapshots::table)
+            .values(&track_entries)
+            .execute(conn)
+    })
+    .await
+    .map_err(|err| -> String {
+        error!("Error inserting row: {:?}", err);
+        "Error inserting user into database".into()
+    })?;
 
     // Update the user to have a last update time that matches all of the new updates
-    let updated_row_count = crate::db_util::update_user_last_updated(&user, &conn, update_time)?;
+    let updated_row_count =
+        crate::db_util::update_user_last_updated(&user, &conn, update_time).await?;
 
     if updated_row_count != 1 {
         error!(
@@ -429,29 +466,31 @@ pub(crate) fn store_stats_snapshot(
 
 const MAX_BATCH_ENTITY_COUNT: usize = 50;
 
-fn fetch_batch_entities<'a, T: for<'de> Deserialize<'de>>(
+async fn fetch_batch_entities<'a, T: for<'de> Deserialize<'de>>(
     base_url: &str,
     token: &str,
     spotify_entity_ids: &[&str],
 ) -> Result<T, String> {
     let url = format!("{}?ids={}", base_url, spotify_entity_ids.join(","));
-    let client = reqwest::blocking::Client::new();
+    let client = reqwest::Client::new();
     client
         .get(&url)
         .bearer_auth(token)
         .send()
+        .await
         .map_err(|err| {
             error!("Error requesting batch data from the Spotify API: {}", err);
             String::from("Error requesting batch data from the Spotify API")
         })?
         .json()
+        .await
         .map_err(|err| -> String {
             error!("Error decoding JSON from Spotify API: {:?}", err);
             "Error reading data from the Spotify API".into()
         })
 }
 
-fn fetch_with_cache<
+async fn fetch_with_cache<
     ResponseType: for<'de> Deserialize<'de>,
     T: Clone + Serialize + for<'de> Deserialize<'de>,
 >(
@@ -463,7 +502,7 @@ fn fetch_with_cache<
 ) -> Result<Vec<T>, String> {
     // First, try to get as many items as we can from the cache
     info!("Checking cache for {} spotify ids...", spotify_ids.len());
-    let cache_res = crate::cache::get_hash_items::<T>(cache_key, spotify_ids)?;
+    let cache_res = block_in_place(|| crate::cache::get_hash_items::<T>(cache_key, spotify_ids))?;
 
     // Fire off a request to Spotify to fill in the missing items
     let mut missing_indices = Vec::new();
@@ -483,7 +522,7 @@ fn fetch_with_cache<
     let mut fetched_entities = Vec::with_capacity(missing_indices.len());
     for (chunk_ix, chunk) in missing_ids.chunks(MAX_BATCH_ENTITY_COUNT).enumerate() {
         info!("Fetching chunk {}...", chunk_ix);
-        let res: ResponseType = fetch_batch_entities(api_url, spotify_access_token, chunk)?;
+        let res: ResponseType = fetch_batch_entities(api_url, spotify_access_token, chunk).await?;
         let fetched_artist_data = map_response_to_items(res)?;
 
         for i in 0..chunk.len() {
@@ -494,14 +533,16 @@ fn fetch_with_cache<
         }
 
         // Update the cache with the missing items
-        crate::cache::set_hash_items(
-            cache_key,
-            &fetched_artist_data
-                .iter()
-                .enumerate()
-                .map(|(i, datum)| (chunk[i], datum))
-                .collect::<Vec<_>>(),
-        )?;
+        block_in_place(|| {
+            crate::cache::set_hash_items(
+                cache_key,
+                &fetched_artist_data
+                    .iter()
+                    .enumerate()
+                    .map(|(i, datum)| (chunk[i], datum))
+                    .collect::<Vec<_>>(),
+            )
+        })?;
 
         fetched_entities.extend(fetched_artist_data)
     }
@@ -523,7 +564,7 @@ fn fetch_with_cache<
     Ok(combined_results)
 }
 
-pub(crate) fn fetch_artists(
+pub(crate) async fn fetch_artists(
     spotify_access_token: &str,
     spotify_ids: &[&str],
 ) -> Result<Vec<Artist>, String> {
@@ -533,7 +574,8 @@ pub(crate) fn fetch_artists(
         spotify_access_token,
         spotify_ids,
         |res: SpotifyBatchArtistsResponse| Ok(res.artists),
-    )?;
+    )
+    .await?;
 
     for artist in &mut entities {
         if let Some(images) = artist.images.as_mut() {
@@ -546,7 +588,7 @@ pub(crate) fn fetch_artists(
     Ok(entities)
 }
 
-pub(crate) fn fetch_tracks(
+pub(crate) async fn fetch_tracks(
     spotify_access_token: &str,
     spotify_ids: &[&str],
 ) -> Result<Vec<Track>, String> {
@@ -556,7 +598,8 @@ pub(crate) fn fetch_tracks(
         spotify_access_token,
         spotify_ids,
         |res: SpotifyBatchTracksResponse| Ok(res.tracks),
-    )?;
+    )
+    .await?;
 
     for track in &mut entities {
         while track.album.images.len() > 1 {
@@ -567,7 +610,7 @@ pub(crate) fn fetch_tracks(
     Ok(entities)
 }
 
-pub(crate) fn create_playlist(
+pub(crate) async fn create_playlist(
     bearer_token: &str,
     user: &User,
     name: String,
@@ -585,7 +628,8 @@ pub(crate) fn create_playlist(
         ..Default::default()
     };
 
-    let mut created_playlist: Playlist = spotify_user_json_api_request(bearer_token, &url, &body)?;
+    let mut created_playlist: Playlist =
+        spotify_user_json_api_request(bearer_token, &url, &body).await?;
     info!(
         "Successfully created playlist with id={:?}",
         created_playlist.id
@@ -598,14 +642,14 @@ pub(crate) fn create_playlist(
     // Can only add up to 100 tracks at a time
     created_playlist.tracks.total = 0;
     for track_spotify_ids in track_spotify_ids.chunks(100) {
-        let body = json!({ "uris": track_spotify_ids });
+        let body = serde_json::json!({ "uris": track_spotify_ids });
         info!(
             "Adding {} tracks to playlist id {}...",
             track_spotify_ids.len(),
             created_playlist.id
         );
         let UpdatePlaylistResponse { snapshot_id } =
-            spotify_user_json_api_request(bearer_token, &url, &body)?;
+            spotify_user_json_api_request(bearer_token, &url, &body).await?;
         info!(
             "Successfully added {} items to playlist id {}",
             track_spotify_ids.len(),
@@ -618,7 +662,7 @@ pub(crate) fn create_playlist(
     Ok(created_playlist)
 }
 
-pub(crate) fn get_related_artists(
+pub(crate) async fn get_related_artists(
     bearer_token: &str,
     artist_id: &str,
 ) -> Result<Vec<Artist>, String> {
@@ -626,17 +670,20 @@ pub(crate) fn get_related_artists(
         "https://api.spotify.com/v1/artists/{}/related-artists",
         artist_id
     );
-    let res: GetRelatedArtistsResponse = spotify_user_json_api_get_request(bearer_token, url)?;
+    let res: GetRelatedArtistsResponse =
+        spotify_user_json_api_get_request(bearer_token, url).await?;
     Ok(res.artists)
 }
 
 /// `artist_ids` must not have any duplicates
-pub(crate) fn get_multiple_related_artists(
+pub(crate) async fn get_multiple_related_artists(
     bearer_token: String,
     artist_ids: &[&str],
 ) -> Result<Vec<Vec<String>>, String> {
     // Pull those from the cache that can be pulled
-    let cache_results = crate::cache::get_hash_items::<Vec<String>>("related_artists", artist_ids)?;
+    let cache_results = block_in_place(|| {
+        crate::cache::get_hash_items::<Vec<String>>("related_artists", artist_ids)
+    })?;
 
     let mut output = vec![None; artist_ids.len()];
     let mut uncached_ids: Vec<String> = Vec::new();
@@ -655,70 +702,68 @@ pub(crate) fn get_multiple_related_artists(
     let uncached_ids_clone = uncached_ids.clone();
     let uncached_ids_clone_2 = uncached_ids_clone.clone();
     let (tx, rx) = std::sync::mpsc::sync_channel(1);
-    let (_, fetched_results) = rayon::join(
-        move || {
-            let work = Arc::new(Mutex::new(uncached_ids_clone_2));
 
-            for _ in 0..CONCURRENT_FETCHES {
-                let bearer_token = bearer_token.clone();
-                let tx = tx.clone();
-                let work = Arc::clone(&work);
+    let work = Arc::new(Mutex::new(uncached_ids_clone_2));
 
-                std::thread::spawn(move || loop {
-                    let artist_id = match { work.lock().unwrap().pop() } {
-                        Some(id) => id,
-                        None => {
-                            debug!("No more items to fetch, worker exiting");
-                            break;
-                        },
-                    };
+    for _ in 0..CONCURRENT_FETCHES {
+        let bearer_token = bearer_token.clone();
+        let tx = tx.clone();
+        let work = Arc::clone(&work);
 
-                    let related_artists_res = get_related_artists(&bearer_token, &artist_id);
-                    tx.send((artist_id, related_artists_res))
-                        .expect("Failed to send related artist over channel");
-                });
-            }
-        },
-        move || {
-            let mut fetched = vec![Vec::new(); total_to_fetch];
-            let mut fetched_so_far = 0;
-            while fetched_so_far < total_to_fetch {
-                let (artist_id, related_artists) = match rx.recv_timeout(Duration::from_secs(30)) {
-                    Ok((artist_id, Ok(res))) => (artist_id, res),
-                    Ok((artist_id, Err(err))) => {
-                        error!(
-                            "Error fetching related artist for artist_id={}: {:?}",
-                            artist_id, err
-                        );
-                        (artist_id, Vec::new())
-                    },
-                    Err(_) => {
-                        error!(
-                            "No response on channel in 30 seconds when fetching related artists; \
-                             giving up"
-                        );
-                        return Err(String::from(
-                            "Error fetching related artists from Spotify API",
-                        ));
+        tokio::task::spawn(async move {
+            loop {
+                let artist_id = match { work.lock().await.pop() } {
+                    Some(id) => id,
+                    None => {
+                        debug!("No more items to fetch, worker exiting");
+                        break;
                     },
                 };
-                fetched_so_far += 1;
 
-                let ix = uncached_ids_clone
-                    .iter()
-                    .position(|id| *id == artist_id)
-                    .expect("Received artist ID for related artist we didn't ask for");
-                assert!(fetched[ix].is_empty());
-                fetched[ix] = related_artists
-                    .into_iter()
-                    .map(|artist| artist.id)
-                    .collect();
+                let related_artists_res = get_related_artists(&bearer_token, &artist_id).await;
+                tx.send((artist_id, related_artists_res))
+                    .expect("Failed to send related artist over channel");
             }
+        });
+    }
 
-            Ok(fetched)
-        },
-    );
-    let fetched_results = fetched_results?;
+    let fetched_results = block_in_place(|| {
+        let mut fetched = vec![Vec::new(); total_to_fetch];
+        let mut fetched_so_far = 0;
+        while fetched_so_far < total_to_fetch {
+            let (artist_id, related_artists) = match rx.recv_timeout(Duration::from_secs(30)) {
+                Ok((artist_id, Ok(res))) => (artist_id, res),
+                Ok((artist_id, Err(err))) => {
+                    error!(
+                        "Error fetching related artist for artist_id={}: {:?}",
+                        artist_id, err
+                    );
+                    (artist_id, Vec::new())
+                },
+                Err(_) => {
+                    error!(
+                        "No response on channel in 30 seconds when fetching related artists; \
+                         giving up"
+                    );
+                    return Err(String::from(
+                        "Error fetching related artists from Spotify API",
+                    ));
+                },
+            };
+            fetched_so_far += 1;
+
+            let ix = uncached_ids_clone
+                .iter()
+                .position(|id| *id == artist_id)
+                .expect("Received artist ID for related artist we didn't ask for");
+            assert!(fetched[ix].is_empty());
+            fetched[ix] = related_artists
+                .into_iter()
+                .map(|artist| artist.id)
+                .collect();
+        }
+        Ok(fetched)
+    })?;
 
     let mut kv_pairs_to_cache: Vec<(&str, Vec<String>)> = Vec::with_capacity(uncached_ids.len());
     for (i, related_artists) in fetched_results.into_iter().enumerate() {
@@ -731,7 +776,7 @@ pub(crate) fn get_multiple_related_artists(
 
         kv_pairs_to_cache.push((artist_id, related_artists));
     }
-    crate::cache::set_hash_items("related_artists", &kv_pairs_to_cache)?;
+    block_in_place(|| crate::cache::set_hash_items("related_artists", &kv_pairs_to_cache))?;
 
     Ok(output
         .into_iter()
@@ -744,7 +789,7 @@ pub(crate) fn get_multiple_related_artists(
         .collect())
 }
 
-pub(crate) fn search_artists(
+pub(crate) async fn search_artists(
     bearer_token: String,
     query: &str,
 ) -> Result<Vec<ArtistSearchResult>, String> {
@@ -761,9 +806,10 @@ pub(crate) fn search_artists(
 
     let url = format!(
         "https://api.spotify.com/v1/search?q={}&type=artist",
-        rocket::http::uri::Uri::percent_encode(query)
+        RawStr::new(query).percent_encode()
     );
-    let res = spotify_server_get_request::<SpotifyArtistsSearchResponse>(&bearer_token, &url)?;
+    let res =
+        spotify_server_get_request::<SpotifyArtistsSearchResponse>(&bearer_token, &url).await?;
 
     Ok(res
         .artists

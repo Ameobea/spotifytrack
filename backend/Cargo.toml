@@ -23,23 +23,24 @@ diesel = { version = "1.4", features = ["chrono", "mysql"] }
 dotenv = "0.15.0"
 
 fnv = "1.0"
+futures = "0.3"
+tokio = { version = "1.6.1", features = ["rt", "rt-multi-thread", "macros"] }
 
 lazy_static = "1.4.0"
 
 log = "0.4"
 
-r2d2_redis = "0.13"
-
 rand = "0.8"
 
-rayon = "1.3"
+r2d2_redis = "0.14"
 
-redis = "0.15"
+redis = { version = "0.20" }
 
 reqwest = { version = "0.11", features = ["blocking", "json"] }
 
-rocket = { git = "https://github.com/SergioBenitez/Rocket.git", rev="2d8bdd457e650c58dbe45eb969d6280758927209" }
-rocket_contrib = { git = "https://github.com/SergioBenitez/Rocket.git", rev="2d8bdd457e650c58dbe45eb969d6280758927209", features = ["json", "diesel_mysql_pool", "compression"] }
+rocket = { git = "https://github.com/SergioBenitez/Rocket.git", rev = "693f4f9ee50057fc735e6e7037e6dee5b485ba10", features = ["json"] }
+rocket_sync_db_pools = { git = "https://github.com/SergioBenitez/Rocket.git", rev = "693f4f9ee50057fc735e6e7037e6dee5b485ba10", features = ["diesel_mysql_pool"]}
+rocket_async_compression = { git = "https://github.com/ameobea/rocket_async_compression.git" }
 
 serde_json = "1.0.57"
 serde = "1.0.115"

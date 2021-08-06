@@ -1,11 +1,12 @@
 use rand::prelude::*;
 
 use crate::{
+    db_util::stringify_diesel_err,
     models::{Track, User},
     DbConn,
 };
 
-pub(crate) fn generate_shared_playlist_track_spotify_ids(
+pub(crate) async fn generate_shared_playlist_track_spotify_ids(
     conn1: DbConn,
     conn2: DbConn,
     conn3: DbConn,
@@ -16,84 +17,70 @@ pub(crate) fn generate_shared_playlist_track_spotify_ids(
 ) -> Result<Vec<String>, String> {
     let (user1_id, user2_id) = (user1.id, user2.id);
 
-    let (tracks_res, artists_res) = rayon::join(
-        move || -> Result<_, String> {
-            let (user1_tracks, user2_tracks) = rayon::join(
-                move || {
-                    crate::db_util::get_all_top_tracks_for_user(&conn1, user1_id)
-                        .map_err(crate::db_util::stringify_diesel_err)
-                        .and_then(|tracks| {
-                            let track_spotify_ids = tracks
-                                .iter()
-                                .map(|(_, spotify_id)| spotify_id.as_str())
-                                .collect::<Vec<_>>();
+    let (user1_tracks, user2_tracks, user1_artists, user2_artists) = tokio::join!(
+        async move {
+            let tracks = crate::db_util::get_all_top_tracks_for_user(&conn1, user1_id).await;
+            match tracks {
+                Ok(tracks) => {
+                    let track_spotify_ids = tracks
+                        .iter()
+                        .map(|(_, spotify_id)| spotify_id.as_str())
+                        .collect::<Vec<_>>();
 
-                            crate::spotify_api::fetch_tracks(
-                                &spotify_access_token,
-                                &track_spotify_ids,
-                            )
-                        })
+                    crate::spotify_api::fetch_tracks(&spotify_access_token, &track_spotify_ids)
+                        .await
                 },
-                move || {
-                    crate::db_util::get_all_top_tracks_for_user(&conn2, user2_id)
-                        .map_err(crate::db_util::stringify_diesel_err)
-                        .and_then(|tracks| {
-                            let track_spotify_ids = tracks
-                                .iter()
-                                .map(|(_, spotify_id)| spotify_id.as_str())
-                                .collect::<Vec<_>>();
-
-                            crate::spotify_api::fetch_tracks(
-                                &spotify_access_token,
-                                &track_spotify_ids,
-                            )
-                        })
-                },
-            );
-            let (user1_tracks, user2_tracks) = (user1_tracks?, user2_tracks?);
-
-            Ok((user1_tracks, user2_tracks))
+                Err(err) => Err(stringify_diesel_err(err)),
+            }
         },
-        move || -> Result<_, String> {
-            let (user1_artists, user2_artists) = rayon::join(
-                move || {
-                    crate::db_util::get_all_top_artists_for_user(&conn3, user1_id)
-                        .map_err(crate::db_util::stringify_diesel_err)
-                        .and_then(|artists| {
-                            let artist_spotify_ids = artists
-                                .iter()
-                                .map(|(_, spotify_id)| spotify_id.as_str())
-                                .collect::<Vec<_>>();
+        async move {
+            let tracks = crate::db_util::get_all_top_tracks_for_user(&conn2, user2_id).await;
+            match tracks {
+                Ok(tracks) => {
+                    let track_spotify_ids = tracks
+                        .iter()
+                        .map(|(_, spotify_id)| spotify_id.as_str())
+                        .collect::<Vec<_>>();
 
-                            crate::spotify_api::fetch_artists(
-                                spotify_access_token,
-                                &artist_spotify_ids,
-                            )
-                        })
+                    crate::spotify_api::fetch_tracks(&spotify_access_token, &track_spotify_ids)
+                        .await
                 },
-                move || {
-                    crate::db_util::get_all_top_artists_for_user(&conn4, user2_id)
-                        .map_err(crate::db_util::stringify_diesel_err)
-                        .and_then(|artists| {
-                            let artist_spotify_ids = artists
-                                .iter()
-                                .map(|(_, spotify_id)| spotify_id.as_str())
-                                .collect::<Vec<_>>();
+                Err(err) => Err(stringify_diesel_err(err)),
+            }
+        },
+        async move {
+            let artists = crate::db_util::get_all_top_artists_for_user(&conn3, user1_id).await;
+            match artists {
+                Ok(artists) => {
+                    let artist_spotify_ids = artists
+                        .iter()
+                        .map(|(_, spotify_id)| spotify_id.as_str())
+                        .collect::<Vec<_>>();
 
-                            crate::spotify_api::fetch_artists(
-                                spotify_access_token,
-                                &artist_spotify_ids,
-                            )
-                        })
+                    crate::spotify_api::fetch_artists(spotify_access_token, &artist_spotify_ids)
+                        .await
                 },
-            );
-            let (user1_artists, user2_artists) = (user1_artists?, user2_artists?);
+                Err(err) => Err(stringify_diesel_err(err)),
+            }
+        },
+        async move {
+            let artists = crate::db_util::get_all_top_artists_for_user(&conn4, user2_id).await;
+            match artists {
+                Ok(artists) => {
+                    let artist_spotify_ids = artists
+                        .iter()
+                        .map(|(_, spotify_id)| spotify_id.as_str())
+                        .collect::<Vec<_>>();
 
-            Ok((user1_artists, user2_artists))
+                    crate::spotify_api::fetch_artists(spotify_access_token, &artist_spotify_ids)
+                        .await
+                },
+                Err(err) => Err(stringify_diesel_err(err)),
+            }
         },
     );
-    let ((user1_tracks, user2_tracks), (user1_artists, user2_artists)) =
-        (tracks_res?, artists_res?);
+    let (user1_tracks, user2_tracks, user1_artists, user2_artists) =
+        (user1_tracks?, user2_tracks?, user1_artists?, user2_artists?);
 
     let mut playlist_tracks: Vec<&Track> = Vec::new();
 
@@ -129,7 +116,7 @@ pub(crate) fn generate_shared_playlist_track_spotify_ids(
 
     playlist_tracks.sort_unstable_by(|track1, track2| track1.id.cmp(&track2.id));
     playlist_tracks.dedup_by(|track1, track2| track1.id == track2.id);
-    playlist_tracks.shuffle(&mut thread_rng());
+    playlist_tracks.shuffle(&mut rand::thread_rng());
 
     Ok(playlist_tracks
         .into_iter()

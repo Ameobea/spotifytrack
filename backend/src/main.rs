@@ -1,4 +1,10 @@
-#![feature(proc_macro_hygiene, decl_macro, box_patterns, try_trait)]
+#![feature(
+    proc_macro_hygiene,
+    decl_macro,
+    box_patterns,
+    try_trait_v2,
+    label_break_value
+)]
 #![allow(clippy::identity_conversion)]
 
 extern crate base64;
@@ -9,23 +15,18 @@ extern crate diesel;
 extern crate dotenv;
 #[macro_use]
 extern crate lazy_static;
-#[macro_use]
 extern crate log;
 extern crate r2d2_redis;
-extern crate rayon;
 extern crate redis;
 #[macro_use]
 extern crate rocket;
-#[macro_use]
-extern crate rocket_contrib;
 extern crate serde;
 extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;
 
-use std::sync::Mutex;
-
-use rocket_contrib::compression::Compression;
+use rocket_async_compression::Compression;
+use tokio::sync::Mutex;
 
 pub mod benchmarking;
 pub mod cache;
@@ -42,10 +43,11 @@ pub mod stats;
 
 use self::spotify_token::SpotifyTokenData;
 
-#[database("spotify_homepage")]
-pub(crate) struct DbConn(diesel::MysqlConnection);
+#[rocket_sync_db_pools::database("spotify_homepage")]
+pub struct DbConn(diesel::MysqlConnection);
 
-fn main() {
+#[rocket::main]
+pub async fn main() {
     dotenv::dotenv().expect("dotenv file parsing failed");
 
     let all_routes = routes![
@@ -69,12 +71,15 @@ fn main() {
         routes::search_artist
     ];
 
-    rocket::ignite()
+    rocket::build()
         .mount("/", all_routes.clone())
         .mount("/api/", all_routes)
+        .manage(Mutex::new(SpotifyTokenData::new().await))
         .attach(DbConn::fairing())
         .attach(cors::CorsFairing)
         .attach(Compression::fairing())
-        .manage(Mutex::new(SpotifyTokenData::new()))
-        .launch();
+        .launch()
+        .await
+        .expect("Error launching Rocket");
+    info!("Rocket exited cleanly");
 }

@@ -63,8 +63,8 @@ pub(crate) struct SpotifyIdMapping {
 
 #[derive(Serialize, Insertable)]
 #[table_name = "spotify_items"]
-pub(crate) struct NewSpotifyIdMapping<'a> {
-    pub spotify_id: &'a str,
+pub struct NewSpotifyIdMapping {
+    pub spotify_id: String,
 }
 
 #[derive(Insertable)]
@@ -364,25 +364,22 @@ pub(crate) enum SpotifyResponse<T: std::fmt::Debug + Clone> {
     Error(SpotifyError),
 }
 
-impl<T: for<'de> Deserialize<'de> + std::fmt::Debug + Clone> std::ops::Try for SpotifyResponse<T> {
-    type Error = String;
-    type Ok = T;
-
-    fn into_result(self) -> Result<Self::Ok, String> {
+impl<T: for<'de> Deserialize<'de> + std::fmt::Debug + Clone> SpotifyResponse<T> {
+    pub fn into_result(self) -> Result<T, String> {
         match self {
-            SpotifyResponse::Success(val) => Ok(val),
-            SpotifyResponse::Error(err) => {
-                error!("Error fetching data from Spotify API: {:?}", err);
-
-                Err(err
-                    .error
-                    .message
-                    .unwrap_or_else(|| -> String { "No error message supplied".into() }))
-            },
+            Self::Success(val) => Ok(val),
+            Self::Error(err) => Err(err
+                .error
+                .message
+                .unwrap_or_else(|| -> String { "No error message supplied".into() })),
         }
     }
+}
 
-    fn from_error(err_msg: String) -> Self {
+impl<T: for<'de> Deserialize<'de> + std::fmt::Debug + Clone> std::ops::FromResidual
+    for SpotifyResponse<T>
+{
+    fn from_residual(err_msg: String) -> Self {
         SpotifyResponse::Error(SpotifyError {
             error: SpotifyErrorInner {
                 status: None,
@@ -392,8 +389,28 @@ impl<T: for<'de> Deserialize<'de> + std::fmt::Debug + Clone> std::ops::Try for S
             other: HashMap::default(),
         })
     }
+}
 
-    fn from_ok(val: T) -> Self { SpotifyResponse::Success(val) }
+impl<T: for<'de> Deserialize<'de> + std::fmt::Debug + Clone> std::ops::Try for SpotifyResponse<T> {
+    type Output = T;
+    type Residual = String;
+
+    fn branch(self) -> std::ops::ControlFlow<Self::Residual, Self::Output> {
+        match self {
+            SpotifyResponse::Success(val) => std::ops::ControlFlow::Continue(val),
+            SpotifyResponse::Error(err) => {
+                error!("Error fetching data from Spotify API: {:?}", err);
+
+                std::ops::ControlFlow::Break(
+                    err.error
+                        .message
+                        .unwrap_or_else(|| -> String { "No error message supplied".into() }),
+                )
+            },
+        }
+    }
+
+    fn from_output(val: T) -> Self { SpotifyResponse::Success(val) }
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -541,7 +558,7 @@ pub(crate) struct RelatedArtistsGraph {
     pub related_artists: HashMap<String, Vec<String>>,
 }
 
-#[derive(Insertable)]
+#[derive(Clone, Insertable)]
 #[table_name = "related_artists"]
 pub(crate) struct NewRelatedArtistEntry {
     pub artist_spotify_id: i32,

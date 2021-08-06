@@ -6,9 +6,9 @@ use diesel::{
     prelude::*,
     query_builder::{QueryFragment, QueryId},
     query_dsl::LoadQuery,
-    r2d2::{ConnectionManager, PooledConnection},
 };
 use fnv::{FnvHashMap as HashMap, FnvHashSet as HashSet};
+use futures::Future;
 use rocket::{http::Status, response::status};
 use serde::Serialize;
 
@@ -22,17 +22,20 @@ use crate::{
     DbConn,
 };
 
-pub(crate) fn get_user_by_spotify_id(
+pub(crate) async fn get_user_by_spotify_id(
     conn: &DbConn,
-    supplied_spotify_id: &str,
+    supplied_spotify_id: String,
 ) -> Result<Option<User>, String> {
     use crate::schema::users::dsl::*;
 
-    diesel_not_found_to_none(
-        users
-            .filter(spotify_id.eq(&supplied_spotify_id))
-            .first::<User>(&conn.0),
-    )
+    conn.run(move |conn| {
+        diesel_not_found_to_none(
+            users
+                .filter(spotify_id.eq(&supplied_spotify_id))
+                .first::<User>(conn),
+        )
+    })
+    .await
 }
 
 pub(crate) fn stringify_diesel_err(err: diesel::result::Error) -> String {
@@ -58,7 +61,7 @@ struct StatsQueryResultItem {
 
 /// Returns the top artists for the last update for the given user.  Items are returned as
 /// `(timeframe_id, artist)`.
-pub(crate) fn get_artist_stats(
+pub(crate) async fn get_artist_stats(
     user: &User,
     conn: DbConn,
     spotify_access_token: &str,
@@ -68,24 +71,27 @@ pub(crate) fn get_artist_stats(
         spotify_items::{self, dsl::*},
     };
 
-    let last_update_time: Option<NaiveDateTime> = artist_rank_snapshots
+    let query = artist_rank_snapshots
         .filter(user_id.eq(user.id))
         .select(update_time)
-        .order_by(update_time.desc())
-        .first(&conn.0)
-        .optional()
+        .order_by(update_time.desc());
+    let last_update_time: Option<NaiveDateTime> = conn
+        .run(move |conn| query.first(conn).optional())
+        .await
         .map_err(stringify_diesel_err)?;
     let last_update_time = match last_update_time {
         Some(last_update_time) => last_update_time,
         None => return Ok(None),
     };
 
-    let artist_stats = artist_rank_snapshots
+    let query = artist_rank_snapshots
         .filter(user_id.eq(user.id))
         .filter(update_time.eq(last_update_time))
         .inner_join(spotify_items)
-        .select((artist_rank_snapshots::timeframe, spotify_items::spotify_id))
-        .load::<StatsQueryResultItem>(&conn.0)
+        .select((artist_rank_snapshots::timeframe, spotify_items::spotify_id));
+    let artist_stats = conn
+        .run(move |conn| query.load::<StatsQueryResultItem>(conn))
+        .await
         .map_err(stringify_diesel_err)?;
     mark("Got artist stats from database");
 
@@ -98,7 +104,8 @@ pub(crate) fn get_artist_stats(
         .map(|entry| entry.spotify_id.as_str())
         .collect();
     let fetched_artists =
-        crate::spotify_api::fetch_artists(spotify_access_token, &artist_spotify_ids)?
+        crate::spotify_api::fetch_artists(spotify_access_token, &artist_spotify_ids)
+            .await?
             .into_iter()
             .enumerate()
             .map(|(i, artist)| {
@@ -110,10 +117,10 @@ pub(crate) fn get_artist_stats(
     Ok(Some(fetched_artists))
 }
 
-pub(crate) fn get_artist_rank_history_single_artist(
+pub(crate) async fn get_artist_rank_history_single_artist(
     user: &User,
     conn: DbConn,
-    artist_spotify_id: &str,
+    artist_spotify_id: String,
 ) -> Result<Option<Vec<(NaiveDateTime, [Option<u8>; 3])>>, String> {
     use crate::schema::{artist_rank_snapshots::dsl::*, spotify_items::dsl::*};
 
@@ -127,7 +134,10 @@ pub(crate) fn get_artist_rank_history_single_artist(
         "{:?}",
         diesel::debug_query::<diesel::mysql::Mysql, _>(&query)
     );
-    let res = match diesel_not_found_to_none(query.load::<ArtistRankHistoryResItem>(&conn.0))? {
+    let res = match conn
+        .run(move |conn| diesel_not_found_to_none(query.load::<ArtistRankHistoryResItem>(conn)))
+        .await?
+    {
         Some(res) => res,
         None => return Ok(None),
     };
@@ -177,26 +187,27 @@ pub(crate) fn group_updates_by_timestamp<T>(
 ///
 /// The data returned by this function is useful for generating graphs on the frontend showing how
 /// the rankings of different entities changes over time.
-fn get_entity_stats_history<
+async fn get_entity_stats_history<
     T: HasSpotifyId + Debug,
     Q: RunQueryDsl<MysqlConnection>
         + QueryFragment<Mysql>
-        + LoadQuery<PooledConnection<ConnectionManager<MysqlConnection>>, StatsHistoryQueryResItem>
-        + QueryId,
+        + LoadQuery<MysqlConnection, StatsHistoryQueryResItem>
+        + QueryId
+        + Send
+        + 'static,
     U: Serialize + Debug,
+    F: Future<Output = Result<Vec<T>, String>>,
 >(
     conn: DbConn,
     query: Q,
     spotify_access_token: &str,
-    fetch_entities: fn(
-        spotify_access_token: &str,
-        entity_spotify_ids: &[&str],
-    ) -> Result<Vec<T>, String>,
+    fetch_entities: fn(spotify_access_token: String, entity_spotify_ids: Vec<String>) -> F,
     get_update_item: fn(&StatsHistoryQueryResItem) -> U,
 ) -> Result<Option<(HashMap<String, T>, Vec<(NaiveDateTime, TimeFrames<U>)>)>, String> {
     debug!("{}", diesel::debug_query::<diesel::mysql::Mysql, _>(&query));
-    let entity_stats_opt: Option<Vec<StatsHistoryQueryResItem>> =
-        diesel_not_found_to_none(query.load::<StatsHistoryQueryResItem>(&conn.0))?;
+    let entity_stats_opt: Option<Vec<StatsHistoryQueryResItem>> = conn
+        .run(|conn| diesel_not_found_to_none(query.load::<StatsHistoryQueryResItem>(conn)))
+        .await?;
 
     let entity_stats: Vec<StatsHistoryQueryResItem> = match entity_stats_opt {
         None => return Ok(None),
@@ -207,9 +218,11 @@ fn get_entity_stats_history<
         .iter()
         .map(|entry| entry.spotify_id.as_str())
         .collect();
-    let entity_spotify_ids: Vec<&str> = entity_spotify_ids.into_iter().collect();
+    let entity_spotify_ids: Vec<String> =
+        entity_spotify_ids.into_iter().map(String::from).collect();
 
-    let fetched_tracks = fetch_entities(spotify_access_token, &entity_spotify_ids)?;
+    let fetched_tracks =
+        fetch_entities(spotify_access_token.to_owned(), entity_spotify_ids).await?;
     let entities_by_id = fetched_tracks
         .into_iter()
         .fold(HashMap::default(), |mut acc, track| {
@@ -248,7 +261,7 @@ fn get_entity_stats_history<
     return Ok(Some((entities_by_id, updates)));
 }
 
-pub(crate) fn get_artist_stats_history(
+pub(crate) async fn get_artist_stats_history(
     user: &User,
     conn: DbConn,
     spotify_access_token: &str,
@@ -262,24 +275,48 @@ pub(crate) fn get_artist_stats_history(
 > {
     use crate::schema::{artist_rank_snapshots::dsl::*, spotify_items::dsl::*};
 
-    let mut query = artist_rank_snapshots
-        .filter(user_id.eq(user.id))
-        .into_boxed();
+    let query = artist_rank_snapshots.filter(user_id.eq(user.id));
     if let Some(timeframe_id) = restrict_to_timeframe_id {
-        query = query.filter(timeframe.eq(timeframe_id))
-    }
-    let query =
-        query
+        let query = query
+            .filter(timeframe.eq(timeframe_id))
             .inner_join(spotify_items)
             .select((spotify_id, update_time, ranking, timeframe));
 
-    get_entity_stats_history(
-        conn,
-        query,
-        spotify_access_token,
-        crate::spotify_api::fetch_artists,
-        |update: &StatsHistoryQueryResItem| update.spotify_id.clone(),
-    )
+        get_entity_stats_history(
+            conn,
+            query,
+            spotify_access_token,
+            |spotify_access_token: String, spotify_ids: Vec<String>| async move {
+                let ref_spotify_ids: Vec<&str> = spotify_ids.iter().map(String::as_str).collect();
+                let res =
+                    crate::spotify_api::fetch_artists(&spotify_access_token, &ref_spotify_ids)
+                        .await;
+                res
+            },
+            |update: &StatsHistoryQueryResItem| update.spotify_id.clone(),
+        )
+        .await
+    } else {
+        let query =
+            query
+                .inner_join(spotify_items)
+                .select((spotify_id, update_time, ranking, timeframe));
+
+        get_entity_stats_history(
+            conn,
+            query,
+            spotify_access_token,
+            |spotify_access_token: String, spotify_ids: Vec<String>| async move {
+                let ref_spotify_ids: Vec<&str> = spotify_ids.iter().map(String::as_str).collect();
+                let res =
+                    crate::spotify_api::fetch_artists(&spotify_access_token, &ref_spotify_ids)
+                        .await;
+                res
+            },
+            |update: &StatsHistoryQueryResItem| update.spotify_id.clone(),
+        )
+        .await
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -288,11 +325,11 @@ pub(crate) struct ArtistRanking {
     pub ranking: u8,
 }
 
-pub(crate) fn get_genre_stats_history(
+pub(crate) async fn get_genre_stats_history(
     user: &User,
     conn: DbConn,
     spotify_access_token: &str,
-    target_genre: &str,
+    target_genre: String,
 ) -> Result<
     Option<(
         HashMap<String, Artist>,
@@ -348,45 +385,52 @@ pub(crate) fn get_genre_stats_history(
         conn,
         query,
         spotify_access_token,
-        crate::spotify_api::fetch_artists,
+        |spotify_access_token: String, spotify_ids: Vec<String>| async move {
+            let ref_spotify_ids: Vec<&str> = spotify_ids.iter().map(String::as_str).collect();
+            let res =
+                crate::spotify_api::fetch_artists(&spotify_access_token, &ref_spotify_ids).await;
+            res
+        },
         |update: &StatsHistoryQueryResItem| ArtistRanking {
             artist_spotify_id: update.spotify_id.clone(),
             ranking: update.ranking,
         },
     )
+    .await
 }
 
 /// Returns a list of track data items for each of the top tracks for the user's most recent update.
 /// The first item of the tuple is the timeframe ID: short, medium, long.
-pub(crate) fn get_track_stats(
+pub(crate) async fn get_track_stats(
     user: &User,
     conn: DbConn,
     spotify_access_token: &str,
 ) -> Result<Option<Vec<(u8, Track)>>, String> {
     use crate::schema::{spotify_items::dsl::*, track_rank_snapshots::dsl::*};
 
-    let last_update_time: Option<NaiveDateTime> = track_rank_snapshots
+    let query = track_rank_snapshots
         .filter(user_id.eq(user.id))
         .select(update_time)
-        .order_by(update_time.desc())
-        .first(&conn.0)
-        .optional()
+        .order_by(update_time.desc());
+    let last_update_time: Option<NaiveDateTime> = conn
+        .run(move |conn| query.first(conn).optional())
+        .await
         .map_err(stringify_diesel_err)?;
     let last_update_time = match last_update_time {
         Some(last_update_time) => last_update_time,
         None => return Ok(None),
     };
 
-    let track_stats_opt = diesel_not_found_to_none(
-        track_rank_snapshots
-            .filter(user_id.eq(user.id))
-            // Only include tracks from the most recent update
-            .filter(update_time.eq(last_update_time))
-            .order_by(update_time)
-            .inner_join(spotify_items)
-            .select((timeframe, spotify_id))
-            .load::<StatsQueryResultItem>(&conn.0),
-    )?;
+    let query = track_rank_snapshots
+        .filter(user_id.eq(user.id))
+        // Only include tracks from the most recent update
+        .filter(update_time.eq(last_update_time))
+        .order_by(update_time)
+        .inner_join(spotify_items)
+        .select((timeframe, spotify_id));
+    let track_stats_opt = conn
+        .run(move |conn| diesel_not_found_to_none(query.load::<StatsQueryResultItem>(conn)))
+        .await?;
 
     let track_stats = match track_stats_opt {
         None => return Ok(None),
@@ -397,26 +441,26 @@ pub(crate) fn get_track_stats(
         .iter()
         .map(|entry| entry.spotify_id.as_str())
         .collect();
-    let fetched_tracks =
-        crate::spotify_api::fetch_tracks(spotify_access_token, &track_spotify_ids)?
-            .into_iter()
-            .enumerate()
-            .map(|(i, track)| {
-                let timeframe_id = track_stats[i].timeframe;
-                (timeframe_id, track)
-            })
-            .collect::<Vec<_>>();
+    let fetched_tracks = crate::spotify_api::fetch_tracks(spotify_access_token, &track_spotify_ids)
+        .await?
+        .into_iter()
+        .enumerate()
+        .map(|(i, track)| {
+            let timeframe_id = track_stats[i].timeframe;
+            (timeframe_id, track)
+        })
+        .collect::<Vec<_>>();
     Ok(Some(fetched_tracks))
 }
 
 /// Retrieves the top tracks for all timeframes for each update for a given user.  Rather than
 /// duplicating track metadata, each timeframe simply stores the track ID and a `HashMap` is
 /// returned which serves as a local lookup tool for the track metadata.
-pub(crate) fn get_track_stats_history(
+pub(crate) async fn get_track_stats_history(
     user: &User,
     conn: DbConn,
     spotify_access_token: &str,
-    parent_artist_id: &str,
+    parent_artist_id: String,
 ) -> Result<
     Option<(
         HashMap<String, Track>,
@@ -430,17 +474,19 @@ pub(crate) fn get_track_stats_history(
         tracks_artists::{self, dsl::*},
     };
 
-    let artist_inner_id: i32 = spotify_items
-        .filter(spotify_items::spotify_id.eq(parent_artist_id))
-        .select(spotify_items::id)
-        .first(&conn.0)
-        .map_err(|err| -> String {
-            error!(
-                "Error querying inner id of artist with spotify id {:?}: {:?}",
-                parent_artist_id, err
-            );
-            "Error looking up parent artist".into()
-        })?;
+    let query = spotify_items
+        .filter(spotify_items::spotify_id.eq(parent_artist_id.clone()))
+        .select(spotify_items::id);
+    let artist_inner_id: i32 =
+        conn.run(move |conn| query.first(conn))
+            .await
+            .map_err(|err| -> String {
+                error!(
+                    "Error querying inner id of artist with spotify id {:?}: {:?}",
+                    parent_artist_id, err
+                );
+                "Error looking up parent artist".into()
+            })?;
 
     let query = tracks_artists
         .filter(tracks_artists::artist_id.eq(artist_inner_id))
@@ -457,14 +503,23 @@ pub(crate) fn get_track_stats_history(
         conn,
         query,
         spotify_access_token,
-        crate::spotify_api::fetch_tracks,
+        |spotify_access_token: String, spotify_ids: Vec<String>| async move {
+            let ref_spotify_ids: Vec<&str> = spotify_ids.iter().map(String::as_str).collect();
+            let res =
+                crate::spotify_api::fetch_tracks(&spotify_access_token, &ref_spotify_ids).await;
+            res
+        },
         |update: &StatsHistoryQueryResItem| update.spotify_id.clone(),
     )
+    .await
 }
 
 /// Retrieves a list of the internal mapped Spotify ID for each of the provided spotify IDs,
 /// inserting new entries as needed and taking care of it all behind the scenes.
-pub(crate) fn retrieve_mapped_spotify_ids<'a, T: Iterator<Item = &'a String> + Clone>(
+pub(crate) async fn retrieve_mapped_spotify_ids<
+    'a,
+    T: Iterator<Item = &'a String> + Clone + Send + 'a,
+>(
     conn: &DbConn,
     spotify_ids: T,
 ) -> Result<HashMap<String, i32>, String> {
@@ -472,6 +527,7 @@ pub(crate) fn retrieve_mapped_spotify_ids<'a, T: Iterator<Item = &'a String> + C
 
     let spotify_id_items: Vec<NewSpotifyIdMapping> = spotify_ids
         .clone()
+        .cloned()
         .map(|spotify_id_item| NewSpotifyIdMapping {
             spotify_id: spotify_id_item,
         })
@@ -479,22 +535,26 @@ pub(crate) fn retrieve_mapped_spotify_ids<'a, T: Iterator<Item = &'a String> + C
 
     // Try to create new entries for all included spotify IDs, ignoring failures due to unique
     // constraint violations
-    diesel::insert_or_ignore_into(spotify_items)
-        .values(spotify_id_items)
-        .execute(&conn.0)
-        .map_err(|err| -> String {
+    let query = diesel::insert_or_ignore_into(spotify_items).values(spotify_id_items);
+    conn.run(move |conn| {
+        query.execute(conn).map_err(|err| -> String {
             error!("Error inserting spotify ids into mapping table: {:?}", err);
             "Error inserting spotify ids into mapping table".into()
-        })?;
+        })
+    })
+    .await?;
 
     // Retrieve the mapped spotify ids, including any inserted ones
-    let mapped_ids: Vec<SpotifyIdMapping> = spotify_items
-        .filter(spotify_id.eq_any(spotify_ids))
-        .load(&conn.0)
-        .map_err(|err| -> String {
-            error!("Error retrieving mapped spotify ids: {:?}", err);
-            "Error retrieving mapped spotify ids".into()
-        })?;
+    let owned_spotify_ids: Vec<String> = spotify_ids.map(String::from).collect();
+    let query = spotify_items.filter(spotify_id.eq_any(owned_spotify_ids));
+    let mapped_ids: Vec<SpotifyIdMapping> = conn
+        .run(move |conn| {
+            query.load(conn).map_err(|err| -> String {
+                error!("Error retrieving mapped spotify ids: {:?}", err);
+                "Error retrieving mapped spotify ids".into()
+            })
+        })
+        .await?;
 
     // Match up the orderings to that the mapped ids are in the same ordering as the provided ids
     let mut mapped_ids_mapping: HashMap<String, i32> = HashMap::default();
@@ -507,7 +567,7 @@ pub(crate) fn retrieve_mapped_spotify_ids<'a, T: Iterator<Item = &'a String> + C
 
 /// Using the list of all stored track spotify IDs, retrieves fresh track metadata for all of them
 /// and populates the mapping table with artist-track pairs for all of them
-pub(crate) fn populate_tracks_artists_table(
+pub(crate) async fn populate_tracks_artists_table(
     conn: &DbConn,
     spotify_access_token: &str,
 ) -> Result<(), String> {
@@ -524,18 +584,21 @@ pub(crate) fn populate_tracks_artists_table(
     }
 
     // Get all unique track ids in the database mapped to their corresponding spotify IDs
-    let all_track_spotify_ids: Vec<Ids> = track_rank_snapshots
+    let query = track_rank_snapshots
         .inner_join(spotify_items)
         .select((track_rank_snapshots::mapped_spotify_id, spotify_id))
-        .distinct()
-        .load::<Ids>(&conn.0)
-        .map_err(|err| -> String {
-            error!(
-                "Unable to query distinct track spotify IDs from database: {:?}",
-                err
-            );
-            "Unable to query distinct track spotify IDs from database".into()
-        })?;
+        .distinct();
+    let all_track_spotify_ids: Vec<Ids> = conn
+        .run(move |conn| {
+            query.load::<Ids>(conn).map_err(|err| -> String {
+                error!(
+                    "Unable to query distinct track spotify IDs from database: {:?}",
+                    err
+                );
+                "Unable to query distinct track spotify IDs from database".into()
+            })
+        })
+        .await?;
     let all_track_spotify_ids_refs = all_track_spotify_ids
         .iter()
         .map(|track_spotify_id| track_spotify_id.spotify_id.as_str())
@@ -548,14 +611,15 @@ pub(crate) fn populate_tracks_artists_table(
 
     // Fetch track metadata for each of them
     let tracks =
-        crate::spotify_api::fetch_tracks(spotify_access_token, &all_track_spotify_ids_refs)?;
+        crate::spotify_api::fetch_tracks(spotify_access_token, &all_track_spotify_ids_refs).await?;
 
     // Map returned artist spotify ids to internal artist ids
     let artist_spotify_ids: Vec<String> = tracks
         .iter()
         .flat_map(|track| track.artists.iter().map(|artist| artist.id.clone()))
         .collect();
-    let artist_internal_id_mapping = retrieve_mapped_spotify_ids(conn, artist_spotify_ids.iter())?;
+    let artist_internal_id_mapping =
+        retrieve_mapped_spotify_ids(conn, artist_spotify_ids.iter()).await?;
 
     // Insert mapping items for each of the (track, artist) pairs
     let pairs: Vec<TrackArtistPair> = tracks
@@ -573,20 +637,23 @@ pub(crate) fn populate_tracks_artists_table(
                 })
         })
         .collect();
-    diesel::insert_or_ignore_into(tracks_artists)
-        .values(&pairs)
-        .execute(&conn.0)
-        .map_err(|err| -> String {
-            error!(
-                "Error inserting artist/track pairs into mapping table: {:?}",
-                err
-            );
-            "Error inserting artist/track pairs into mapping table".into()
-        })
-        .map(|_| ())
+    conn.run(move |conn| {
+        diesel::insert_or_ignore_into(tracks_artists)
+            .values(&pairs)
+            .execute(conn)
+    })
+    .await
+    .map_err(|err| -> String {
+        error!(
+            "Error inserting artist/track pairs into mapping table: {:?}",
+            err
+        );
+        "Error inserting artist/track pairs into mapping table".into()
+    })
+    .map(|_| ())
 }
 
-pub(crate) fn populate_artists_genres_table(
+pub(crate) async fn populate_artists_genres_table(
     conn: &DbConn,
     spotify_access_token: &str,
 ) -> Result<(), String> {
@@ -603,11 +670,13 @@ pub(crate) fn populate_artists_genres_table(
     }
 
     // Get the full set of unique artist Spotify IDs for all stored updates
-    let all_artist_ids = artist_rank_snapshots
+    let query = artist_rank_snapshots
         .inner_join(spotify_items)
         .select((artist_rank_snapshots::mapped_spotify_id, spotify_id))
-        .distinct()
-        .load::<Ids>(&conn.0)
+        .distinct();
+    let all_artist_ids = conn
+        .run(move |conn| query.load::<Ids>(conn))
+        .await
         .map_err(|err| -> String {
             error!("Error fetching all artist ids from database: {:?}", err);
             "Error fetching all artist ids from database".into()
@@ -626,7 +695,7 @@ pub(crate) fn populate_artists_genres_table(
     // Fetch artist metadata for each of them
     // println!("{:?}", all_artist_spotify_ids);
     let mut artists =
-        crate::spotify_api::fetch_artists(spotify_access_token, &all_artist_spotify_ids)?;
+        crate::spotify_api::fetch_artists(spotify_access_token, &all_artist_spotify_ids).await?;
     artists.sort_unstable_by(|a, b| a.id.cmp(&b.id));
     artists.dedup_by(|a, b| a.id == b.id);
 
@@ -657,48 +726,50 @@ pub(crate) fn populate_artists_genres_table(
         })
         .collect();
 
-    conn.0
-        .transaction::<_, diesel::result::Error, _>(|| {
+    conn.run(move |conn| {
+        conn.transaction::<_, diesel::result::Error, _>(|| {
             // Clear all existing artist/genre mapping entries
-            diesel::delete(artists_genres).execute(&conn.0)?;
+            diesel::delete(artists_genres).execute(conn)?;
 
             // Re-fill the table with the new ones we've created
             for pairs in pairs.chunks(500) {
                 diesel::insert_into(artists_genres)
                     .values(pairs)
-                    .execute(&conn.0)?;
+                    .execute(conn)?;
             }
             Ok(())
         })
-        .map_err(|err| -> String {
-            error!(
-                "Error clearing + refreshing artists/genres mapping table: {:?}",
-                err
-            );
-            "Error clearing + refreshing artists/genres mapping table".into()
-        })
-        .map(|_| ())
+    })
+    .await
+    .map_err(|err| -> String {
+        error!(
+            "Error clearing + refreshing artists/genres mapping table: {:?}",
+            err
+        );
+        "Error clearing + refreshing artists/genres mapping table".into()
+    })
+    .map(|_| ())
 }
 
 /// Sets the `last_updated_time` column for the provided user to the provided `update_time`.
 /// Returns the number of rows updated or an error message.
-pub(crate) fn update_user_last_updated(
+pub(crate) async fn update_user_last_updated(
     user: &User,
     conn: &DbConn,
     update_time: NaiveDateTime,
 ) -> Result<usize, String> {
     use crate::schema::users::dsl::*;
 
-    diesel::update(users.filter(id.eq(user.id)))
-        .set(last_update_time.eq(update_time))
-        .execute(&conn.0)
+    let query = diesel::update(users.filter(id.eq(user.id))).set(last_update_time.eq(update_time));
+    conn.run(move |conn| query.execute(conn))
+        .await
         .map_err(|err| -> String {
             error!("Error updating user's last update time: {:?}", err);
             "Error updating user's last update time.".into()
         })
 }
 
-pub(crate) fn get_artist_timeline_events(
+pub(crate) async fn get_artist_timeline_events(
     conn: &DbConn,
     user_id: i64,
     start_day: NaiveDateTime,
@@ -706,7 +777,7 @@ pub(crate) fn get_artist_timeline_events(
 ) -> Result<Vec<(String, NaiveDateTime)>, diesel::result::Error> {
     use crate::schema::{artists_users_first_seen, spotify_items};
 
-    artists_users_first_seen::table
+    let query = artists_users_first_seen::table
         .filter(
             artists_users_first_seen::dsl::user_id.eq(user_id).and(
                 artists_users_first_seen::dsl::first_seen
@@ -722,11 +793,11 @@ pub(crate) fn get_artist_timeline_events(
         .select((
             spotify_items::dsl::spotify_id,
             artists_users_first_seen::dsl::first_seen,
-        ))
-        .load(&conn.0)
+        ));
+    conn.run(move |conn| query.load(conn)).await
 }
 
-pub(crate) fn get_track_timeline_events(
+pub(crate) async fn get_track_timeline_events(
     conn: &DbConn,
     user_id: i64,
     start_day: NaiveDateTime,
@@ -734,7 +805,7 @@ pub(crate) fn get_track_timeline_events(
 ) -> Result<Vec<(String, NaiveDateTime)>, diesel::result::Error> {
     use crate::schema::{spotify_items, tracks_users_first_seen};
 
-    tracks_users_first_seen::table
+    let query = tracks_users_first_seen::table
         .filter(
             tracks_users_first_seen::dsl::user_id.eq(user_id).and(
                 tracks_users_first_seen::dsl::first_seen
@@ -750,17 +821,17 @@ pub(crate) fn get_track_timeline_events(
         .select((
             spotify_items::dsl::spotify_id,
             tracks_users_first_seen::dsl::first_seen,
-        ))
-        .load(&conn.0)
+        ));
+    conn.run(move |conn| query.load(conn)).await
 }
 
-pub(crate) fn get_all_top_tracks_for_user(
+pub(crate) async fn get_all_top_tracks_for_user(
     conn: &DbConn,
     user_id: i64,
 ) -> Result<Vec<(i32, String)>, diesel::result::Error> {
     use crate::schema::{spotify_items, tracks_users_first_seen};
 
-    tracks_users_first_seen::table
+    let query = tracks_users_first_seen::table
         .filter(tracks_users_first_seen::dsl::user_id.eq(user_id))
         .inner_join(
             spotify_items::table
@@ -770,17 +841,17 @@ pub(crate) fn get_all_top_tracks_for_user(
             tracks_users_first_seen::dsl::mapped_spotify_id,
             spotify_items::dsl::spotify_id,
         ))
-        .distinct()
-        .load(&conn.0)
+        .distinct();
+    conn.run(move |conn| query.load(conn)).await
 }
 
-pub(crate) fn get_all_top_artists_for_user(
+pub(crate) async fn get_all_top_artists_for_user(
     conn: &DbConn,
     user_id: i64,
 ) -> Result<Vec<(i32, String)>, diesel::result::Error> {
     use crate::schema::{artists_users_first_seen, spotify_items};
 
-    artists_users_first_seen::table
+    let query = artists_users_first_seen::table
         .filter(artists_users_first_seen::dsl::user_id.eq(user_id))
         .inner_join(
             spotify_items::table
@@ -790,36 +861,38 @@ pub(crate) fn get_all_top_artists_for_user(
             artists_users_first_seen::dsl::mapped_spotify_id,
             spotify_items::dsl::spotify_id,
         ))
-        .distinct()
-        .load(&conn.0)
+        .distinct();
+    conn.run(move |conn| query.load(conn)).await
 }
 
-pub(crate) fn refresh_user_access_token(
+pub(crate) async fn refresh_user_access_token(
     conn: &DbConn,
     user: &mut User,
 ) -> Result<Option<status::Custom<String>>, String> {
     use crate::schema::users;
 
     // Update the access token for that user using the refresh token
-    let updated_access_token = match crate::spotify_api::refresh_user_token(&user.refresh_token) {
-        Ok(updated_access_token) => updated_access_token,
-        Err(_) => {
-            update_user_last_updated(&user, &conn, Utc::now().naive_utc())?;
+    let updated_access_token =
+        match crate::spotify_api::refresh_user_token(&user.refresh_token).await {
+            Ok(updated_access_token) => updated_access_token,
+            Err(_) => {
+                update_user_last_updated(&user, &conn, Utc::now().naive_utc()).await?;
 
-            // TODO: Disable auto-updates for the user that has removed their permission grant to
-            // prevent wasted updates in the future
-            let msg = format!(
-                "Failed to refresh user token for user {}; updating last updated timestamp and \
-                 not updating.",
-                user.username
-            );
-            info!("{}", msg);
-            return Ok(Some(status::Custom(Status::Unauthorized, msg)));
-        },
-    };
-    diesel::update(users::table.filter(users::dsl::id.eq(user.id)))
-        .set(users::dsl::token.eq(&updated_access_token))
-        .execute(&conn.0)
+                // TODO: Disable auto-updates for the user that has removed their permission grant
+                // to prevent wasted updates in the future
+                let msg = format!(
+                    "Failed to refresh user token for user {}; updating last updated timestamp \
+                     and not updating.",
+                    user.username
+                );
+                info!("{}", msg);
+                return Ok(Some(status::Custom(Status::Unauthorized, msg)));
+            },
+        };
+    let query = diesel::update(users::table.filter(users::dsl::id.eq(user.id)))
+        .set(users::dsl::token.eq(updated_access_token.clone()));
+    conn.run(move |conn| query.execute(conn))
+        .await
         .map_err(|err| -> String {
             error!("{:?}", err);
             "Error updating user with new access token".into()
@@ -829,9 +902,9 @@ pub(crate) fn refresh_user_access_token(
     Ok(None)
 }
 
-pub(crate) fn insert_related_artists(
+pub(crate) async fn insert_related_artists(
     conn: &DbConn,
-    related_artists: &[NewRelatedArtistEntry],
+    related_artists: Vec<NewRelatedArtistEntry>,
 ) -> QueryResult<()> {
     use crate::schema::related_artists;
 
@@ -840,19 +913,22 @@ pub(crate) fn insert_related_artists(
         .map(|entry| entry.artist_spotify_id)
         .collect();
 
-    conn.0.transaction(move || -> QueryResult<()> {
-        diesel::delete(
-            related_artists::table
-                .filter(related_artists::dsl::artist_spotify_id.eq_any(all_artist_ids)),
-        )
-        .execute(&conn.0)?;
+    conn.run(move |conn| {
+        conn.transaction(|| -> QueryResult<()> {
+            diesel::delete(
+                related_artists::table
+                    .filter(related_artists::dsl::artist_spotify_id.eq_any(all_artist_ids)),
+            )
+            .execute(conn)?;
 
-        diesel::insert_into(related_artists::table)
-            .values(related_artists)
-            .execute(&conn.0)?;
+            diesel::insert_into(related_artists::table)
+                .values(related_artists)
+                .execute(conn)?;
 
-        Ok(())
-    })?;
+            Ok(())
+        })
+    })
+    .await?;
 
     Ok(())
 }
