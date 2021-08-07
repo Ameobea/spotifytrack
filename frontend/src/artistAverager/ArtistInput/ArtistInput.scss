@@ -1,0 +1,27 @@
+.artist-input {
+  color: #ccc;
+  height: 40px;
+  margin-left: 7vw;
+  margin-right: 7vw;
+  font-size: 25px;
+  padding: 2px 12px;
+  text-align: center;
+}
+
+.autocomplete-dropdown {
+  margin-left: 7vw;
+  width: calc(min(450px, 60vw));
+  border-radius: 3px;
+  max-height: calc(min(400px, 60vh));
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.autocomplete-suggestion {
+  background-color: #555;
+  cursor: pointer;
+}
+
+.autocomplete-suggestion[data-selected='true'] {
+  background-color: #888;
+}

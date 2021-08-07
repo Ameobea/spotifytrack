@@ -7,6 +7,9 @@ import './index.scss';
 import './graphStandalone.scss';
 import { RelatedArtistsGraphForUser } from './components/RelatedArtistsGraph';
 import { store } from 'src/store';
+import { initSentry } from './sentry';
+
+initSentry();
 
 const reactQueryClient = new QueryClient({
   defaultOptions: { queries: { refetchOnWindowFocus: false } },
