@@ -568,6 +568,7 @@ pub(crate) struct NewRelatedArtistEntry {
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ArtistSearchResult {
+    #[serde(rename = "spotifyID")]
     pub spotify_id: String,
     pub name: String,
 }

@@ -1185,12 +1185,17 @@ pub(crate) async fn search_artist(
     Ok(Json(search_results))
 }
 
-#[get("/average_artists/<artist_1_spotify_id>/<artist_2_spotify_id>?<count>")]
+#[get(
+    "/average_artists/<artist_1_spotify_id>/<artist_2_spotify_id>?<count>&<artist_1_bias>&\
+     <artist_2_bias>"
+)]
 pub(crate) async fn get_average_artists_route(
     conn: DbConn,
     artist_1_spotify_id: String,
     artist_2_spotify_id: String,
     count: Option<usize>,
+    artist_1_bias: Option<f32>,
+    artist_2_bias: Option<f32>,
     token_data: &State<Mutex<SpotifyTokenData>>,
 ) -> Result<Json<AverageArtistsResponse>, String> {
     // Look up internal IDs for provided spotify IDs
@@ -1211,17 +1216,22 @@ pub(crate) async fn get_average_artists_route(
     assert!(artist_1_id > 0);
     assert!(artist_2_id > 0);
 
-    let mut average_artists =
-        match get_average_artists(artist_1_id as usize, artist_2_id as usize, count) {
-            Ok(res) => res,
-            Err(err) => match err {
-                ArtistEmbeddingError::ArtistIdNotFound(id) =>
-                    return Err(format!(
-                        "No artist found in embedding with internal id={}",
-                        id
-                    )),
-            },
-        };
+    let mut average_artists = match get_average_artists(
+        artist_1_id as usize,
+        artist_1_bias.unwrap_or(1.),
+        artist_2_id as usize,
+        artist_2_bias.unwrap_or(1.),
+        count,
+    ) {
+        Ok(res) => res,
+        Err(err) => match err {
+            ArtistEmbeddingError::ArtistIdNotFound(id) =>
+                return Err(format!(
+                    "No artist found in embedding with internal id={}",
+                    id
+                )),
+        },
+    };
 
     let all_artist_internal_ids: Vec<i32> = average_artists.iter().map(|d| d.id as i32).collect();
     let artist_spotify_ids_by_internal_id: HashMap<i32, String> =
@@ -1246,6 +1256,7 @@ pub(crate) async fn get_average_artists_route(
         token_data.get().await
     }?;
     let fetched_artists = fetch_artists(&spotify_access_token, &all_spotify_ids).await?;
+
     if fetched_artists.len() != average_artists.len() {
         assert!(fetched_artists.len() < average_artists.len());
         average_artists.retain(|d| {
@@ -1290,11 +1301,24 @@ pub(crate) async fn get_average_artists_route(
                     return None;
                 },
             };
-            let artist = fetched_artists
+            let artist = match fetched_artists
                 .iter()
                 .find(|artist| artist.id == *avg_artist_spotify_id)
-                .expect("We checked that the lengths are equal")
-                .clone();
+                .cloned()
+            {
+                Some(artist) => artist,
+                None => {
+                    warn!(
+                        "Didn't find artist with id={} in response from Spotify even though we \
+                         requested it and counts lined up; they probably did the thing where they \
+                         gave a different ID back than the one we requested, both of which refer \
+                         to the same actual artist.",
+                        avg_artist_spotify_id
+                    );
+
+                    return None;
+                },
+            };
 
             Some(AverageArtistItem {
                 artist,

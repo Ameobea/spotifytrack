@@ -17,6 +17,7 @@ const buildConfig = () => ({
   entry: {
     index: './src/index.tsx',
     graph: './src/graphStandalone.tsx',
+    artistAverager: './src/artistAverager/index.tsx',
   },
   output: {
     path: path.resolve(__dirname, 'dist'),
@@ -94,6 +95,15 @@ const buildConfig = () => ({
       filename: 'graph.html',
       inject: true,
       chunks: ['graph'],
+    }),
+    new HtmlWebpackPlugin({
+      alwaysWriteToDisk: true,
+      title: 'Artist Averager',
+      minify: true,
+      template: 'artist-averager.hbs',
+      filename: 'artist-averager.html',
+      inject: true,
+      chunks: ['artistAverager'],
     }),
     new webpack.EnvironmentPlugin(['REACT_APP_API_BASE_URL', 'REACT_APP_SITE_URL']),
     // new BundleAnalyzerPlugin(),

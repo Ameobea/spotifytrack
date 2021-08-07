@@ -1,0 +1,14 @@
+.artist-averager-root {
+  display: flex;
+  flex-direction: column;
+
+  h1 {
+    text-align: center;
+  }
+
+  .artist-input {
+    background-color: #333;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+  }
+}

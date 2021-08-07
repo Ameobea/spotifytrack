@@ -104,10 +104,10 @@ fn cosine_similarity(normalized_v1: &[f32; 8], normalized_v2: &[f32; 8]) -> f32 
     sum
 }
 
-fn midpoint(v1: &[f32; 8], v2: &[f32; 8]) -> [f32; 8] {
+fn weighted_midpoint(v1: &[f32; 8], v1_bias: f32, v2: &[f32; 8], v2_bias: f32) -> [f32; 8] {
     let mut out: [f32; 8] = Default::default();
     for i in 0..v1.len() {
-        out[i] = (v1[i] + v2[i]) / 2.
+        out[i] = (v1[i] * v1_bias + v2[i] * v2_bias) / 2.
     }
     out
 }
@@ -128,14 +128,16 @@ pub enum ArtistEmbeddingError {
 
 pub fn get_average_artists(
     artist_1_id: usize,
+    artist_1_bias: f32,
     artist_2_id: usize,
+    artist_2_bias: f32,
     count: usize,
 ) -> Result<Vec<AverageArtistDescriptor>, ArtistEmbeddingError> {
     let mut out = vec![AverageArtistDescriptor::new_placeholder(); count];
 
     let ctx = get_artist_embedding_ctx();
     let (pos_1, pos_2) = ctx.get_positions(artist_1_id, artist_2_id)?;
-    let midpoint = midpoint(&pos_1.pos, &pos_2.pos);
+    let midpoint = weighted_midpoint(&pos_1.pos, artist_1_bias, &pos_2.pos, artist_2_bias);
     let normalized_midpoint = normalize_vector(&midpoint);
 
     let mut worst_retained_similarity = std::f32::NEG_INFINITY;
@@ -163,8 +165,8 @@ pub fn get_average_artists(
         out[pos_to_replace] = AverageArtistDescriptor {
             id,
             similarity_to_target_point: similarity,
-            similarity_to_artist_1: cosine_similarity(&normalized_midpoint, &pos_1.normalized_pos),
-            similarity_to_artist_2: cosine_similarity(&normalized_midpoint, &pos_2.normalized_pos),
+            similarity_to_artist_1: cosine_similarity(&pos.normalized_pos, &pos_1.normalized_pos),
+            similarity_to_artist_2: cosine_similarity(&pos.normalized_pos, &pos_2.normalized_pos),
         };
 
         worst_retained_similarity = out.last().unwrap().similarity_to_target_point;
