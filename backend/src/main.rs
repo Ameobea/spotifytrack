@@ -3,31 +3,23 @@
     decl_macro,
     box_patterns,
     try_trait_v2,
-    label_break_value
+    label_break_value,
+    box_syntax
 )]
 #![allow(clippy::identity_conversion)]
 
-extern crate base64;
-extern crate chrono;
-extern crate crossbeam;
 #[macro_use]
 extern crate diesel;
-extern crate dotenv;
-#[macro_use]
-extern crate lazy_static;
-extern crate log;
-extern crate r2d2_redis;
-extern crate redis;
-#[macro_use]
-extern crate rocket;
-extern crate serde;
-extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;
+#[macro_use]
+extern crate rocket;
 
+use artist_embedding::init_artist_embedding_ctx;
 use rocket_async_compression::Compression;
 use tokio::sync::Mutex;
 
+pub mod artist_embedding;
 pub mod benchmarking;
 pub mod cache;
 pub mod conf;
@@ -50,6 +42,9 @@ pub struct DbConn(diesel::MysqlConnection);
 pub async fn main() {
     dotenv::dotenv().expect("dotenv file parsing failed");
 
+    // init_artist_embedding_ctx("https://ameo.dev/artist_embedding_8d.w2v").await;
+    init_artist_embedding_ctx("http://localhost:8080/artist_embedding_8d.w2v").await;
+
     let all_routes = routes![
         routes::index,
         routes::get_current_stats,
@@ -68,7 +63,8 @@ pub async fn main() {
         routes::get_display_name,
         routes::dump_redis_related_artists_to_database,
         routes::crawl_related_artists,
-        routes::search_artist
+        routes::search_artist,
+        routes::get_average_artists_route
     ];
 
     rocket::build()

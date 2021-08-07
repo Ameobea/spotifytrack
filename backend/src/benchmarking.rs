@@ -1,6 +1,6 @@
 use std::{sync::Mutex, time::Instant};
 
-lazy_static! {
+lazy_static::lazy_static! {
     pub static ref LAST: Mutex<Instant> = Mutex::new(Instant::now());
 }
 

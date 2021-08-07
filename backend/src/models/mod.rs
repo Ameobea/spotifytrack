@@ -567,7 +567,24 @@ pub(crate) struct NewRelatedArtistEntry {
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ArtistSearchResult {
+pub(crate) struct ArtistSearchResult {
     pub spotify_id: String,
     pub name: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AverageArtistItem {
+    pub artist: Artist,
+    pub similarity_to_target_point: f32,
+    pub similarity_to_artist_1: f32,
+    pub similarity_to_artist_2: f32,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AverageArtistsResponse {
+    pub artists: Vec<AverageArtistItem>,
+    pub similarity: f32,
+    pub distance: f32,
 }

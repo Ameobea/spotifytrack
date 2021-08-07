@@ -59,6 +59,6 @@ impl Conf {
     }
 }
 
-lazy_static! {
+lazy_static::lazy_static! {
     pub(crate) static ref CONF: Conf = Conf::build_from_env();
 }

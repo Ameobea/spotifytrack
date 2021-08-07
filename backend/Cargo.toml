@@ -16,8 +16,6 @@ base64 = "0.13"
 
 chrono = { version = "0.4", features = ["serde"] }
 
-crossbeam = "0.8"
-
 diesel = { version = "1.4", features = ["chrono", "mysql"] }
 
 dotenv = "0.15.0"
@@ -28,20 +26,18 @@ tokio = { version = "1.6.1", features = ["rt", "rt-multi-thread", "macros"] }
 
 lazy_static = "1.4.0"
 
-log = "0.4"
-
 rand = "0.8"
 
 r2d2_redis = "0.14"
 
 redis = { version = "0.20" }
 
-reqwest = { version = "0.11", features = ["blocking", "json"] }
+reqwest = { version = "0.11", features = ["json"] }
 
-rocket = { git = "https://github.com/SergioBenitez/Rocket.git", rev = "693f4f9ee50057fc735e6e7037e6dee5b485ba10", features = ["json"] }
-rocket_sync_db_pools = { git = "https://github.com/SergioBenitez/Rocket.git", rev = "693f4f9ee50057fc735e6e7037e6dee5b485ba10", features = ["diesel_mysql_pool"]}
+rocket = { git = "https://github.com/SergioBenitez/Rocket.git", rev = "786db9b832b7edd91f143b24835677c69121a9bb", features = ["json"] }
+rocket_sync_db_pools = { git = "https://github.com/SergioBenitez/Rocket.git", rev = "786db9b832b7edd91f143b24835677c69121a9bb", features = ["diesel_mysql_pool"]}
 rocket_async_compression = { git = "https://github.com/ameobea/rocket_async_compression.git" }
 
-serde_json = "1.0.57"
-serde = "1.0.115"
-serde_derive = "1.0.115"
+serde_json = "1.0"
+serde = "1.0"
+serde_derive = "1.0"

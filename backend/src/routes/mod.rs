@@ -13,17 +13,19 @@ use rocket::{
 use tokio::{sync::Mutex, task::block_in_place};
 
 use crate::{
+    artist_embedding::{get_artist_embedding_ctx, get_average_artists, ArtistEmbeddingError},
     benchmarking::{mark, start},
     cache::{get_hash_items, get_redis_conn, set_hash_items},
     conf::CONF,
     db_util::{
-        self, get_all_top_artists_for_user, insert_related_artists, retrieve_mapped_spotify_ids,
+        self, get_all_top_artists_for_user, get_artist_spotify_ids_by_internal_id,
+        insert_related_artists, retrieve_mapped_spotify_ids,
     },
     models::{
-        Artist, ArtistSearchResult, CompareToRequest, CreateSharedPlaylistRequest,
-        NewRelatedArtistEntry, NewUser, OAuthTokenResponse, Playlist, RelatedArtistsGraph,
-        StatsSnapshot, TimeFrames, Timeline, TimelineEvent, TimelineEventType, Track, User,
-        UserComparison,
+        Artist, ArtistSearchResult, AverageArtistItem, AverageArtistsResponse, CompareToRequest,
+        CreateSharedPlaylistRequest, NewRelatedArtistEntry, NewUser, OAuthTokenResponse, Playlist,
+        RelatedArtistsGraph, StatsSnapshot, TimeFrames, Timeline, TimelineEvent, TimelineEventType,
+        Track, User, UserComparison,
     },
     spotify_api::{fetch_artists, get_multiple_related_artists, search_artists},
     DbConn, SpotifyTokenData,
@@ -1181,4 +1183,136 @@ pub(crate) async fn search_artist(
     );
 
     Ok(Json(search_results))
+}
+
+#[get("/average_artists/<artist_1_spotify_id>/<artist_2_spotify_id>?<count>")]
+pub(crate) async fn get_average_artists_route(
+    conn: DbConn,
+    artist_1_spotify_id: String,
+    artist_2_spotify_id: String,
+    count: Option<usize>,
+    token_data: &State<Mutex<SpotifyTokenData>>,
+) -> Result<Json<AverageArtistsResponse>, String> {
+    // Look up internal IDs for provided spotify IDs
+    let internal_ids_by_spotify_id = retrieve_mapped_spotify_ids(
+        &conn,
+        [artist_1_spotify_id.clone(), artist_2_spotify_id.clone()].iter(),
+    )
+    .await?;
+    let artist_1_id = match internal_ids_by_spotify_id.get(&artist_1_spotify_id) {
+        Some(id) => *id,
+        None => return Err(format!("No artist found with id={}", artist_1_spotify_id)),
+    };
+    let artist_2_id = match internal_ids_by_spotify_id.get(&artist_2_spotify_id) {
+        Some(id) => *id,
+        None => return Err(format!("No artist found with id={}", artist_2_spotify_id)),
+    };
+    let count = count.unwrap_or(10).min(50);
+    assert!(artist_1_id > 0);
+    assert!(artist_2_id > 0);
+
+    let mut average_artists =
+        match get_average_artists(artist_1_id as usize, artist_2_id as usize, count) {
+            Ok(res) => res,
+            Err(err) => match err {
+                ArtistEmbeddingError::ArtistIdNotFound(id) =>
+                    return Err(format!(
+                        "No artist found in embedding with internal id={}",
+                        id
+                    )),
+            },
+        };
+
+    let all_artist_internal_ids: Vec<i32> = average_artists.iter().map(|d| d.id as i32).collect();
+    let artist_spotify_ids_by_internal_id: HashMap<i32, String> =
+        get_artist_spotify_ids_by_internal_id(&conn, all_artist_internal_ids)
+            .await
+            .map_err(|err| {
+                error!(
+                    "Error converting artist internal ids to spotify ids after performing \
+                     averaging: {:?}",
+                    err
+                );
+                String::from("Internal database error")
+            })?;
+
+    let all_spotify_ids: Vec<&str> = artist_spotify_ids_by_internal_id
+        .values()
+        .map(String::as_str)
+        .collect();
+
+    let spotify_access_token = {
+        let token_data = &mut *(&*token_data).lock().await;
+        token_data.get().await
+    }?;
+    let fetched_artists = fetch_artists(&spotify_access_token, &all_spotify_ids).await?;
+    if fetched_artists.len() != average_artists.len() {
+        assert!(fetched_artists.len() < average_artists.len());
+        average_artists.retain(|d| {
+            let avg_artist_spotify_id = match artist_spotify_ids_by_internal_id.get(&(d.id as i32))
+            {
+                Some(id) => id,
+                None => {
+                    error!(
+                        "No spotify id found for artist with internal_id={} returned from \
+                         averageing",
+                        d.id
+                    );
+                    return false;
+                },
+            };
+            let was_fetched = fetched_artists
+                .iter()
+                .any(|a| a.id == *avg_artist_spotify_id);
+            if !was_fetched {
+                error!(
+                    "Failed to find artist metadata for artist with spotify_id={}",
+                    avg_artist_spotify_id
+                );
+            }
+            return was_fetched;
+        });
+        assert_eq!(fetched_artists.len(), average_artists.len());
+    }
+
+    let out_artists: Vec<AverageArtistItem> = average_artists
+        .into_iter()
+        .filter_map(|d| {
+            let avg_artist_spotify_id = match artist_spotify_ids_by_internal_id.get(&(d.id as i32))
+            {
+                Some(id) => id,
+                None => {
+                    error!(
+                        "No spotify id found for artist with internal_id={} returned from \
+                         averageing",
+                        d.id
+                    );
+                    return None;
+                },
+            };
+            let artist = fetched_artists
+                .iter()
+                .find(|artist| artist.id == *avg_artist_spotify_id)
+                .expect("We checked that the lengths are equal")
+                .clone();
+
+            Some(AverageArtistItem {
+                artist,
+                similarity_to_target_point: d.similarity_to_target_point,
+                similarity_to_artist_1: d.similarity_to_artist_1,
+                similarity_to_artist_2: d.similarity_to_artist_2,
+            })
+        })
+        .collect();
+
+    let ctx = get_artist_embedding_ctx();
+    Ok(Json(AverageArtistsResponse {
+        artists: out_artists,
+        distance: ctx
+            .distance(artist_1_id as usize, artist_2_id as usize)
+            .unwrap(),
+        similarity: ctx
+            .similarity(artist_1_id as usize, artist_2_id as usize)
+            .unwrap(),
+    }))
 }

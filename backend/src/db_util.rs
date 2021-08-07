@@ -653,6 +653,29 @@ pub(crate) async fn populate_tracks_artists_table(
     .map(|_| ())
 }
 
+pub(crate) async fn get_artist_spotify_ids_by_internal_id(
+    conn: &DbConn,
+    internal_ids: Vec<i32>,
+) -> QueryResult<HashMap<i32, String>> {
+    use crate::schema::spotify_items;
+
+    #[derive(Queryable)]
+    struct Ids {
+        pub internal_id: i32,
+        pub spotify_id: String,
+    }
+
+    let query = spotify_items::table.filter(spotify_items::dsl::id.eq_any(internal_ids));
+    let loaded_ids: Vec<Ids> = conn.run(move |conn| query.load(conn)).await?;
+
+    let mut internal_id_by_spotify_id: HashMap<i32, String> = HashMap::default();
+    for ids in loaded_ids {
+        internal_id_by_spotify_id.insert(ids.internal_id, ids.spotify_id.clone());
+    }
+
+    Ok(internal_id_by_spotify_id)
+}
+
 pub(crate) async fn populate_artists_genres_table(
     conn: &DbConn,
     spotify_access_token: &str,

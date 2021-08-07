@@ -1,13 +1,15 @@
 use std::{sync::Arc, time::Duration};
 
 use chrono::Utc;
-use crossbeam::channel;
 use diesel::prelude::*;
 use fnv::FnvHashMap as HashMap;
 use reqwest::{self, StatusCode};
 use rocket::http::RawStr;
 use serde::{Deserialize, Serialize};
-use tokio::{sync::Mutex, task::block_in_place};
+use tokio::{
+    sync::{mpsc::channel, Mutex},
+    task::block_in_place,
+};
 
 use crate::{
     conf::CONF,
@@ -222,11 +224,11 @@ pub(crate) async fn refresh_user_token(refresh_token: &str) -> Result<String, St
 
 pub(crate) async fn fetch_cur_stats(user: &User) -> Result<Option<StatsSnapshot>, String> {
     // Use the user's token to fetch their current stats
-    let (tx, rx) = channel::unbounded::<(
+    let (tx, mut rx) = channel::<(
         &'static str,
         &'static str,
         Result<reqwest::Response, String>,
-    )>();
+    )>(6);
 
     // Create tasks for each of the inner requests (we have to make 6; one for each of the three
     // timeframes, and then that multiplied by each of the two entities (tracks and artists)).
@@ -247,7 +249,7 @@ pub(crate) async fn fetch_cur_stats(user: &User) -> Result<Option<StatsSnapshot>
                         "Error requesting latest user stats from the Spotify API".into()
                     });
 
-                tx.send((entity_type, timeframe, res))
+                let _ = tx.send((entity_type, timeframe, res)).await;
             });
         }
     }
@@ -257,7 +259,7 @@ pub(crate) async fn fetch_cur_stats(user: &User) -> Result<Option<StatsSnapshot>
     // Wait for all 6 requests to return back and then
     info!("Waiting for all 6 inner stats requests to return...");
     for _ in 0..6 {
-        match rx.recv().unwrap() {
+        match rx.recv().await.unwrap() {
             ("tracks", timeframe, res) => {
                 let parsed_res: TopTracksResponse = res?.json().await.map_err(|err| -> String {
                     error!("Error parsing top tracks response: {:?}", err);

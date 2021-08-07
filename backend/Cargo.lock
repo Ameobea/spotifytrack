@@ -237,74 +237,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "crossbeam"
-version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ae5588f6b3c3cb05239e90bd110f257254aecd01e4635400391aeae07497845"
-dependencies = [
- "cfg-if",
- "crossbeam-channel",
- "crossbeam-deque",
- "crossbeam-epoch",
- "crossbeam-queue",
- "crossbeam-utils",
-]
-
-[[package]]
-name = "crossbeam-channel"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06ed27e177f16d65f0f0c22a213e17c696ace5dd64b14258b52f9417ccb52db4"
-dependencies = [
- "cfg-if",
- "crossbeam-utils",
-]
-
-[[package]]
-name = "crossbeam-deque"
-version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6455c0ca19f0d2fbf751b908d5c55c1f5cbc65e03c4225427254b46890bdde1e"
-dependencies = [
- "cfg-if",
- "crossbeam-epoch",
- "crossbeam-utils",
-]
-
-[[package]]
-name = "crossbeam-epoch"
-version = "0.9.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ec02e091aa634e2c3ada4a392989e7c3116673ef0ac5b72232439094d73b7fd"
-dependencies = [
- "cfg-if",
- "crossbeam-utils",
- "lazy_static",
- "memoffset",
- "scopeguard",
-]
-
-[[package]]
-name = "crossbeam-queue"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b10ddc024425c88c2ad148c1b0fd53f4c6d38db9697c9f1588381212fa657c9"
-dependencies = [
- "cfg-if",
- "crossbeam-utils",
-]
-
-[[package]]
-name = "crossbeam-utils"
-version = "0.8.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d82cfc11ce7f2c3faef78d8a684447b40d503d9681acebed6cb728d45940c4db"
-dependencies = [
- "cfg-if",
- "lazy_static",
-]
-
-[[package]]
 name = "devise"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -806,15 +738,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b16bd47d9e329435e309c58469fe0791c2d0d1ba96ec0954152a5ae2b04387dc"
 
 [[package]]
-name = "memoffset"
-version = "0.6.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59accc507f1338036a0477ef61afdae33cde60840f4dfe481319ce3ad116ddf9"
-dependencies = [
- "autocfg",
-]
-
-[[package]]
 name = "mime"
 version = "0.3.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1182,9 +1105,9 @@ dependencies = [
 
 [[package]]
 name = "redox_syscall"
-version = "0.2.9"
+version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ab49abadf3f9e1c4bc499e8845e152ad87d2ad2d30371841171169e9d75feee"
+checksum = "8383f39639269cde97d255a32bdb68c047337295414940c68bdd30c2e13203ff"
 dependencies = [
  "bitflags",
 ]
@@ -1256,7 +1179,7 @@ dependencies = [
 [[package]]
 name = "rocket"
 version = "0.5.0-rc.1"
-source = "git+https://github.com/SergioBenitez/Rocket.git?rev=693f4f9ee50057fc735e6e7037e6dee5b485ba10#693f4f9ee50057fc735e6e7037e6dee5b485ba10"
+source = "git+https://github.com/SergioBenitez/Rocket.git?rev=786db9b832b7edd91f143b24835677c69121a9bb#786db9b832b7edd91f143b24835677c69121a9bb"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -1294,7 +1217,7 @@ dependencies = [
 [[package]]
 name = "rocket_async_compression"
 version = "0.1.0"
-source = "git+https://github.com/ameobea/rocket_async_compression.git#e60e67d76345264f285302c3c1dce2659a75a70f"
+source = "git+https://github.com/ameobea/rocket_async_compression.git#9abc5c1d943748e7761c54cf5047665009504c37"
 dependencies = [
  "async-compression",
  "futures",
@@ -1306,7 +1229,7 @@ dependencies = [
 [[package]]
 name = "rocket_codegen"
 version = "0.5.0-rc.1"
-source = "git+https://github.com/SergioBenitez/Rocket.git?rev=693f4f9ee50057fc735e6e7037e6dee5b485ba10#693f4f9ee50057fc735e6e7037e6dee5b485ba10"
+source = "git+https://github.com/SergioBenitez/Rocket.git?rev=786db9b832b7edd91f143b24835677c69121a9bb#786db9b832b7edd91f143b24835677c69121a9bb"
 dependencies = [
  "devise",
  "glob",
@@ -1321,7 +1244,7 @@ dependencies = [
 [[package]]
 name = "rocket_http"
 version = "0.5.0-rc.1"
-source = "git+https://github.com/SergioBenitez/Rocket.git?rev=693f4f9ee50057fc735e6e7037e6dee5b485ba10#693f4f9ee50057fc735e6e7037e6dee5b485ba10"
+source = "git+https://github.com/SergioBenitez/Rocket.git?rev=786db9b832b7edd91f143b24835677c69121a9bb#786db9b832b7edd91f143b24835677c69121a9bb"
 dependencies = [
  "cookie",
  "either",
@@ -1348,7 +1271,7 @@ dependencies = [
 [[package]]
 name = "rocket_sync_db_pools"
 version = "0.1.0-rc.1"
-source = "git+https://github.com/SergioBenitez/Rocket.git?rev=693f4f9ee50057fc735e6e7037e6dee5b485ba10#693f4f9ee50057fc735e6e7037e6dee5b485ba10"
+source = "git+https://github.com/SergioBenitez/Rocket.git?rev=786db9b832b7edd91f143b24835677c69121a9bb#786db9b832b7edd91f143b24835677c69121a9bb"
 dependencies = [
  "diesel",
  "r2d2",
@@ -1361,7 +1284,7 @@ dependencies = [
 [[package]]
 name = "rocket_sync_db_pools_codegen"
 version = "0.1.0-rc.1"
-source = "git+https://github.com/SergioBenitez/Rocket.git?rev=693f4f9ee50057fc735e6e7037e6dee5b485ba10#693f4f9ee50057fc735e6e7037e6dee5b485ba10"
+source = "git+https://github.com/SergioBenitez/Rocket.git?rev=786db9b832b7edd91f143b24835677c69121a9bb#786db9b832b7edd91f143b24835677c69121a9bb"
 dependencies = [
  "devise",
  "quote",
@@ -1517,9 +1440,9 @@ dependencies = [
 
 [[package]]
 name = "slab"
-version = "0.4.3"
+version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f173ac3d1a7e3b28003f40de0b5ce7fe2710f9b9dc3fc38664cebee46b3b6527"
+checksum = "c307a32c1c5c437f38c7fd45d753050587732ba8628319fbdf12a7e289ccc590"
 
 [[package]]
 name = "smallvec"
@@ -1549,13 +1472,11 @@ version = "0.1.0"
 dependencies = [
  "base64",
  "chrono",
- "crossbeam",
  "diesel",
  "dotenv",
  "fnv",
  "futures",
  "lazy_static",
- "log",
  "r2d2_redis",
  "rand",
  "redis",
