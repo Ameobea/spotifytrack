@@ -1,0 +1,29 @@
+.artist-averager-submit-button {
+  width: 200px;
+  height: 50px;
+  border-radius: 8px;
+  font-size: 22px;
+  border: 1px solid #aaa;
+  color: #2d2d2d;
+  background: linear-gradient(
+    124deg,
+    rgb(1, 92, 6) 0%,
+    rgb(125, 207, 25) 50%,
+    rgb(218, 207, 65) 100%
+  );
+  margin-left: auto;
+  margin-right: auto;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.artist-averager-submit-button:disabled {
+  background: #444;
+  color: #888;
+  cursor: default;
+  font-weight: normal;
+}
+
+.artist-averager-submit-button:hover {
+  border: 3px solid #ccc;
+}

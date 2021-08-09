@@ -473,23 +473,52 @@ async fn fetch_batch_entities<'a, T: for<'de> Deserialize<'de>>(
     token: &str,
     spotify_entity_ids: &[&str],
 ) -> Result<T, String> {
-    let url = format!("{}?ids={}", base_url, spotify_entity_ids.join(","));
+    let url = if base_url.contains('?') {
+        base_url.into()
+    } else {
+        format!("{}?ids={}", base_url, spotify_entity_ids.join(","))
+    };
     let client = reqwest::Client::new();
-    client
-        .get(&url)
-        .bearer_auth(token)
-        .send()
-        .await
-        .map_err(|err| {
-            error!("Error requesting batch data from the Spotify API: {}", err);
-            String::from("Error requesting batch data from the Spotify API")
-        })?
-        .json()
-        .await
-        .map_err(|err| -> String {
-            error!("Error decoding JSON from Spotify API: {:?}", err);
-            "Error reading data from the Spotify API".into()
-        })
+
+    loop {
+        let res = client
+            .get(&url)
+            .bearer_auth(token)
+            .send()
+            .await
+            .map_err(|err| {
+                error!("Error requesting batch data from the Spotify API: {}", err);
+                String::from("Error requesting batch data from the Spotify API")
+            })?;
+
+        if res.status() == StatusCode::TOO_MANY_REQUESTS {
+            warn!("Rate limited when hitting URL={}", url);
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            continue;
+        }
+
+        if cfg!(debug_assertions) {
+            let res = res.text().await.map_err(|err| -> String {
+                error!("Error reading response from Spotify API: {:?}", err);
+                "Error reading response from the Spotify API".into()
+            })?;
+            return serde_json::from_str(&res).map_err(|err| -> String {
+                error!(
+                    "Error decoding JSON from Spotify API: {:?}, url={}, res={}",
+                    err, url, res
+                );
+                "Error reading data from the Spotify API".into()
+            });
+        } else {
+            return res.json().await.map_err(|err| -> String {
+                error!(
+                    "Error decoding JSON from Spotify API: {:?}, url={}",
+                    err, url
+                );
+                "Error reading data from the Spotify API".into()
+            });
+        };
+    }
 }
 
 async fn fetch_with_cache<
@@ -520,6 +549,10 @@ async fn fetch_with_cache<
         cache_res.len() - missing_indices.len(),
         spotify_ids.len()
     );
+
+    if missing_indices.is_empty() {
+        return Ok(cache_res.into_iter().map(Option::unwrap).collect());
+    }
 
     let mut fetched_entities = Vec::with_capacity(missing_indices.len());
     for (chunk_ix, chunk) in missing_ids.chunks(MAX_BATCH_ENTITY_COUNT).enumerate() {
@@ -789,6 +822,33 @@ pub(crate) async fn get_multiple_related_artists(
             )
         })
         .collect())
+}
+
+pub(crate) async fn fetch_top_tracks_for_artist(
+    spotify_access_token: &str,
+    artist_spotify_id: &str,
+) -> Result<Vec<Track>, String> {
+    #[derive(Deserialize)]
+    struct FetchTopTracksForArtistResponse {
+        pub tracks: Vec<Track>,
+    }
+
+    let url = format!(
+        "https://api.spotify.com/v1/artists/{}/top-tracks?market=us",
+        artist_spotify_id
+    );
+
+    Ok(fetch_with_cache::<FetchTopTracksForArtistResponse, _>(
+        "top-tracks",
+        &url,
+        spotify_access_token,
+        &[artist_spotify_id],
+        |res| Ok(vec![res.tracks]),
+    )
+    .await?
+    .into_iter()
+    .next()
+    .unwrap())
 }
 
 pub(crate) async fn search_artists(

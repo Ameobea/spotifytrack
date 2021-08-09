@@ -53,7 +53,7 @@ export interface Artist {
   id: string;
   images: Image[];
   name: string;
-  popularity: number;
+  popularity?: number | null;
   // uri: string;
 }
 

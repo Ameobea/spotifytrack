@@ -1,0 +1,13 @@
+.similarity-bar {
+  background-color: rgb(218, 207, 65);
+  width: 350px;
+  height: 34px;
+
+  .similarity-bar-bar {
+    background-color: rgb(1, 92, 6);
+    position: absolute;
+    height: 34px;
+    border-right: 1.5px solid #cdcdcd;
+    box-sizing: border-box;
+  }
+}

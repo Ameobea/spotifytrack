@@ -1,7 +1,9 @@
+use std::cmp::Reverse;
+
 use chrono::{NaiveDate, NaiveDateTime, Utc};
 use diesel::{self, prelude::*};
 use fnv::{FnvHashMap as HashMap, FnvHashSet};
-use futures::TryFutureExt;
+use futures::{stream::FuturesUnordered, TryFutureExt, TryStreamExt};
 use redis::Commands;
 use rocket::{
     data::ToByteUnit,
@@ -27,7 +29,9 @@ use crate::{
         RelatedArtistsGraph, StatsSnapshot, TimeFrames, Timeline, TimelineEvent, TimelineEventType,
         Track, User, UserComparison,
     },
-    spotify_api::{fetch_artists, get_multiple_related_artists, search_artists},
+    spotify_api::{
+        fetch_artists, fetch_top_tracks_for_artist, get_multiple_related_artists, search_artists,
+    },
     DbConn, SpotifyTokenData,
 };
 
@@ -1255,7 +1259,22 @@ pub(crate) async fn get_average_artists_route(
         let token_data = &mut *(&*token_data).lock().await;
         token_data.get().await
     }?;
-    let fetched_artists = fetch_artists(&spotify_access_token, &all_spotify_ids).await?;
+
+    let top_tracks_for_artists = FuturesUnordered::new();
+    for artist_spotify_id in &all_spotify_ids {
+        let artist_spotify_id_clone = String::from(*artist_spotify_id);
+        top_tracks_for_artists.push(
+            fetch_top_tracks_for_artist(&spotify_access_token, artist_spotify_id)
+                .map_ok(move |res| (artist_spotify_id_clone, res)),
+        );
+    }
+
+    let (top_tracks, fetched_artists) = tokio::try_join!(
+        top_tracks_for_artists.try_collect::<Vec<_>>(),
+        fetch_artists(&spotify_access_token, &all_spotify_ids)
+    )?;
+    let mut top_tracks_by_artist_spotify_id: HashMap<String, Vec<Track>> =
+        top_tracks.into_iter().collect();
 
     if fetched_artists.len() != average_artists.len() {
         assert!(fetched_artists.len() < average_artists.len());
@@ -1286,7 +1305,7 @@ pub(crate) async fn get_average_artists_route(
         assert_eq!(fetched_artists.len(), average_artists.len());
     }
 
-    let out_artists: Vec<AverageArtistItem> = average_artists
+    let mut out_artists: Vec<AverageArtistItem> = average_artists
         .into_iter()
         .filter_map(|d| {
             let avg_artist_spotify_id = match artist_spotify_ids_by_internal_id.get(&(d.id as i32))
@@ -1322,12 +1341,17 @@ pub(crate) async fn get_average_artists_route(
 
             Some(AverageArtistItem {
                 artist,
+                top_tracks: top_tracks_by_artist_spotify_id
+                    .remove(avg_artist_spotify_id)
+                    .unwrap_or_default(),
                 similarity_to_target_point: d.similarity_to_target_point,
                 similarity_to_artist_1: d.similarity_to_artist_1,
                 similarity_to_artist_2: d.similarity_to_artist_2,
             })
         })
         .collect();
+
+    out_artists.sort_unstable_by_key(|item| Reverse(item.score()));
 
     let ctx = get_artist_embedding_ctx();
     Ok(Json(AverageArtistsResponse {

@@ -226,7 +226,7 @@ pub async fn init_artist_embedding_ctx(positions_url: &str) {
         .text()
         .await
         .unwrap();
-    println!("Successfully parsed artst embedding positions.  Parsing...");
+    println!("Successfully fetched artst embedding positions.  Parsing...");
     let artist_position_by_id = parse_positions(&raw_positions);
     println!("Successfully parsed artist embedding positions.  Setting into global context.");
     let ctx = box ArtistEmbeddingContext {
