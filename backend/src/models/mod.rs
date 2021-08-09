@@ -1,6 +1,7 @@
 use std::{default::Default, fmt::Debug, vec};
 
 use chrono::{NaiveDate, NaiveDateTime};
+use float_ord::FloatOrd;
 use fnv::FnvHashMap as HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -316,8 +317,8 @@ pub(crate) struct Artist {
     pub id: String,
     pub images: Option<Vec<Image>>,
     pub name: String,
-    /* pub popularity: Option<usize>,
-     * pub uri: String, */
+    pub popularity: Option<usize>,
+    // pub uri: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -577,9 +578,45 @@ pub(crate) struct ArtistSearchResult {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AverageArtistItem {
     pub artist: Artist,
+    pub top_tracks: Vec<Track>,
     pub similarity_to_target_point: f32,
     pub similarity_to_artist_1: f32,
     pub similarity_to_artist_2: f32,
+}
+
+impl AverageArtistItem {
+    pub fn score(&self) -> FloatOrd<f32> {
+        let mut score = self.similarity_to_target_point.powi(2) * 2.8;
+
+        // Penalty for very unpopularity artists
+        let artist_popularity = self.artist.popularity.unwrap_or(10);
+        if artist_popularity < 5 {
+            score -= 0.35;
+        } else if artist_popularity < 10 {
+            score -= 0.21;
+        } else if artist_popularity < 20 {
+            score -= 0.055;
+        } else if artist_popularity > 70 {
+            score += 0.071;
+        } else if artist_popularity > 90 {
+            score += 0.15;
+        } else if artist_popularity >= 95 {
+            score += 0.25;
+        }
+
+        // If distance(this, artist_a) is close to distance(this, artist_b), then we add weight to
+        // this artist since it represents a better mix between both artists
+        //
+        // (1 - abs(0.97 - 0.97))^2 = 1 - 0.9 = 0.1
+        // (1 - abs(0.94 - 0.99))^2 = 0.9025 - 0.9 = 0.025
+        // (1 - abs(0.90 - 0.99))^2 = 0.8281 - 0.9 - -0.0719
+        // (1 - abs(0.63520014 - 0.91005754))^2 = 0.5258 - 0.9 = -0.374
+        let distances_diff = (self.similarity_to_artist_1 - self.similarity_to_artist_2).abs();
+        let distances_diff_factor = (1. - distances_diff.abs()).powi(2) - 0.9;
+        score += distances_diff_factor * 1.8;
+
+        FloatOrd(score)
+    }
 }
 
 #[derive(Serialize)]

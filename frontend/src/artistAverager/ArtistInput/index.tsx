@@ -4,13 +4,14 @@ import { useQuery } from 'react-query';
 import { getArtistAutocompleteSuggestions } from '../api';
 import AutocompleteDropdown, { AutocompleteSuggestion } from './AutocompleteDropdown';
 import './ArtistInput.scss';
-import { set } from 'ramda';
 
 interface ArtistInputProps {
   onSelect: (spotifyID: string) => void;
+  onClear: () => void;
+  style?: React.CSSProperties;
 }
 
-const ArtistInput: React.FC<ArtistInputProps> = ({ onSelect }) => {
+const ArtistInput: React.FC<ArtistInputProps> = ({ onSelect, onClear, style }) => {
   const [text, setText] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [selectedSuggestionIx, setSelectedSuggestionIx] = useState(0);
@@ -28,14 +29,18 @@ const ArtistInput: React.FC<ArtistInputProps> = ({ onSelect }) => {
   }, [suggestions]);
 
   return (
-    <>
+    <div className="artist-input-wrapper">
       <input
+        style={style}
         ref={inputRef}
         onFocus={() => setIsFocused(true)}
         onBlur={() => setTimeout(() => setIsFocused(false), 100)}
         className="artist-input"
         value={text}
-        onChange={(evt) => setText(evt.target.value)}
+        onChange={(evt) => {
+          onClear();
+          setText(evt.target.value);
+        }}
         onKeyDown={(evt) => {
           if (evt.key === 'ArrowDown') {
             setSelectedSuggestionIx(
@@ -65,9 +70,10 @@ const ArtistInput: React.FC<ArtistInputProps> = ({ onSelect }) => {
             onSelect(spotifyID);
           }}
           selectedIx={selectedSuggestionIx}
+          setSelectedIx={setSelectedSuggestionIx}
         />
       ) : null}
-    </>
+    </div>
   );
 };
 

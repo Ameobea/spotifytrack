@@ -1,0 +1,30 @@
+.average-artists-listing {
+  display: flex;
+  flex-direction: column;
+  margin-left: 15vw;
+  margin-right: 15vw;
+  height: 200px;
+
+  .average-artist-item {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    margin-top: 15px;
+
+    .artist-image {
+      height: 200px;
+      width: 200px;
+    }
+
+    .artist-name {
+      font-weight: bold;
+      font-size: 24px;
+    }
+  }
+
+  .similarity-bar-container {
+    flex: 1;
+    justify-content: flex-end;
+    display: flex;
+  }
+}

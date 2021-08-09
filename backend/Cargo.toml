@@ -20,7 +20,10 @@ diesel = { version = "1.4", features = ["chrono", "mysql"] }
 
 dotenv = "0.15.0"
 
+float-ord = "0.3"
+
 fnv = "1.0"
+
 futures = "0.3"
 tokio = { version = "1.6.1", features = ["rt", "rt-multi-thread", "macros"] }
 
