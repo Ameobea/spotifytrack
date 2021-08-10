@@ -1,13 +1,18 @@
 .similarity-bar {
   background-color: rgb(218, 207, 65);
-  width: 350px;
-  height: 34px;
+  width: 140px;
+  height: 16px;
+  border-radius: 16px;
+  border: 1px solid #090909;
+  box-shadow: 0 0 0px 0px #41414152 inset, -1px 0px 1px 0px #3c3c3c4f inset;
 
   .similarity-bar-bar {
     background-color: rgb(1, 92, 6);
     position: absolute;
-    height: 34px;
+    height: 16px;
     border-right: 1.5px solid #cdcdcd;
     box-sizing: border-box;
+    border-radius: 16px 0px 0px 16px;
+    box-shadow: 0 0 1px 0px black inset, 0 0 1px 0px black;
   }
 }

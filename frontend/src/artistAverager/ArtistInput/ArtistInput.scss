@@ -1,13 +1,15 @@
 .artist-input-wrapper {
   display: flex;
-  flex: 1;
   flex-direction: column;
+  flex: 1;
+  max-width: 570px;
 }
 
 .artist-inputs {
   display: flex;
   flex-direction: row;
   margin-bottom: 40px;
+  justify-content: center;
 
   .artist-input {
     color: #ccc;
@@ -26,13 +28,13 @@
   }
 
   .autocomplete-dropdown {
-    width: calc(min(450px, 60vw));
+    width: calc(min(530px, 60vw));
     border-radius: 3px;
     max-height: calc(min(400px, 60vh));
     overflow-y: auto;
     overflow-x: hidden;
     position: absolute;
-    left: 26px;
+    margin-left: 20px;
     top: 130px;
   }
 

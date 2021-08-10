@@ -5,7 +5,8 @@ import { useRouteMatch } from 'react-router';
 import { Link, useLocation } from 'react-router-dom';
 
 import { fetchComparison } from 'src/api';
-import { ImageBoxGrid, Artist as ArtistCard, Track as TrackCard } from 'src/Cards';
+import { ImageBoxGrid, Track as TrackCard } from 'src/Cards';
+import ArtistCard from 'src/Cards/ArtistCard';
 import { useUsername } from 'src/store/selectors';
 import { usePush } from 'src/util/hooks';
 import './Compare.scss';
@@ -37,11 +38,10 @@ const CompareInner: React.FC<{ mobile: boolean }> = ({ mobile }) => {
   const [playing, setPlaying] = useState<string | false>(false);
   const { search: queryString } = useLocation();
   const push = usePush();
-  const [generatedPlaylist, setGeneratedPlaylist] =
-    useState<{
-      name: string;
-      track_count: number;
-    } | null>(null);
+  const [generatedPlaylist, setGeneratedPlaylist] = useState<{
+    name: string;
+    track_count: number;
+  } | null>(null);
 
   const { data, error } = useQuery({
     queryKey: ['compare', user1, user2],

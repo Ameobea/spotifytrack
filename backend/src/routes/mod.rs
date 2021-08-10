@@ -1339,11 +1339,26 @@ pub(crate) async fn get_average_artists_route(
                 },
             };
 
+            let mut top_tracks = top_tracks_by_artist_spotify_id
+                .remove(avg_artist_spotify_id)
+                .unwrap_or_default();
+            // If the artist doesn't have any tracks, it's not worth showing to the user
+            if top_tracks.is_empty() {
+                return None;
+            }
+
+            // Put tracks without a preview URL at the end
+            top_tracks.sort_by_key(|t| if t.preview_url.is_some() { 0 } else { 1 });
+            // We don't really have space in the UI to show artists for every track, so we strip
+            // them out here
+            for track in &mut top_tracks {
+                track.artists = Vec::new();
+                track.album.artists = Vec::new();
+            }
+
             Some(AverageArtistItem {
                 artist,
-                top_tracks: top_tracks_by_artist_spotify_id
-                    .remove(avg_artist_spotify_id)
-                    .unwrap_or_default(),
+                top_tracks,
                 similarity_to_target_point: d.similarity_to_target_point,
                 similarity_to_artist_1: d.similarity_to_artist_1,
                 similarity_to_artist_2: d.similarity_to_artist_2,

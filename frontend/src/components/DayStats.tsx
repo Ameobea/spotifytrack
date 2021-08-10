@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import * as R from 'ramda';
+import { withMobileProp } from 'ameo-utils/dist/responsive';
 
 import { TimelineEvent } from 'src/types';
 import type { TimelineDay } from './Timeline';
-import { Artist as ArtistCard, ImageBoxGrid, Track as TrackCard } from '../Cards';
-import { withMobileProp } from 'ameo-utils/dist/responsive';
+import { ImageBoxGrid, Track as TrackCard } from 'src/Cards';
+import ArtistCard from 'src/Cards/ArtistCard';
 import { Dayjs } from 'dayjs';
 
 const EventTypePrecedence: TimelineEvent['type'][] = ['artistFirstSeen', 'topTrackFirstSeen'];

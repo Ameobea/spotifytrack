@@ -6,7 +6,7 @@ import AutocompleteDropdown, { AutocompleteSuggestion } from './AutocompleteDrop
 import './ArtistInput.scss';
 
 interface ArtistInputProps {
-  onSelect: (spotifyID: string) => void;
+  onSelect: (spotifyID: { spotifyID: string; name: string } | null) => void;
   onClear: () => void;
   style?: React.CSSProperties;
 }
@@ -33,7 +33,11 @@ const ArtistInput: React.FC<ArtistInputProps> = ({ onSelect, onClear, style }) =
       <input
         style={style}
         ref={inputRef}
-        onFocus={() => setIsFocused(true)}
+        onFocus={() => {
+          setIsFocused(true);
+          setText('');
+          onSelect(null);
+        }}
         onBlur={() => setTimeout(() => setIsFocused(false), 100)}
         className="artist-input"
         value={text}
@@ -54,7 +58,7 @@ const ArtistInput: React.FC<ArtistInputProps> = ({ onSelect, onClear, style }) =
               return;
             }
             setText(selected.name);
-            onSelect(selected.spotifyID);
+            onSelect(selected);
             inputRef.current?.blur();
           }
         }}
@@ -67,7 +71,7 @@ const ArtistInput: React.FC<ArtistInputProps> = ({ onSelect, onClear, style }) =
               (sugg) => sugg.spotifyID === spotifyID
             )!;
             setText(match.name);
-            onSelect(spotifyID);
+            onSelect({ spotifyID, name: match.name });
           }}
           selectedIx={selectedSuggestionIx}
           setSelectedIx={setSelectedSuggestionIx}
