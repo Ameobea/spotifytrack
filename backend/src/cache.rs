@@ -83,12 +83,15 @@ pub(crate) fn get_hash_items<T: for<'de> Deserialize<'de>>(
             "Error pulling data from Redis cache".into()
         })?
         .into_iter()
-        .map(|opt: Option<String>| match opt {
+        .enumerate()
+        .map(|(i, opt): (usize, Option<String>)| match opt {
             Some(val) => serde_json::from_str(&val).map_err(|err| -> String {
                 error!(
-                    "Error deserializing value of {}: {:?}",
+                    "Error deserializing value of {}: {:?}; key={}; val={}",
                     std::any::type_name::<T>(),
-                    err
+                    err,
+                    keys.get(i).unwrap_or(&"<NO KEY FOUND FOR INDEX>"),
+                    val
                 );
                 "Error reading values from cache".into()
             }),

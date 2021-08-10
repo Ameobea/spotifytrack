@@ -5,47 +5,48 @@ import AverageArtistsListing from './AverageArtistsListing';
 import SubmitButton from './SubmitButton';
 
 const ArtistAveragerRoot: React.FC = () => {
-  const [artist1SpotifyID, setArtist1SpotifyID] = useState<string | null>(
-    window.location.hash ? window.location.hash.split('-')[0].substring(1) : null
-  );
-  const [artist2SpotifyID, setArtist2SpotifyID] = useState<string | null>(
-    window.location.hash ? window.location.hash.split('-')[1] : null
-  );
+  const [artist1, setArtist1] = useState<{ spotifyID: string; name: string } | null>(null);
+  const [artist2, setArtist2] = useState<{ spotifyID: string; name: string } | null>(null);
   const [isSubmitted, setIsSubmitted] = useState(!!window.location.hash);
 
   useEffect(() => {
-    setIsSubmitted(false);
-  }, [artist1SpotifyID, artist2SpotifyID]);
+    if (!artist1 || !artist2) {
+      setIsSubmitted(false);
+    }
+  }, [artist1, artist2]);
 
   return (
     <div className="artist-averager-root">
       <h1>Artist Averager</h1>
       <div className="artist-inputs">
         <ArtistInput
-          onSelect={setArtist1SpotifyID}
+          onSelect={setArtist1}
           onClear={() => {
-            if (artist1SpotifyID) {
-              setArtist1SpotifyID(null);
+            if (artist1) {
+              setArtist1(null);
             }
           }}
           style={{ backgroundColor: 'rgb(1, 92, 6)' }}
         />
         <ArtistInput
-          onSelect={setArtist2SpotifyID}
+          onSelect={setArtist2}
           onClear={() => {
-            if (artist2SpotifyID) {
-              setArtist2SpotifyID(null);
+            if (artist2) {
+              setArtist2(null);
             }
           }}
           style={{ backgroundColor: 'rgb(218, 207, 65)', color: '#222' }}
         />
       </div>
-      <SubmitButton
-        disabled={!artist1SpotifyID || !artist2SpotifyID}
-        onSubmit={() => setIsSubmitted(true)}
-      />
-      {isSubmitted && artist1SpotifyID && artist2SpotifyID ? (
-        <AverageArtistsListing artistSpotifyIDs={[artist1SpotifyID, artist2SpotifyID]} />
+      {isSubmitted ? null : (
+        <SubmitButton disabled={!artist1 || !artist2} onSubmit={() => setIsSubmitted(true)} />
+      )}
+      {isSubmitted && artist1 && artist2 ? (
+        <AverageArtistsListing
+          artistSpotifyIDs={[artist1.spotifyID, artist2.spotifyID]}
+          artist1Name={artist1.name}
+          artist2Name={artist2.name}
+        />
       ) : null}
     </div>
   );

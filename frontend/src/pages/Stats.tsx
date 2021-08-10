@@ -9,7 +9,8 @@ import { useOnce } from 'src/util/hooks';
 import { fetchUserStats } from 'src/api';
 import { mapObj } from 'src/util';
 import { dispatch, actionCreators, useSelector, UserStatsState } from 'src/store';
-import { ImageBoxGrid, Artist as ArtistCard, Track as TrackCard } from 'src/Cards';
+import { ImageBoxGrid, Track as TrackCard } from 'src/Cards';
+import ArtistCard from 'src/Cards/ArtistCard';
 import ArtistStats from 'src/pages/ArtistStats';
 import GenreStats from 'src/pages/GenreStats';
 import Loading from 'src/components/Loading';
@@ -377,10 +378,10 @@ const Stats: React.FC<ReactRouterRouteProps> = ({
       actionCreators.userStats.ADD_USER_STATS(username, {
         last_update_time,
         // TODO: Fix this type hackery when you're less lazy and ennui-riddled
-        tracks: mapObj(tracks as any as { [key: string]: { id: string }[] }, (tracks) =>
+        tracks: mapObj((tracks as any) as { [key: string]: { id: string }[] }, (tracks) =>
           tracks.map(R.prop('id'))
         ) as any,
-        artists: mapObj(artists as any as { [key: string]: { id: string }[] }, (artists) =>
+        artists: mapObj((artists as any) as { [key: string]: { id: string }[] }, (artists) =>
           artists.map(R.prop('id'))
         ) as any,
         artistStats: {},

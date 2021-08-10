@@ -1,4 +1,4 @@
-import type { Artist } from 'src/types';
+import type { Artist, Track } from 'src/types';
 import { API_BASE_URL } from '../conf';
 import { AutocompleteSuggestion } from './ArtistInput/AutocompleteDropdown';
 
@@ -11,6 +11,7 @@ export const getArtistAutocompleteSuggestions = (
 
 export interface AverageArtistItem {
   artist: Artist;
+  topTracks: Track[];
   similarityToTargetPoint: number;
   similarityToArtist1: number;
   similarityToArtist2: number;

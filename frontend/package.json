@@ -76,6 +76,7 @@
     "react-responsive-carousel": "^3.2.18",
     "react-router": "^5.2.0",
     "react-router-dom": "^5.2.0",
+    "react-tippy": "^1.4.0",
     "redux": "^4.1.0",
     "webcola": "^3.4.0"
   }
