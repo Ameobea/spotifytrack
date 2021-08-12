@@ -20,22 +20,22 @@ const ArtistAveragerRoot: React.FC = () => {
       <h1>Artist Averager</h1>
       <div className="artist-inputs">
         <ArtistInput
+          selectedArtist={artist1}
           onSelect={setArtist1}
           onClear={() => {
             if (artist1) {
               setArtist1(null);
             }
           }}
-          style={{ backgroundColor: 'rgb(1, 92, 6)' }}
         />
         <ArtistInput
+          selectedArtist={artist2}
           onSelect={setArtist2}
           onClear={() => {
             if (artist2) {
               setArtist2(null);
             }
           }}
-          style={{ backgroundColor: 'rgb(218, 207, 65)', color: '#222' }}
         />
       </div>
       {isSubmitted ? null : (

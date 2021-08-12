@@ -30,3 +30,6 @@ export const getAverageArtists = (
   fetch(`${API_BASE_URL}/average_artists/${artist1SpotifyID}/${artist2SpotifyID}`).then((res) =>
     res.json()
   );
+
+export const getArtistImageURL = (artistSpotifyID: string): Promise<string> =>
+  fetch(`${API_BASE_URL}/artist_image_url/${artistSpotifyID}`).then((res) => res.text());

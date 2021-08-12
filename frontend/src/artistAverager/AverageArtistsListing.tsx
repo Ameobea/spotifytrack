@@ -115,7 +115,7 @@ const AverageArtistsListing: React.FC<AverageArtistsListingProps> = ({
   artist2Name,
 }) => {
   const [playing, setPlaying] = useState<string | false>(false);
-  const { data: averageArtists } = useQuery(
+  const { data: averageArtists, error } = useQuery(
     ['averageArtists', artist1ID, artist2ID],
     ({ queryKey: [, artist1ID, artist2ID] }) => getAverageArtists(artist1ID, artist2ID)
   );
@@ -136,9 +136,11 @@ const AverageArtistsListing: React.FC<AverageArtistsListingProps> = ({
             />
           ))}
         </>
-      ) : (
-        <Loading />
-      )}
+      ) : null}
+      {!averageArtists && !error ? <Loading /> : null}
+      {error ? (
+        <div className="error">Nothing found for these artists; try choosing some others</div>
+      ) : null}
     </div>
   );
 };

@@ -1,17 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useQuery } from 'react-query';
 
-import { getArtistAutocompleteSuggestions } from '../api';
+import { getArtistAutocompleteSuggestions, getArtistImageURL } from '../api';
 import AutocompleteDropdown, { AutocompleteSuggestion } from './AutocompleteDropdown';
 import './ArtistInput.scss';
+import { getProxiedImageURL } from 'src/util/index';
 
 interface ArtistInputProps {
   onSelect: (spotifyID: { spotifyID: string; name: string } | null) => void;
   onClear: () => void;
-  style?: React.CSSProperties;
+  selectedArtist: { spotifyID: string; name: string } | null;
 }
 
-const ArtistInput: React.FC<ArtistInputProps> = ({ onSelect, onClear, style }) => {
+const ArtistInput: React.FC<ArtistInputProps> = ({ onSelect, onClear, selectedArtist }) => {
   const [text, setText] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [selectedSuggestionIx, setSelectedSuggestionIx] = useState(0);
@@ -28,10 +29,19 @@ const ArtistInput: React.FC<ArtistInputProps> = ({ onSelect, onClear, style }) =
     setSelectedSuggestionIx(0);
   }, [suggestions]);
 
+  const { data: artistURL } = useQuery(
+    ['artistURL', selectedArtist?.spotifyID],
+    ({ queryKey: [, artistSpotifyID] }) => {
+      if (artistSpotifyID) {
+        return getArtistImageURL(artistSpotifyID);
+      }
+      return null;
+    }
+  );
+
   return (
     <div className="artist-input-wrapper">
       <input
-        style={style}
         ref={inputRef}
         onFocus={() => {
           setIsFocused(true);
@@ -77,6 +87,9 @@ const ArtistInput: React.FC<ArtistInputProps> = ({ onSelect, onClear, style }) =
           setSelectedIx={setSelectedSuggestionIx}
         />
       ) : null}
+      <div className="artist-picker-portrait">
+        {artistURL ? <img src={getProxiedImageURL(280, artistURL)} /> : null}
+      </div>
     </div>
   );
 };

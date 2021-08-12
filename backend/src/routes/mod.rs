@@ -56,7 +56,6 @@ pub(crate) async fn get_current_stats(
         },
     };
     mark("Finished getting spotify user by id");
-    // println!("{:?}", user);
 
     let spotify_access_token = {
         let token_data = &mut *(&*token_data).lock().await;
@@ -1378,4 +1377,27 @@ pub(crate) async fn get_average_artists_route(
             .similarity(artist_1_id as usize, artist_2_id as usize)
             .unwrap(),
     }))
+}
+
+#[get("/artist_image_url/<artist_spotify_id>")]
+pub(crate) async fn get_artist_image_url(
+    artist_spotify_id: String,
+    token_data: &State<Mutex<SpotifyTokenData>>,
+) -> Result<String, String> {
+    let spotify_access_token = {
+        let token_data = &mut *(&*token_data).lock().await;
+        token_data.get().await
+    }?;
+
+    let artist: Option<Artist> = fetch_artists(&spotify_access_token, &[&artist_spotify_id])
+        .await?
+        .into_iter()
+        .next();
+    let image = match artist
+        .and_then(|artist| artist.images.and_then(|images| images.into_iter().next()))
+    {
+        Some(image) => image,
+        None => return Err(String::from("Not found")),
+    };
+    Ok(image.url)
 }

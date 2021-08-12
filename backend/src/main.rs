@@ -42,7 +42,7 @@ pub struct DbConn(diesel::MysqlConnection);
 pub async fn main() {
     dotenv::dotenv().expect("dotenv file parsing failed");
 
-     init_artist_embedding_ctx("https://ameo.dev/artist_embedding_8d.w2v").await;
+    init_artist_embedding_ctx("https://ameo.dev/artist_embedding_8d.w2v").await;
     //init_artist_embedding_ctx("http://localhost:8080/artist_embedding_8d.w2v").await;
 
     let all_routes = routes![
@@ -64,7 +64,8 @@ pub async fn main() {
         routes::dump_redis_related_artists_to_database,
         routes::crawl_related_artists,
         routes::search_artist,
-        routes::get_average_artists_route
+        routes::get_average_artists_route,
+        routes::get_artist_image_url
     ];
 
     rocket::build()

@@ -27,7 +27,8 @@
 
     h2 {
       text-align: center;
-      font-size: 24px;
+      font-size: 28px;
+      margin: 0;
     }
   }
 
@@ -46,7 +47,13 @@
     transform: translate(-3px);
     overflow-x: auto;
     margin-left: 40px;
-    max-height: 218px;
+    max-height: 220px;
     overflow-y: hidden;
+  }
+
+  .error {
+    font-size: 24px;
+    color: #bb2222;
+    text-align: center;
   }
 }
