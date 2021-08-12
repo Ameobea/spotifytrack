@@ -2,7 +2,18 @@
   display: flex;
   flex-direction: column;
   flex: 1;
-  max-width: 570px;
+  max-width: 500px;
+  margin-top: 10px;
+
+  .artist-picker-portrait {
+    height: 280px;
+    width: 280px;
+    background-color: #181818;
+    margin-right: auto;
+    margin-left: auto;
+    margin-top: 50px;
+    margin-bottom: 10px;
+  }
 }
 
 .artist-inputs {
@@ -14,17 +25,18 @@
   .artist-input {
     color: #ccc;
     height: 40px;
-    margin-left: 20px;
-    margin-right: 20px;
+    margin-left: 32px;
+    margin-right: 32px;
     font-size: 25px;
     padding: 2px 12px;
     text-align: center;
-    border: 1px solid #ccc;
-    border-radius: 8px;
+    border: none;
+    background-color: #020202;
+    outline: 1px solid #383838;
   }
 
-  .artist-input:active {
-    outline: 1px solid #ccc;
+  .artist-input:focus {
+    outline: 1px solid #787878;
   }
 
   .autocomplete-dropdown {

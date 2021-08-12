@@ -32,7 +32,6 @@ const buildConfig = () => ({
   devtool: 'eval-cheap-module-source-map',
   experiments: {
     asyncWebAssembly: true,
-    // importAsync: true,
   },
   module: {
     rules: [
@@ -50,6 +49,15 @@ const buildConfig = () => ({
         use: ['style-loader', { loader: 'css-loader', options: { sourceMap: false } }],
       },
       {
+        test: /\.(ttf|eot|woff|woff2|svg)$/,
+        use: {
+          loader: 'file-loader',
+          options: {
+            name: '[name].[ext]',
+          },
+        },
+      },
+      {
         test: /\.scss$/,
         use: [
           {
@@ -57,6 +65,9 @@ const buildConfig = () => ({
           },
           {
             loader: 'css-loader',
+          },
+          {
+            loader: 'resolve-url-loader',
           },
           {
             loader: 'sass-loader',

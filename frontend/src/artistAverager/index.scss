@@ -1,3 +1,11 @@
+@import url('https://fonts.googleapis.com/css2?family=Aldrich&display=swap');
+
+body,
+html,
+#root {
+  background-color: #080808 !important;
+}
+
 .artist-averager-root {
   display: flex;
   flex-direction: column;
@@ -5,5 +13,12 @@
 
   h1 {
     text-align: center;
+    font-family: 'Aldrich', sans-serif;
+    font-size: 40px;
+  }
+
+  .artist-picker {
+    display: flex;
+    flex: 1;
   }
 }
