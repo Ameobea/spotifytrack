@@ -1,0 +1,51 @@
+MAIN GOAL: Figure out a rough plan for the initial development of the 3D artists map
+
+At a high level, the map will a 3D world in which artists are rendered as spheres or something similar.  The size of the spheres will reflect popularity of the artist.  There is still a color component that I haven't figured out how to utilize.  The artist name will need to be rendered as well so that it's possible to tell which artist is which.  Direct connections between related artists will be rendered in as well.
+
+The camera will be mouse and keyboard controlled.  I don't have an exact camera control scheme in mind yet; it's probably either going to be a free fly style or an anchored camera; leanings towards free fly although it complicates things slightly.
+
+I will use threejs for all of the rendering.  Since the total number of points is quite high, it will probably be apt to only render a small selection of the points - probably a selection of the most popular artists from all corners of the space.  As the user flys through the space and moves closer to different areas, more detail should be rendered in incrementally.  Less popular artists will be shown, more connections will be rendered in, etc.  It may also be a good idea to adjust the opacity of far-away items and have them fade in, maybe even some kind of blurring would be good.
+
+There will be an integration with the artist averager such that the two selected artists and the various averaged artists that it returns are highlighted on the map.  They can be sized bigger and colored differently to reflect that significance.
+
+There should also be a search functionality so that users can jump directly to artists that they choose and explore the map from that starting point.  It may be tricky to handle orienting the camera.
+
+----
+
+One thing I'm not sure about regarding the incremental rendering is how much incremental data fetching will need to be done.  I think we should be able to pack the positions of all 100k artists in the embedding pretty well.  100000 artists * (u32 id + 3 * f32 position = 16 bytes) = 1.6MB.  It should probably compress at least a bit too; 1.6MB is a very reasonable amount of data to transfer over the wire and hold in memory for something like this.  It will probably be a good idea to sort these things or maybe even split positions from IDs to improve compression ratio.
+
+OK so that will make things a LOT easier.  Rather than having to deal with asynchronous addition of points and con--
+
+ah, I forgot about connections.  Connection data is much more dense, and we'll probably need to fetch that dynamically.  That's OK though; we can expose a very lightweight endpoint for that which we hit as we render points in.  We'll then store all known connections and for each known connection we can have some logic to determine whether or not we want to render it.
+
+Before I forget, one other idea I had was for rendering "gas" or some other fog/fill effect to indicate dense areas before zooming in.  I think that this will be a finishing touch or embellishment rather than a core feature.
+
+----
+
+I've not used threejs directly before, so I'm not very familiar with its API.  I imagine that there will be some mapping between data and renderable entities like PIXI.js.  We will need to update the set of rendered entities when any of the following happens:
+
+ * The user moves in the world meaning that they are potentially closer to some points and further from others
+ * Edge data is fetched asynchronously
+ * Some other user-initiated event happens like artist search, artist averager artist select, etc.
+
+Actually, I think that I don't want to get too prescriptive with this without knowing more about the threejs API.  Will figure this out once I start writing it.
+
+----
+
+INITIAL PLAN:
+
+The first MVP that I want to aim for is this:
+
+ * Endpoint for fetching all artist positions.  Should provide them in an efficient, compressed, binary format.
+ * Come up with a set of initial artists to render from the set of all points.  Can be hard-coded into the UI for now, may eventually be dynamically generated based off of position data.
+ * Endpoint to provide the artist names + connections for all intially rendered artists.
+ * Wasm module on the frontend for receiving the initial artist positions and parsing into memory.  Concurrently hit the second endpoint to retrieve artist names and connections for all initially rendered artists.
+ * Threejs renderer that does the following:
+  - Renders spheres at the proper 3D positions
+  - Renders labels above/around those spheres, always facing the user, matched with fetched artist names.
+  - Renders connections between related artists with lines.
+  - Allows "flying" around the world to move the camera.  Idk exactly what the control scheme should be like right now (if scroll wheel should be used, etc.) but I assume that won't be *that* hard to change down the road so I'm not that worried about it atm.
+
+If we can get that working, I'd call it a pretty solid MVP.  The dynamic rendering/unrendering of artists + connections based off of user/camera position seems like it will be tricker, but that's a different feature.  The renderer and associated code should be designed with the understanding that dynamically adding/removing rendered artists + connections will need to be supported in the future.  It should also take into account the fact that artist names + connections are fetched lazily and will be loaded asynchronously.
+
+Once that is implemented, all of the other features + additions should be relatively straightforward I think.  I'm sure there will be unexpected complications and pieces I'm missing, but I really think this is enough to get started.  I look forward to bringing this into reality.
