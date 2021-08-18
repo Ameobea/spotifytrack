@@ -5,7 +5,7 @@
   "main": "src/index.tsx",
   "repository": "https://github.com/Ameobea/spotifytrack",
   "author": "Casey Primozic (Ameo) <casey@cprimozic.net>",
-  "license": "Blue Oak 1.0.0 (https://blueoakcouncil.org/license/1.0.0#markdown)",
+  "license": "mit",
   "private": false,
   "scripts": {
     "start": "webpack serve",

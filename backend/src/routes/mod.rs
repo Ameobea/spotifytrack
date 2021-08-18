@@ -12,7 +12,10 @@ use rocket::{
     serde::json::Json,
     State,
 };
-use tokio::{sync::Mutex, task::block_in_place};
+use tokio::{
+    sync::Mutex,
+    task::{block_in_place, spawn_blocking},
+};
 
 use crate::{
     artist_embedding::{get_artist_embedding_ctx, get_average_artists, ArtistEmbeddingError},
@@ -1099,7 +1102,7 @@ pub(crate) async fn crawl_related_artists(
     })
     .map_err(|err| {
         error!(
-            "Error getting random related artist keys from DB: {:?}",
+            "Error getting random related artist keys from Redis cache: {:?}",
             err
         );
         String::from("Redis error")
@@ -1400,4 +1403,91 @@ pub(crate) async fn get_artist_image_url(
         None => return Err(String::from("Not found")),
     };
     Ok(image.url)
+}
+
+#[post(
+    "/refetch_cached_artists_missing_popularity?<count>",
+    data = "<api_token_data>"
+)]
+pub(crate) async fn refetch_cached_artists_missing_popularity(
+    api_token_data: rocket::Data<'_>,
+    token_data: &State<Mutex<SpotifyTokenData>>,
+    count: Option<usize>,
+) -> Result<status::Custom<String>, String> {
+    if !validate_api_token(api_token_data).await? {
+        return Ok(status::Custom(
+            Status::Unauthorized,
+            "Invalid API token supplied".into(),
+        ));
+    }
+
+    let spotify_access_token = {
+        let token_data = &mut *(&*token_data).lock().await;
+        token_data.get().await
+    }?;
+
+    let mut redis_conn = spawn_blocking(|| get_redis_conn()).await.unwrap()?;
+
+    let (mut redis_conn, artist_spotify_ids) =
+        spawn_blocking(move || -> Result<(_, Vec<String>), String> {
+            let artist_spotify_ids = redis::cmd("HRANDFIELD")
+                .arg(&CONF.artists_cache_hash_name)
+                .arg(count.unwrap_or(20).to_string())
+                .query::<Vec<String>>(&mut *redis_conn)
+                .map_err(|err| {
+                    error!(
+                        "Error getting random artist keys from Redis cache: {:?}",
+                        err
+                    );
+                    String::from("Redis error")
+                })?;
+            Ok((redis_conn, artist_spotify_ids))
+        })
+        .await
+        .unwrap()?;
+    let artist_spotify_ids: Vec<&str> = artist_spotify_ids.iter().map(String::as_str).collect();
+    let mut artists = fetch_artists(&spotify_access_token, &artist_spotify_ids).await?;
+    artists.retain(|artist| artist.popularity.is_none());
+    if artists.is_empty() {
+        return Ok(status::Custom(Status::Ok, "No artists to refetch".into()));
+    }
+    let artist_ids_needing_refetch: Vec<String> =
+        artists.iter().map(|artist| artist.id.clone()).collect();
+
+    // Delete from the cache and then re-fetch them to re-populate the cache from the Spotify API
+    let artist_ids_needing_refetch_clone = artist_ids_needing_refetch.clone();
+    let deleted_artist_count = spawn_blocking(move || {
+        let artist_ids_needing_refetch: Vec<&str> = artist_ids_needing_refetch_clone
+            .iter()
+            .map(String::as_str)
+            .collect();
+
+        let mut cmd = redis::cmd("HDEL");
+        cmd.arg(&CONF.artists_cache_hash_name);
+        for artist_id in artist_ids_needing_refetch {
+            cmd.arg(artist_id);
+        }
+        cmd.query::<usize>(&mut *redis_conn)
+    })
+    .await
+    .unwrap()
+    .map_err(|err| {
+        error!("Error deleting artist ids from Redis cache: {}", err);
+        String::from("Redis error")
+    })?;
+    info!("Deleted {} artists from Redis cache", deleted_artist_count);
+
+    let artist_ids_needing_refetch: Vec<&str> = artist_ids_needing_refetch
+        .iter()
+        .map(String::as_str)
+        .collect();
+    fetch_artists(&spotify_access_token, &artist_ids_needing_refetch).await?;
+
+    Ok(status::Custom(
+        Status::Ok,
+        format!(
+            "Successfully fetched {} artists missing popularities",
+            deleted_artist_count
+        ),
+    ))
 }
