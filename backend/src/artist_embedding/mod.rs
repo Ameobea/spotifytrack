@@ -1,12 +1,15 @@
 use std::{collections::HashMap, sync::Once};
 
+const DIMS: usize = 8;
+type VEC = [f32; DIMS];
+
 pub struct ArtistPos {
-    pub pos: [f32; 8],
-    pub normalized_pos: [f32; 8],
+    pub pos: VEC,
+    pub normalized_pos: VEC,
 }
 
 impl ArtistPos {
-    pub fn new(pos: [f32; 8]) -> Self {
+    pub fn new(pos: VEC) -> Self {
         ArtistPos {
             pos,
             normalized_pos: normalize_vector(&pos),
@@ -83,8 +86,8 @@ impl AverageArtistDescriptor {
 }
 
 /// l2 normalization
-fn normalize_vector(v: &[f32; 8]) -> [f32; 8] {
-    let mut out: [f32; 8] = Default::default();
+fn normalize_vector(v: &VEC) -> VEC {
+    let mut out: VEC = Default::default();
 
     let sum_of_squares = v.iter().map(|&x| x * x).fold(0.0f32, |acc, x| acc + x);
     let divisor = sum_of_squares.sqrt();
@@ -96,7 +99,7 @@ fn normalize_vector(v: &[f32; 8]) -> [f32; 8] {
 }
 
 /// Just dot product of l2-normalized positions
-fn cosine_similarity(normalized_v1: &[f32; 8], normalized_v2: &[f32; 8]) -> f32 {
+fn cosine_similarity(normalized_v1: &VEC, normalized_v2: &VEC) -> f32 {
     let mut sum = 0.;
     for i in 0..normalized_v1.len() {
         sum += normalized_v1[i] * normalized_v2[i];
@@ -104,15 +107,15 @@ fn cosine_similarity(normalized_v1: &[f32; 8], normalized_v2: &[f32; 8]) -> f32 
     sum
 }
 
-fn weighted_midpoint(v1: &[f32; 8], v1_bias: f32, v2: &[f32; 8], v2_bias: f32) -> [f32; 8] {
-    let mut out: [f32; 8] = Default::default();
+fn weighted_midpoint(v1: &VEC, v1_bias: f32, v2: &VEC, v2_bias: f32) -> VEC {
+    let mut out: VEC = Default::default();
     for i in 0..v1.len() {
         out[i] = (v1[i] * v1_bias + v2[i] * v2_bias) / 2.
     }
     out
 }
 
-fn distance(v1: &[f32; 8], v2: &[f32; 8]) -> f32 {
+fn distance(v1: &VEC, v2: &VEC) -> f32 {
     v1.iter()
         .zip(v2.iter())
         .fold(0., |acc, (&v1_n, &v2_n)| {
@@ -186,7 +189,7 @@ fn parse_positions(raw_positions: &str) -> HashMap<usize, ArtistPos> {
         }
 
         let mut artist_id = 0usize;
-        let mut pos: [f32; 8] = Default::default();
+        let mut pos: VEC = Default::default();
         for (i, part) in line.split_ascii_whitespace().enumerate() {
             if i == 0 {
                 artist_id = part
@@ -237,8 +240,8 @@ pub async fn init_artist_embedding_ctx(positions_url: &str) {
 
 #[test]
 fn test_cosine_similarity_accuracy() {
-    let x: [f32; 8] = [0., 1., 2., 3., 4., 5., 6., 7.];
-    let y: [f32; 8] = [0.5, 1.2, 2., 3., -1., 0., 6., 7.];
+    let x: VEC = [0., 1., 2., 3., 4., 5., 6., 7.];
+    let y: VEC = [0.5, 1.2, 2., 3., -1., 0., 6., 7.];
 
     let normalized_x = dbg!(normalize_vector(&x));
     let normalized_y = dbg!(normalize_vector(&y));

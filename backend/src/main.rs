@@ -65,7 +65,8 @@ pub async fn main() {
         routes::crawl_related_artists,
         routes::search_artist,
         routes::get_average_artists_route,
-        routes::get_artist_image_url
+        routes::get_artist_image_url,
+        routes::refetch_cached_artists_missing_popularity
     ];
 
     rocket::build()
