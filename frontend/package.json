@@ -23,6 +23,7 @@
     "@types/ramda": "^0.27.40",
     "@types/react-redux": "^7.1.16",
     "@types/react-router": "^5.1.13",
+    "@types/three": "^0.131.0",
     "@typescript-eslint/eslint-plugin": "^4.22.0",
     "@typescript-eslint/parser": "^4.22.0",
     "@webpack-cli/serve": "^1.5.1",
@@ -80,6 +81,7 @@
     "react-router-dom": "^5.2.0",
     "react-tippy": "^1.4.0",
     "redux": "^4.1.0",
+    "three": "^0.131.3",
     "webcola": "^3.4.0"
   }
 }

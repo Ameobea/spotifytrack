@@ -1,0 +1,15 @@
+copy-files:
+  cp -r ./build/* ..
+
+build:
+  cargo build --release --target wasm32-unknown-unknown
+  wasm-bindgen ./target/wasm32-unknown-unknown/release/engine.wasm --browser --remove-producers-section --out-dir ./build
+  wasm-opt ./build/engine_bg.wasm -g -O4 --enable-simd --enable-nontrapping-float-to-int --precompute-propagate --fast-math --detect-features --strip-dwarf -c -o ./build/engine_bg.wasm
+
+  just copy-files
+
+debug:
+  cargo build
+  wasm-bindgen ./target/wasm32-unknown-unknown/debug/engine.wasm --browser --remove-producers-section --out-dir ./build
+
+  just copy-files

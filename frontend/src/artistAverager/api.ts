@@ -33,3 +33,12 @@ export const getAverageArtists = (
 
 export const getArtistImageURL = (artistSpotifyID: string): Promise<string> =>
   fetch(`${API_BASE_URL}/artist_image_url/${artistSpotifyID}`).then((res) => res.text());
+
+export const getArtistsByInternalIDs = (internalIDs: number[]): Promise<(Artist | null)[]> =>
+  fetch(`${API_BASE_URL}/artists_by_internal_ids`, {
+    method: 'POST',
+    body: JSON.stringify(internalIDs),
+  }).then((res) => res.json());
+
+export const fetchPackedArtistPositions = (): Promise<ArrayBuffer> =>
+  fetch(`${API_BASE_URL}/packed_3d_artist_coords`).then((res) => res.arrayBuffer());
