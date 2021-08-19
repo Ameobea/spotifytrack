@@ -1,15 +1,15 @@
-use std::{collections::HashMap, sync::Once};
+use std::{collections::HashMap, convert::TryInto, sync::Once};
 
-const DIMS: usize = 8;
-type VEC = [f32; DIMS];
+pub mod map_3d;
 
-pub struct ArtistPos {
-    pub pos: VEC,
-    pub normalized_pos: VEC,
+#[derive(Clone)]
+pub struct ArtistPos<const DIMS: usize> {
+    pub pos: [f32; DIMS],
+    pub normalized_pos: [f32; DIMS],
 }
 
-impl ArtistPos {
-    pub fn new(pos: VEC) -> Self {
+impl<const DIMS: usize> ArtistPos<DIMS> {
+    pub fn new(pos: [f32; DIMS]) -> Self {
         ArtistPos {
             pos,
             normalized_pos: normalize_vector(&pos),
@@ -17,16 +17,16 @@ impl ArtistPos {
     }
 }
 
-pub struct ArtistEmbeddingContext {
-    pub artist_position_by_id: HashMap<usize, ArtistPos>,
+pub struct ArtistEmbeddingContext<const DIMS: usize> {
+    pub artist_position_by_id: HashMap<usize, ArtistPos<DIMS>>,
 }
 
-impl ArtistEmbeddingContext {
+impl<const DIMS: usize> ArtistEmbeddingContext<DIMS> {
     pub fn get_positions<'a>(
         &'a self,
         id_1: usize,
         id_2: usize,
-    ) -> Result<(&'a ArtistPos, &'a ArtistPos), ArtistEmbeddingError> {
+    ) -> Result<(&'a ArtistPos<DIMS>, &'a ArtistPos<DIMS>), ArtistEmbeddingError> {
         let pos_1 = match self.artist_position_by_id.get(&id_1) {
             Some(id) => id,
             None => {
@@ -57,11 +57,58 @@ impl ArtistEmbeddingContext {
             &pos_2.normalized_pos,
         ))
     }
+
+    /// Serializes to an efficient binary format with the following format:
+    ///
+    /// 1 * u32: number of artists
+    /// [number of artists] * u32: artist internal ids
+    /// [number of artists] * DIMS * f32: artist positions
+    pub fn serialize_to_packed_binary(&self) -> Vec<u8> {
+        let mut pairs: Vec<(u32, ArtistPos<DIMS>)> = self
+            .artist_position_by_id
+            .iter()
+            .map(|(&id, pos)| {
+                let id: u32 = id.try_into().expect("Artist id greater than u32::MAX");
+                (id, pos.clone())
+            })
+            .collect();
+
+        // Sort the pairs to maybe increase compression ratio who knows
+        pairs.sort_unstable_by_key(|(id, _pos)| *id);
+
+        let packed_byte_size = 1 + (pairs.len() * 4) + (pairs.len() * DIMS * 4);
+        let mut packed: Vec<u8> = Vec::with_capacity(packed_byte_size);
+        unsafe { packed.set_len(packed_byte_size) };
+
+        unsafe {
+            let mut ptr: *mut u32 = packed.as_mut_ptr() as *mut u32;
+
+            // Write the length
+            ptr.write(pairs.len() as u32);
+
+            // Write IDs
+            ptr = ptr.add(1);
+            for (i, (id, _pos)) in pairs.iter().enumerate() {
+                ptr.add(i).write((*id) as u32);
+            }
+
+            // Write positions
+            let ptr = ptr.add(pairs.len()) as *mut f32;
+
+            for (i, (_id, pos)) in pairs.iter().enumerate() {
+                for (dim_ix, val_for_dim) in pos.pos.iter().enumerate() {
+                    ptr.add(i * DIMS + dim_ix).write(*val_for_dim);
+                }
+            }
+        }
+
+        packed
+    }
 }
 
-static mut ARTIST_EMBEDDING_CTX: *const ArtistEmbeddingContext = std::ptr::null();
+static mut ARTIST_EMBEDDING_CTX: *const ArtistEmbeddingContext<8> = std::ptr::null();
 
-pub fn get_artist_embedding_ctx() -> &'static ArtistEmbeddingContext {
+pub fn get_artist_embedding_ctx() -> &'static ArtistEmbeddingContext<8> {
     unsafe { &*ARTIST_EMBEDDING_CTX }
 }
 
@@ -86,8 +133,8 @@ impl AverageArtistDescriptor {
 }
 
 /// l2 normalization
-fn normalize_vector(v: &VEC) -> VEC {
-    let mut out: VEC = Default::default();
+fn normalize_vector<const DIMS: usize>(v: &[f32; DIMS]) -> [f32; DIMS] {
+    let mut out: [f32; DIMS] = [0.; DIMS];
 
     let sum_of_squares = v.iter().map(|&x| x * x).fold(0.0f32, |acc, x| acc + x);
     let divisor = sum_of_squares.sqrt();
@@ -99,7 +146,10 @@ fn normalize_vector(v: &VEC) -> VEC {
 }
 
 /// Just dot product of l2-normalized positions
-fn cosine_similarity(normalized_v1: &VEC, normalized_v2: &VEC) -> f32 {
+fn cosine_similarity<const DIMS: usize>(
+    normalized_v1: &[f32; DIMS],
+    normalized_v2: &[f32; DIMS],
+) -> f32 {
     let mut sum = 0.;
     for i in 0..normalized_v1.len() {
         sum += normalized_v1[i] * normalized_v2[i];
@@ -107,15 +157,20 @@ fn cosine_similarity(normalized_v1: &VEC, normalized_v2: &VEC) -> f32 {
     sum
 }
 
-fn weighted_midpoint(v1: &VEC, v1_bias: f32, v2: &VEC, v2_bias: f32) -> VEC {
-    let mut out: VEC = Default::default();
+fn weighted_midpoint<const DIMS: usize>(
+    v1: &[f32; DIMS],
+    v1_bias: f32,
+    v2: &[f32; DIMS],
+    v2_bias: f32,
+) -> [f32; DIMS] {
+    let mut out: [f32; DIMS] = [0.; DIMS];
     for i in 0..v1.len() {
         out[i] = (v1[i] * v1_bias + v2[i] * v2_bias) / 2.
     }
     out
 }
 
-fn distance(v1: &VEC, v2: &VEC) -> f32 {
+fn distance<const DIMS: usize>(v1: &[f32; DIMS], v2: &[f32; DIMS]) -> f32 {
     v1.iter()
         .zip(v2.iter())
         .fold(0., |acc, (&v1_n, &v2_n)| {
@@ -180,8 +235,8 @@ pub fn get_average_artists(
 
 static ARTIST_EMBEDDING_INITIALIZED: Once = Once::new();
 
-fn parse_positions(raw_positions: &str) -> HashMap<usize, ArtistPos> {
-    let mut positions_by_id: HashMap<usize, ArtistPos> = HashMap::new();
+fn parse_positions<const DIMS: usize>(raw_positions: &str) -> HashMap<usize, ArtistPos<DIMS>> {
+    let mut positions_by_id: HashMap<usize, ArtistPos<DIMS>> = HashMap::new();
 
     for line in raw_positions.lines().skip(1) {
         if line.is_empty() {
@@ -189,7 +244,7 @@ fn parse_positions(raw_positions: &str) -> HashMap<usize, ArtistPos> {
         }
 
         let mut artist_id = 0usize;
-        let mut pos: VEC = Default::default();
+        let mut pos: [f32; DIMS] = [0.; DIMS];
         for (i, part) in line.split_ascii_whitespace().enumerate() {
             if i == 0 {
                 artist_id = part
@@ -229,7 +284,7 @@ pub async fn init_artist_embedding_ctx(positions_url: &str) {
         .text()
         .await
         .unwrap();
-    println!("Successfully fetched artst embedding positions.  Parsing...");
+    println!("Successfully fetched artist embedding positions.  Parsing...");
     let artist_position_by_id = parse_positions(&raw_positions);
     println!("Successfully parsed artist embedding positions.  Setting into global context.");
     let ctx = box ArtistEmbeddingContext {
@@ -240,8 +295,8 @@ pub async fn init_artist_embedding_ctx(positions_url: &str) {
 
 #[test]
 fn test_cosine_similarity_accuracy() {
-    let x: VEC = [0., 1., 2., 3., 4., 5., 6., 7.];
-    let y: VEC = [0.5, 1.2, 2., 3., -1., 0., 6., 7.];
+    let x: [f32; 8] = [0., 1., 2., 3., 4., 5., 6., 7.];
+    let y: [f32; 8] = [0.5, 1.2, 2., 3., -1., 0., 6., 7.];
 
     let normalized_x = dbg!(normalize_vector(&x));
     let normalized_y = dbg!(normalize_vector(&y));
