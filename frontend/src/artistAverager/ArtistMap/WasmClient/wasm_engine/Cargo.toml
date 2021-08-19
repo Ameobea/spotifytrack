@@ -1,0 +1,25 @@
+cargo-features = ["edition2021"]
+
+[package]
+name = "engine"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wasm-bindgen = { version = "=0.2.74", features = ["nightly"] }
+console_error_panic_hook = "0.1.6"
+wasm-logger = "0.2.0"
+log = "0.4"
+
+[profile.release]
+debug-assertions = true
+panic = "abort"
+debug = 1
+codegen-units = 1
+lto = "fat"
+
+[profile.dev]
+debug-assertions = true

@@ -1499,3 +1499,51 @@ pub(crate) async fn refetch_cached_artists_missing_popularity(
 pub(crate) async fn get_packed_3d_artist_coords_route() -> &'static [u8] {
     get_packed_3d_artist_coords().await
 }
+
+// TODO: Return slimmer artists that only contain the necessary data
+#[post("/artists_by_internal_ids", data = "<artist_internal_ids>")]
+pub(crate) async fn get_artists_by_internal_ids(
+    conn: DbConn,
+    token_data: &State<Mutex<SpotifyTokenData>>,
+    artist_internal_ids: Json<Vec<i32>>,
+) -> Result<Json<Vec<Option<Artist>>>, String> {
+    let spotify_access_token = {
+        let token_data = &mut *(&*token_data).lock().await;
+        token_data.get().await
+    }?;
+
+    let artist_internal_ids: Vec<i32> = artist_internal_ids.0;
+    let artist_spotify_ids_by_internal_id =
+        get_artist_spotify_ids_by_internal_id(&conn, artist_internal_ids.clone())
+            .await
+            .map_err(|err| {
+                error!(
+                    "Error getting artist spotify IDs by internal IDs: {:?}",
+                    err
+                );
+                String::from("Internal DB error")
+            })?;
+    let artist_spotify_ids = artist_internal_ids
+        .iter()
+        .filter_map(|internal_id| {
+            artist_spotify_ids_by_internal_id
+                .get(internal_id)
+                .map(String::as_str)
+        })
+        .collect::<Vec<_>>();
+
+    let artists = fetch_artists(&spotify_access_token, &artist_spotify_ids).await?;
+
+    Ok(Json(
+        artist_internal_ids
+            .into_iter()
+            .map(|internal_id| {
+                let spotify_id = artist_spotify_ids_by_internal_id.get(&internal_id)?;
+                artists
+                    .iter()
+                    .find(|artist| artist.id == *spotify_id)
+                    .cloned()
+            })
+            .collect(),
+    ))
+}
