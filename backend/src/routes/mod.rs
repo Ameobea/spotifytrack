@@ -18,7 +18,10 @@ use tokio::{
 };
 
 use crate::{
-    artist_embedding::{get_artist_embedding_ctx, get_average_artists, ArtistEmbeddingError},
+    artist_embedding::{
+        get_artist_embedding_ctx, get_average_artists, map_3d::get_packed_3d_artist_coords,
+        ArtistEmbeddingError,
+    },
     benchmarking::{mark, start},
     cache::{get_hash_items, get_redis_conn, set_hash_items},
     conf::CONF,
@@ -1490,4 +1493,9 @@ pub(crate) async fn refetch_cached_artists_missing_popularity(
             deleted_artist_count
         ),
     ))
+}
+
+#[get("/packed_3d_artist_coords")]
+pub(crate) async fn get_packed_3d_artist_coords_route() -> &'static [u8] {
+    get_packed_3d_artist_coords().await
 }
