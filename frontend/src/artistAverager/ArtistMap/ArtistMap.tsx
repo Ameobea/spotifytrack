@@ -14,7 +14,7 @@ const ArtistMap: React.FC = () => {
 
   return (
     <div className="artist-map">
-      <canvas className="artist-map-canvas" height={1000} width={1000} ref={canvas} />
+      <canvas className="artist-map-canvas" height={1000} width={1920} ref={canvas} />
     </div>
   );
 };
