@@ -10,6 +10,8 @@ const { RetryChunkLoadPlugin } = require('webpack-retry-chunk-load-plugin');
 
 const styles = require('./src/_style');
 
+const isDev = !process.env.NODE_ENV || process.env.NODE_ENV === 'development';
+
 /**
  * @returns {webpack.Configuration}
  */
@@ -22,7 +24,8 @@ const buildConfig = () => ({
   output: {
     path: path.resolve(__dirname, 'dist'),
     publicPath: '/',
-    filename: 'itallhappened.[name].[contenthash].js',
+    filename: '[name].[contenthash].js',
+    chunkFilename: `${isDev ? '[name]' : '[name].[fullhash]'}.js`,
   },
   resolve: {
     fallback: { path: false, fs: false },

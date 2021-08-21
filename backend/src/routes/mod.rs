@@ -1572,6 +1572,7 @@ pub(crate) async fn get_artist_relationships_by_internal_ids(
                 );
                 String::from("Internal DB error")
             })?;
+    info!("Converted to spotify IDs");
     let artist_spotify_ids = artist_internal_ids
         .iter()
         .filter_map(|internal_id| {
@@ -1583,6 +1584,7 @@ pub(crate) async fn get_artist_relationships_by_internal_ids(
 
     let related_artists =
         get_multiple_related_artists(spotify_access_token, &artist_spotify_ids).await?;
+    info!("Got related artists");
     assert_eq!(related_artists.len(), artist_spotify_ids.len());
 
     let related_artists_internal_ids_by_spotify_id = retrieve_mapped_spotify_ids(
@@ -1592,6 +1594,7 @@ pub(crate) async fn get_artist_relationships_by_internal_ids(
             .flat_map(|related_artists| related_artists.iter()),
     )
     .await?;
+    info!("Mapped back to internal IDs");
 
     let res = related_artists
         .into_iter()
