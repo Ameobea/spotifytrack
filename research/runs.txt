@@ -1,0 +1,19 @@
+100k_corpus_3_dims_new_params_huge_negative:
+  node2vec = Node2Vec(graph, dimensions=3, walk_length=40, num_walks=15, workers=14)
+
+  model = node2vec.fit(window=10, min_count=1, workers=14, hs=0, negative=10)
+
+50k_corpus_3_dims_shorter_walks_softmax:
+  node2vec = Node2Vec(graph, dimensions=3, walk_length=10, num_walks=15, workers=14)
+
+  model = node2vec.fit(window=10, min_count=1, workers=14, hs=1)
+
+50k_corpus_3_dims_shorter_walks_softmax_skipgram:
+  node2vec = Node2Vec(graph, dimensions=3, walk_length=10, num_walks=15, workers=14)
+
+  model = node2vec.fit(window=10, min_count=1, workers=14, hs=1, sg=1)
+
+50k_corpus_3_dims_shorter_walks_softmax_skipgram_high_training_rate:
+  node2vec = Node2Vec(graph, dimensions=3, walk_length=10, num_walks=15, workers=14)
+
+  model = node2vec.fit(window=10, min_count=1, workers=14, hs=1, sg=1, alpha=0.1, min_alpha=0.01)

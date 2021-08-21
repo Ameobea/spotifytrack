@@ -1500,13 +1500,12 @@ pub(crate) async fn get_packed_3d_artist_coords_route() -> &'static [u8] {
     get_packed_3d_artist_coords().await
 }
 
-// TODO: Return slimmer artists that only contain the necessary data
-#[post("/artists_by_internal_ids", data = "<artist_internal_ids>")]
+#[post("/map_artist_data_by_internal_ids", data = "<artist_internal_ids>")]
 pub(crate) async fn get_artists_by_internal_ids(
     conn: DbConn,
     token_data: &State<Mutex<SpotifyTokenData>>,
     artist_internal_ids: Json<Vec<i32>>,
-) -> Result<Json<Vec<Option<Artist>>>, String> {
+) -> Result<Json<Vec<Option<String>>>, String> {
     let spotify_access_token = {
         let token_data = &mut *(&*token_data).lock().await;
         token_data.get().await
@@ -1542,8 +1541,70 @@ pub(crate) async fn get_artists_by_internal_ids(
                 artists
                     .iter()
                     .find(|artist| artist.id == *spotify_id)
-                    .cloned()
+                    .map(|artist| artist.name.clone())
             })
             .collect(),
     ))
+}
+
+#[post(
+    "/map_artist_relationships_by_internal_ids",
+    data = "<artist_internal_ids>"
+)]
+pub(crate) async fn get_artist_relationships_by_internal_ids(
+    conn: DbConn,
+    token_data: &State<Mutex<SpotifyTokenData>>,
+    artist_internal_ids: Json<Vec<i32>>,
+) -> Result<Json<Vec<Vec<i32>>>, String> {
+    let spotify_access_token = {
+        let token_data = &mut *(&*token_data).lock().await;
+        token_data.get().await
+    }?;
+
+    let artist_internal_ids: Vec<i32> = artist_internal_ids.0;
+    let artist_spotify_ids_by_internal_id =
+        get_artist_spotify_ids_by_internal_id(&conn, artist_internal_ids.clone())
+            .await
+            .map_err(|err| {
+                error!(
+                    "Error getting artist spotify IDs by internal IDs: {:?}",
+                    err
+                );
+                String::from("Internal DB error")
+            })?;
+    let artist_spotify_ids = artist_internal_ids
+        .iter()
+        .filter_map(|internal_id| {
+            artist_spotify_ids_by_internal_id
+                .get(internal_id)
+                .map(String::as_str)
+        })
+        .collect::<Vec<_>>();
+
+    let related_artists =
+        get_multiple_related_artists(spotify_access_token, &artist_spotify_ids).await?;
+    assert_eq!(related_artists.len(), artist_spotify_ids.len());
+
+    let related_artists_internal_ids_by_spotify_id = retrieve_mapped_spotify_ids(
+        &conn,
+        related_artists
+            .iter()
+            .flat_map(|related_artists| related_artists.iter()),
+    )
+    .await?;
+
+    let res = related_artists
+        .into_iter()
+        .map(|related_artists| {
+            related_artists
+                .iter()
+                .filter_map(|artist_spotify_id| {
+                    related_artists_internal_ids_by_spotify_id
+                        .get(artist_spotify_id)
+                        .copied()
+                })
+                .collect()
+        })
+        .collect();
+    Ok(Json(res))
 }

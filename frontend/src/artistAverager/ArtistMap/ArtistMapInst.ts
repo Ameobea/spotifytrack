@@ -1,10 +1,16 @@
-import { UnreachableException } from 'ameo-utils';
-
-import type { Artist } from 'src/types';
 import type { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls';
 import type { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer';
-import { fetchPackedArtistPositions, getArtistsByInternalIDs } from '../api';
-import { BASE_ARTIST_COLOR, MOVEMENT_SPEED_UNITS_PER_SECOND } from './conf';
+import { fetchPackedArtistPositions } from '../api';
+import {
+  ARTIST_GEOMETRY_SIZE,
+  ARTIST_LABEL_TEXT_SIZE,
+  BASE_ARTIST_COLOR,
+  MOVEMENT_SPEED_UNITS_PER_SECOND,
+} from './conf';
+import DataFetchClient, {
+  ArtistMapDataWithId,
+  ArtistRelationshipDataWithId,
+} from './DataFetchClient';
 import { MovementInputHandler } from './MovementInputHandler';
 
 interface ThreeExtra {
@@ -16,29 +22,7 @@ interface ThreeExtra {
   EffectComposer: typeof import('three/examples/jsm/postprocessing/EffectComposer');
 }
 
-const ArtistsByInternalID: Map<number, Artist | 'FETCHING' | null> = new Map();
-
-const fetchAndCacheArtistData = async (artistIDs: number[]) => {
-  const artistIDsToFetch = artistIDs.filter((id) => !ArtistsByInternalID.has(id));
-  if (artistIDsToFetch.length === 0) {
-    return;
-  }
-
-  artistIDsToFetch.forEach((id) => ArtistsByInternalID.set(id, 'FETCHING'));
-
-  const artists = await getArtistsByInternalIDs(artistIDsToFetch);
-  if (artists.length !== artistIDsToFetch.length) {
-    throw new UnreachableException('API error; expected to return exact length requested');
-  }
-
-  artists.forEach((artist, i) => {
-    const internalID = artistIDsToFetch[i];
-    if (ArtistsByInternalID.get(internalID) !== 'FETCHING') {
-      throw new UnreachableException('Fetch logic invariant violation');
-    }
-    ArtistsByInternalID.set(internalID, artist);
-  });
-};
+const dataFetchClient = new DataFetchClient();
 
 const getInitialArtistIDsToRender = async (): Promise<number[]> => {
   // This will eventually be fetched from the API or something, probably.
@@ -91,7 +75,8 @@ export const initArtistMapInst = async (canvas: HTMLCanvasElement): Promise<Arti
   const initialArtistIDsToRender = await initialArtistIDsToRenderPromise.then((ids) => {
     // Optimization to allow us to start fetching artist data as soon as we have the IDs regardless of whether we've
     // finished fetching the wasm client, three, packed artist positions, etc.
-    // fetchAndCacheArtistData(ids);
+    dataFetchClient.getOrFetchArtistData(ids);
+    dataFetchClient.getOrFetchArtistRelationships(ids);
 
     return ids;
   });
@@ -112,11 +97,13 @@ export class ArtistMapInst {
   private isPointerLocked = false;
   private bloomComposer: EffectComposer;
   private finalComposer: EffectComposer;
+  private font: THREE.Font;
   private clock: THREE.Clock;
   private stats: ReturnType<ThreeExtra['Stats']['default']>;
 
   private totalArtistCount: number;
   private renderedArtistIDs: Set<number> = new Set();
+  private renderedConnections: Set<string> = new Set();
   private renderedArtistLabelsByID: Map<
     number,
     { mesh: THREE.Mesh; pos: THREE.Vector3; width: number }
@@ -149,13 +136,15 @@ export class ArtistMapInst {
     this.renderer.toneMapping = THREE.ReinhardToneMapping;
     this.clock = new THREE.Clock();
 
-    this.camera = new THREE.PerspectiveCamera(50, canvas.width / canvas.height, 0.1, 2000);
+    this.camera = new THREE.PerspectiveCamera(50, canvas.width / canvas.height, 0.1, 200_000);
     this.camera.position.set(1.4, -0.7, 1);
     this.camera.lookAt(0, 0, 0);
 
-    this.movementInputHandler = new MovementInputHandler(new THREE.Vector3());
+    this.movementInputHandler = new MovementInputHandler();
 
     this.scene = new THREE.Scene();
+    this.scene.fog = new this.THREE.Fog(0x000000, 1, 12_000);
+
     const light = new THREE.AmbientLight(0x404040); // soft white light
     this.scene.add(light);
 
@@ -181,7 +170,7 @@ export class ArtistMapInst {
     // canvas.appendChild(this.stats.domElement);
 
     this.artistMeshes = (() => {
-      const geometry = new this.THREE.IcosahedronGeometry(0.01, 6);
+      const geometry = new this.THREE.IcosahedronGeometry(ARTIST_GEOMETRY_SIZE, 3);
       const material = new this.THREE.MeshPhongMaterial({
         color: BASE_ARTIST_COLOR,
         // wireframe: true,
@@ -190,13 +179,15 @@ export class ArtistMapInst {
         specular: 0x996633,
         reflectivity: 1,
       });
-      const meshes = new this.THREE.InstancedMesh(geometry, material, 50);
+      const meshes = new this.THREE.InstancedMesh(geometry, material, 100000);
       meshes.count = 0;
       return meshes;
     })();
     this.scene.add(this.artistMeshes);
 
     this.initBloomPass();
+
+    this.initAsync();
 
     this.animate();
   }
@@ -269,6 +260,142 @@ export class ArtistMapInst {
     });
   }
 
+  private async initAsync() {
+    this.font = await this.loadFont();
+
+    // We're now able to actually render artist labels, so register the data fetch client callbacks
+    dataFetchClient.registerCallbacks(
+      (data) => this.handleArtistData(data),
+      (data) => this.handleArtistRelationships(data)
+    );
+  }
+
+  private handleArtistData(artistData: ArtistMapDataWithId[]) {
+    // TODO: Decide if we actually want to render artist names or not based on distance or something
+
+    const artistIDs = artistData.map((datum) => datum.id);
+    const artistPositions = this.wasmClient.get_artist_positions(
+      this.ctxPtr,
+      new Uint32Array(artistIDs)
+    );
+    artistData.forEach(({ id: artistID, name }, i) => {
+      if (Number.isNaN(artistPositions[i * 3])) {
+        return;
+      }
+
+      const position = new this.THREE.Vector3(
+        artistPositions[i * 3],
+        artistPositions[i * 3 + 1],
+        artistPositions[i * 3 + 2]
+      );
+      this.renderArtistLabel(artistID, name, position);
+    });
+    // dataFetchClient.getOrFetchArtistRelationships(artistIDs);
+  }
+
+  private handleArtistRelationships(artistRelationships: ArtistRelationshipDataWithId[]) {
+    // TODO: Decide if we actually want to render the artists or not based on distance or something
+
+    // TODO: Render connections between artists
+
+    const allArtistIDs = Array.from(
+      new Set(artistRelationships.flatMap((datum) => [datum.id, ...datum.relatedArtists])).values()
+    );
+    this.renderArtists(allArtistIDs);
+    const artistPositions = this.wasmClient.get_artist_positions(
+      this.ctxPtr,
+      new Uint32Array(allArtistIDs)
+    );
+    artistRelationships.forEach(({ id, relatedArtists }) => {
+      const posIx = allArtistIDs.indexOf(id);
+      if (Number.isNaN(artistPositions[posIx * 3])) {
+        return;
+      }
+
+      const artistPosition = new this.THREE.Vector3(
+        artistPositions[posIx * 3],
+        artistPositions[posIx * 3 + 1],
+        artistPositions[posIx * 3 + 2]
+      );
+
+      relatedArtists.forEach((relatedID) => {
+        const relatedPosIx = allArtistIDs.indexOf(relatedID);
+        if (Number.isNaN(artistPositions[relatedPosIx])) {
+          return;
+        }
+        const relatedPosition = new this.THREE.Vector3(
+          artistPositions[relatedPosIx * 3],
+          artistPositions[relatedPosIx * 3 + 1],
+          artistPositions[relatedPosIx * 3 + 2]
+        );
+
+        this.renderConnection(id, artistPosition, relatedID, relatedPosition);
+      });
+    });
+
+    dataFetchClient.getOrFetchArtistData(allArtistIDs);
+    // dataFetchClient.getOrFetchArtistRelationships(allArtistIDs);
+  }
+
+  private async renderArtistLabel(
+    artistID: number,
+    artistName: string,
+    artistPosition: THREE.Vector3
+  ) {
+    if (this.renderedArtistLabelsByID.has(artistID)) {
+      return;
+    }
+
+    const textMaterial = new this.THREE.MeshBasicMaterial({ color: 0xff2333 });
+    const textGeometry = new this.THREE.TextGeometry(artistName, {
+      font: this.font,
+      size: ARTIST_LABEL_TEXT_SIZE,
+      height: 0.2,
+      curveSegments: 1,
+    });
+    const textMesh = new this.THREE.Mesh(textGeometry, textMaterial);
+    // Create a bounding box to measure the text so we can know how wide it is in order to
+    // accurately center it
+    const bbox = new this.THREE.Box3().setFromObject(textMesh);
+    const dims = new this.THREE.Vector3();
+    bbox.getSize(dims);
+    const width = dims.x;
+
+    // The label's position is set every frame in the render function
+    this.scene.add(textMesh);
+
+    this.renderedArtistLabelsByID.set(artistID, {
+      mesh: textMesh,
+      pos: artistPosition,
+      width,
+    });
+  }
+
+  public renderConnection(
+    artist1ID: number,
+    artist1Pos: THREE.Vector3,
+    artist2ID: number,
+    artist2Pos: THREE.Vector3
+  ) {
+    if (
+      this.renderedConnections.has(`${artist1ID}-${artist2ID}`) ||
+      this.renderedConnections.has(`${artist2ID}-${artist1ID}`)
+    ) {
+      return;
+    }
+    this.renderedConnections.add(`${artist1ID}-${artist2ID}`);
+
+    const lineMaterial = new this.THREE.LineBasicMaterial({
+      color: 0x2288ee,
+      transparent: true,
+      opacity: 0.1,
+      linewidth: 2,
+    });
+    const lineGeometry = new this.THREE.BufferGeometry().setFromPoints([artist1Pos, artist2Pos]);
+    const lineMesh = new this.THREE.Line(lineGeometry, lineMaterial);
+    this.scene.add(lineMesh);
+  }
+
   public renderArtists(artistInternalIDs: number[]) {
     // Skip artists that are already rendered
     const artistsToRender = artistInternalIDs.filter((id) => {
@@ -287,83 +414,37 @@ export class ArtistMapInst {
       new Uint32Array(artistsToRender)
     );
 
-    // Kick off request to fetch artist names etc. asynchronously
-    fetchAndCacheArtistData(artistInternalIDs).then(async () => {
-      const font = await this.loadFont();
-
-      // Generate + render labels for artists that don't yet have them
-      const textMaterial = new this.THREE.MeshBasicMaterial({ color: 0xffffff });
-
-      artistsToRender.forEach((id, i) => {
-        if (this.renderedArtistLabelsByID.has(id)) {
-          return;
-        }
-
-        const artist = ArtistsByInternalID.get(id);
-        if (typeof artist === 'string' || !artist) {
-          console.log({ ArtistsByInternalID });
-          throw new UnreachableException(
-            `Artist id=${id} should have been fetched by now; found=${artist}`
-          );
-        }
-
-        const textGeometry = new this.THREE.TextGeometry(artist.name, {
-          font,
-          size: 0.02,
-          height: 0.002,
-          curveSegments: 1,
-        });
-        const textMesh = new this.THREE.Mesh(textGeometry, textMaterial);
-        // Create a bounding box to measure the text so we can know how wide it is in order to
-        // accurately center it
-        const bbox = new this.THREE.Box3().setFromObject(textMesh);
-        const dims = new this.THREE.Vector3();
-        bbox.getSize(dims);
-        const width = dims.x;
-
-        const pos = [
-          artistPositions[i * 3],
-          artistPositions[i * 3 + 1],
-          artistPositions[i * 3 + 2],
-        ] as const;
-        textMesh.position.set(pos[0], pos[1] + 0.02, pos[2]);
-        this.scene.add(textMesh);
-
-        this.renderedArtistLabelsByID.set(id, {
-          mesh: textMesh,
-          pos: new this.THREE.Vector3(pos[0], pos[1], pos[2]),
-          width,
-        });
-      });
-    });
-
     const matrix = new this.THREE.Matrix4();
     matrix.makeScale(5, 5, 5);
     const artistColor = new this.THREE.Color(/* BASE_ARTIST_COLOR */);
     artistsToRender.forEach((_id, i) => {
+      if (Number.isNaN(artistPositions[i * 3])) {
+        return;
+      }
+
       const pos = [
         artistPositions[i * 3],
         artistPositions[i * 3 + 1],
         artistPositions[i * 3 + 2],
       ] as const;
 
-      // matrix.makeScale(i * 0.5, i * 0.5, i * 0.5);
       matrix.setPosition(...pos);
       this.artistMeshes.setMatrixAt(startIx + i, matrix);
       this.artistMeshes.setColorAt(startIx + i, artistColor);
 
-      const light = new this.THREE.PointLight(
-        new this.THREE.Color(0x66ef66),
-        0.0165,
-        undefined,
-        0.2
-      );
-      light.shadow.mapSize.width = 1024;
-      light.shadow.mapSize.height = 1024;
-      light.position.x = pos[0];
-      light.position.y = pos[1];
-      light.position.z = pos[2];
-      this.scene.add(light);
+      // TODO: Need to limit the amount of created lights
+      // const light = new this.THREE.PointLight(
+      //   new this.THREE.Color(0x66ef66),
+      //   0.0165,
+      //   undefined,
+      //   0.2
+      // );
+      // light.shadow.mapSize.width = 1024;
+      // light.shadow.mapSize.height = 1024;
+      // light.position.x = pos[0];
+      // light.position.y = pos[1];
+      // light.position.z = pos[2];
+      // this.scene.add(light);
     });
     this.artistMeshes.instanceMatrix.needsUpdate = true;
     this.artistMeshes.instanceColor!.needsUpdate = true;
@@ -386,13 +467,14 @@ export class ArtistMapInst {
 
   private render() {
     // this.stats.update();
-    const movementDirection = this.movementInputHandler.getDirectionVector();
-    this.controls.moveForward(movementDirection.z * MOVEMENT_SPEED_UNITS_PER_SECOND);
-    this.controls.moveRight(movementDirection.x * MOVEMENT_SPEED_UNITS_PER_SECOND);
-    this.controls.getObject().position.y +=
-      this.controls.getDirection(VEC3_IDENTITY).y *
-      movementDirection.z *
-      MOVEMENT_SPEED_UNITS_PER_SECOND;
+    const { forward, sideways } = this.movementInputHandler.getDirectionVector();
+    this.controls.moveRight(sideways * MOVEMENT_SPEED_UNITS_PER_SECOND);
+    this.controls.getObject().position.add(
+      this.controls
+        .getDirection(VEC3_IDENTITY)
+        .clone()
+        .multiplyScalar(MOVEMENT_SPEED_UNITS_PER_SECOND * forward)
+    );
 
     // Make all labels appear above their respective artists and face the camera
     this.renderedArtistLabelsByID.forEach(({ mesh, pos, width }) => {
@@ -403,15 +485,8 @@ export class ArtistMapInst {
       mesh.matrix.setPosition(
         pos
           .clone()
-          // Move the label towards the camera
-          .add(
-            cameraOffset
-              .clone()
-              .normalize()
-              .multiplyScalar(width * 1.4 + 0.05)
-          )
           // Move the label up with respect to the camera, less distance the closer it is
-          .add(this.camera.up.clone().multiplyScalar(0.09))
+          .add(this.camera.up.clone().multiplyScalar(8))
           // And move it left to center it
           .add(
             this.camera.up

@@ -7,12 +7,8 @@ class MovementInputFlags {
 
 export class MovementInputHandler {
   private inputs: MovementInputFlags = new MovementInputFlags();
-  private directionVector: THREE.Vector3;
 
-  constructor(directionVector: THREE.Vector3) {
-    this.directionVector = directionVector;
-    this.directionVector.setY(0);
-
+  constructor() {
     window.addEventListener('keydown', (evt) => {
       switch (evt.code) {
         case 'ArrowUp':
@@ -59,10 +55,10 @@ export class MovementInputHandler {
     });
   }
 
-  public getDirectionVector(): THREE.Vector3 {
-    this.directionVector.setX(-+this.inputs.left + +this.inputs.right);
-    this.directionVector.setZ(-+this.inputs.down + +this.inputs.up);
-    this.directionVector.normalize();
-    return this.directionVector;
+  public getDirectionVector(): { forward: number; sideways: number } {
+    return {
+      sideways: -+this.inputs.left + +this.inputs.right,
+      forward: -+this.inputs.down + +this.inputs.up,
+    };
   }
 }

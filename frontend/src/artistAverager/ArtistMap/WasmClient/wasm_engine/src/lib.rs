@@ -19,6 +19,8 @@ impl Default for ArtistMapCtx {
     }
 }
 
+const DISTANCE_MULTIPLIER: f32 = 430.;
+
 const DID_INIT: Once = Once::new();
 
 fn maybe_init() {
@@ -50,6 +52,10 @@ pub fn decode_and_record_packed_artist_positions(ctx: *mut ArtistMapCtx, packed:
         unsafe {
             let id: u32 = *ptr.add(i);
             let pos: &[f32; 3] = &*(ptr.add(count + i * 3) as *const _);
+            let mut pos: [f32; 3] = *pos;
+            for val in &mut pos {
+                *val *= DISTANCE_MULTIPLIER;
+            }
             ctx.positions_by_artist.insert(id, pos.clone());
         }
     }
@@ -58,7 +64,7 @@ pub fn decode_and_record_packed_artist_positions(ctx: *mut ArtistMapCtx, packed:
     count
 }
 
-const ORIGIN: [f32; 3] = [0., 0., 0.];
+const MISSING_POS: [f32; 3] = [f32::NAN, f32::NAN, f32::NAN];
 
 #[wasm_bindgen]
 pub fn get_artist_positions(ctx: *mut ArtistMapCtx, artist_ids: Vec<u32>) -> Vec<f32> {
@@ -69,11 +75,11 @@ pub fn get_artist_positions(ctx: *mut ArtistMapCtx, artist_ids: Vec<u32>) -> Vec
 
     for (artist_ix, artist_id) in artist_ids.into_iter().enumerate() {
         let pos = ctx.positions_by_artist.get(&artist_id).unwrap_or_else(|| {
-            error!(
-                "Artist id not in embedding: {}, using 0,0,0 position",
-                artist_id
-            );
-            &ORIGIN
+            // error!(
+            //     "Artist id not in embedding: {}, using 0,0,0 position",
+            //     artist_id
+            // );
+            &MISSING_POS
         });
 
         for (dim_ix, val_for_dim) in pos.iter().enumerate() {
