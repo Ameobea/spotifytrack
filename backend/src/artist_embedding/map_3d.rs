@@ -2,7 +2,8 @@ use tokio::sync::OnceCell;
 
 use crate::artist_embedding::{parse_positions, ArtistEmbeddingContext};
 
-const PACKED_3D_ARTIST_COORDS_URL: &str = "https://ameo.dev/artist_map_embedding_3d.w2v";
+// const PACKED_3D_ARTIST_COORDS_URL: &str = "https://ameo.dev/artist_map_embedding_3d.w2v";
+const PACKED_3D_ARTIST_COORDS_URL: &str = "https://ameo.dev/pca.w2v";
 
 async fn build_3d_artist_map_ctx() -> ArtistEmbeddingContext<3> {
     let raw_positions: String = reqwest::get(PACKED_3D_ARTIST_COORDS_URL)
