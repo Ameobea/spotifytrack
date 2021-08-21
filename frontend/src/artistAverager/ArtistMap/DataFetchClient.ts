@@ -25,6 +25,7 @@ export interface ArtistRelationshipDataWithId extends ArtistRelationshipData {
 }
 
 const MAX_CONCURRENT_REQUESTS = 4;
+const CHUNK_SIZE = 2000;
 
 export default class DataFetchClient {
   private fetchedArtistDataByID: Map<number, ArtistMapData | null | 'FETCHING'> = new Map();
@@ -161,7 +162,7 @@ export default class DataFetchClient {
 
     // Kick off request to fetch the missing data in the background
     if (idsNeedingFetch.length > 0) {
-      R.splitEvery(250, idsNeedingFetch).forEach((ids) => {
+      R.splitEvery(CHUNK_SIZE, idsNeedingFetch).forEach((ids) => {
         this.fetchArtistData(ids);
       });
     }
@@ -185,7 +186,7 @@ export default class DataFetchClient {
 
     // Kick off request to fetch the missing data in the background
     if (idsNeedingFetch.length > 0) {
-      R.splitEvery(250, idsNeedingFetch).forEach((ids) => {
+      R.splitEvery(CHUNK_SIZE, idsNeedingFetch).forEach((ids) => {
         this.fetchArtistRelationships(ids);
       });
     }

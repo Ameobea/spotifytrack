@@ -2,7 +2,7 @@
   "compilerOptions": {
     "outDir": "dist",
     "module": "esnext",
-    "target": "es5",
+    "target": "esnext",
     "lib": ["esnext", "dom"],
     "sourceMap": true,
     "allowJs": true,
@@ -13,7 +13,6 @@
     "noImplicitThis": true,
     "noImplicitAny": true,
     "noStrictGenericChecks": false,
-    "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "strictNullChecks": true,
     "strictFunctionTypes": false,
