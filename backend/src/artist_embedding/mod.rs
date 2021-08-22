@@ -1,4 +1,5 @@
-use std::{collections::HashMap, convert::TryInto, sync::Once};
+use fnv::FnvHashMap as HashMap;
+use std::{convert::TryInto, sync::Once};
 
 pub mod map_3d;
 
@@ -63,7 +64,11 @@ impl<const DIMS: usize> ArtistEmbeddingContext<DIMS> {
     /// 1 * u32: number of artists
     /// [number of artists] * u32: artist internal ids
     /// [number of artists] * DIMS * f32: artist positions
-    pub fn serialize_to_packed_binary(&self) -> Vec<u8> {
+    /// (OPTIONAL) [number of artists] * u8: artist popularity 0-100
+    pub fn serialize_to_packed_binary(
+        &self,
+        artist_popularities_by_id: Option<HashMap<i32, u8>>,
+    ) -> Vec<u8> {
         let mut pairs: Vec<(u32, ArtistPos<DIMS>)> = self
             .artist_position_by_id
             .iter()
@@ -76,7 +81,14 @@ impl<const DIMS: usize> ArtistEmbeddingContext<DIMS> {
         // Sort the pairs to maybe increase compression ratio who knows
         pairs.sort_unstable_by_key(|(id, _pos)| *id);
 
-        let packed_byte_size = 1 + (pairs.len() * 4) + (pairs.len() * DIMS * 4);
+        let packed_byte_size = 1
+            + (pairs.len() * 4)
+            + (pairs.len() * DIMS * 4)
+            + if artist_popularities_by_id.is_some() {
+                pairs.len()
+            } else {
+                0
+            };
         let mut packed: Vec<u8> = Vec::with_capacity(packed_byte_size);
         unsafe { packed.set_len(packed_byte_size) };
 
@@ -98,6 +110,15 @@ impl<const DIMS: usize> ArtistEmbeddingContext<DIMS> {
             for (i, (_id, pos)) in pairs.iter().enumerate() {
                 for (dim_ix, val_for_dim) in pos.pos.iter().enumerate() {
                     ptr.add(i * DIMS + dim_ix).write(*val_for_dim);
+                }
+            }
+
+            // Write popularities if provided
+            if let Some(popularities) = artist_popularities_by_id {
+                let ptr = ptr.add(pairs.len() * DIMS) as *mut u8;
+                for (i, (id, _)) in pairs.iter().enumerate() {
+                    let popularity = popularities.get(&(*id as i32)).copied().unwrap_or(0);
+                    ptr.add(i).write(popularity);
                 }
             }
         }
@@ -236,7 +257,7 @@ pub fn get_average_artists(
 static ARTIST_EMBEDDING_INITIALIZED: Once = Once::new();
 
 fn parse_positions<const DIMS: usize>(raw_positions: &str) -> HashMap<usize, ArtistPos<DIMS>> {
-    let mut positions_by_id: HashMap<usize, ArtistPos<DIMS>> = HashMap::new();
+    let mut positions_by_id: HashMap<usize, ArtistPos<DIMS>> = HashMap::default();
 
     for line in raw_positions.lines().skip(1) {
         if line.is_empty() {

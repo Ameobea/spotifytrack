@@ -24,11 +24,11 @@ export interface ArtistRelationshipDataWithId extends ArtistRelationshipData {
   id: number;
 }
 
-const MAX_CONCURRENT_REQUESTS = 4;
-const CHUNK_SIZE = 2000;
+const MAX_CONCURRENT_REQUESTS = { data: 4, relationship: 2 };
+const CHUNK_SIZE = 450;
 
 export default class DataFetchClient {
-  private fetchedArtistDataByID: Map<number, ArtistMapData | null | 'FETCHING'> = new Map();
+  public fetchedArtistDataByID: Map<number, ArtistMapData | null | 'FETCHING'> = new Map();
   private fetchedArtistRelationshipsByID: Map<
     number,
     ArtistRelationshipData | 'FETCHING'
@@ -40,39 +40,44 @@ export default class DataFetchClient {
   private pendingArtistData: ArtistMapData[] = [];
   private pendingArtistRelationships: ArtistRelationshipData[] = [];
 
-  private curActiveRequestCount = 0;
-  private requestPermitQueue: (() => void)[] = [];
+  private curActiveRequestCount = { data: 0, relationship: 0 };
+  private requestPermitQueue: { data: (() => void)[]; relationship: (() => void)[] } = {
+    data: [],
+    relationship: [],
+  };
 
   constructor() {
     //
   }
 
-  private getRequestPermit(): Promise<void> {
-    if (this.curActiveRequestCount < MAX_CONCURRENT_REQUESTS) {
-      this.curActiveRequestCount += 1;
-      console.log(`Got permit immediately, active requests: ${this.curActiveRequestCount}`);
+  private getRequestPermit(type: 'data' | 'relationship'): Promise<void> {
+    if (this.curActiveRequestCount[type] < MAX_CONCURRENT_REQUESTS[type]) {
+      this.curActiveRequestCount[type] += 1;
+      // console.log(
+      //   `Got permit immediately, active requests: ${this.curActiveRequestCount},type: ${type}`
+      // );
       return Promise.resolve();
     }
 
     return new Promise((resolve) => {
-      this.requestPermitQueue.push(() => {
-        if (this.curActiveRequestCount >= MAX_CONCURRENT_REQUESTS) {
+      this.requestPermitQueue[type].push(() => {
+        if (this.curActiveRequestCount[type] >= MAX_CONCURRENT_REQUESTS[type]) {
           throw new UnreachableException();
         }
 
-        this.curActiveRequestCount += 1;
+        this.curActiveRequestCount[type] += 1;
         resolve();
       });
     });
   }
 
-  private releaseRequestPermit() {
-    this.curActiveRequestCount -= 1;
-    console.log(`Released permit, active requests: ${this.curActiveRequestCount}`);
-    if (this.curActiveRequestCount < 0) {
+  private releaseRequestPermit(type: 'data' | 'relationship') {
+    this.curActiveRequestCount[type] -= 1;
+    // console.log(`Released permit, active requests: ${this.curActiveRequestCount}`);
+    if (this.curActiveRequestCount[type] < 0) {
       throw new UnreachableException();
     }
-    this.requestPermitQueue.shift()?.();
+    this.requestPermitQueue[type].shift()?.();
   }
 
   public registerCallbacks(
@@ -93,11 +98,11 @@ export default class DataFetchClient {
   }
 
   private async fetchArtistData(allIDs: number[]) {
-    await this.getRequestPermit();
+    await this.getRequestPermit('data');
 
     const ids = allIDs.filter((id) => !this.fetchedArtistDataByID.has(id));
     if (ids.length === 0) {
-      this.releaseRequestPermit();
+      this.releaseRequestPermit('data');
       return;
     }
 
@@ -115,16 +120,16 @@ export default class DataFetchClient {
         this.pendingArtistData.push(...toEmit);
       }
     } finally {
-      this.releaseRequestPermit();
+      this.releaseRequestPermit('data');
     }
   }
 
   private async fetchArtistRelationships(allIDs: number[]) {
-    await this.getRequestPermit();
+    await this.getRequestPermit('relationship');
 
     const ids = allIDs.filter((id) => !this.fetchedArtistRelationshipsByID.has(id));
     if (ids.length === 0) {
-      this.releaseRequestPermit();
+      this.releaseRequestPermit('relationship');
       return;
     }
 
@@ -142,7 +147,7 @@ export default class DataFetchClient {
         this.pendingArtistRelationships.push(...toEmit);
       }
     } finally {
-      this.releaseRequestPermit();
+      this.releaseRequestPermit('relationship');
     }
   }
 

@@ -1496,8 +1496,16 @@ pub(crate) async fn refetch_cached_artists_missing_popularity(
 }
 
 #[get("/packed_3d_artist_coords")]
-pub(crate) async fn get_packed_3d_artist_coords_route() -> &'static [u8] {
-    get_packed_3d_artist_coords().await
+pub(crate) async fn get_packed_3d_artist_coords_route(
+    conn: DbConn,
+    token_data: &State<Mutex<SpotifyTokenData>>,
+) -> Result<&'static [u8], String> {
+    let spotify_access_token = {
+        let token_data = &mut *(&*token_data).lock().await;
+        token_data.get().await
+    }?;
+
+    get_packed_3d_artist_coords(&conn, &spotify_access_token).await
 }
 
 #[post("/map_artist_data_by_internal_ids", data = "<artist_internal_ids>")]

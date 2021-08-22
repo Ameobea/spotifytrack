@@ -72,9 +72,9 @@ pub async fn main() {
     ];
 
     // Pre-populate the packed 3D artist map embedding to make the first request for it instant
-    tokio::task::spawn(async {
-        get_packed_3d_artist_coords().await;
-    });
+    // tokio::task::spawn(async {
+    //     get_packed_3d_artist_coords().await;
+    // });
 
     rocket::build()
         .mount("/", all_routes.clone())
