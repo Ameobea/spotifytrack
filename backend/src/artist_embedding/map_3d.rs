@@ -5,7 +5,7 @@ use tokio::{sync::OnceCell, task::spawn_blocking};
 
 use crate::{
     artist_embedding::{parse_positions, ArtistEmbeddingContext},
-    db_util::{get_artist_spotify_ids_by_internal_id, retrieve_mapped_spotify_ids},
+    db_util::{get_artist_spotify_ids_by_internal_id, get_internal_ids_by_spotify_id},
     spotify_api::fetch_artists,
     DbConn,
 };
@@ -79,7 +79,7 @@ async fn build_packed_3d_artist_coords(
         .unwrap();
     info!("Fetched {} popularities", popularities.len());
 
-    let internal_ids = retrieve_mapped_spotify_ids(conn, popularities.keys()).await?;
+    let internal_ids = get_internal_ids_by_spotify_id(conn, popularities.keys()).await?;
     let mut popularities_by_internal_id: HashMap<i32, u8> = HashMap::default();
     for (spotify_id, popularity) in popularities {
         let internal_id = match internal_ids.get(&spotify_id) {

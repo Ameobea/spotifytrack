@@ -36,8 +36,13 @@ export class WasmClient {
   /**
    * Returns set of draw commands to execute
    */
-  public handleReceivedArtistNames(artistIDs: Uint32Array) {
-    return this.engine.handle_received_artist_names(this.ctxPtr, artistIDs);
+  public handleReceivedArtistNames(
+    artistIDs: Uint32Array,
+    curX: number,
+    curY: number,
+    curZ: number
+  ) {
+    return this.engine.handle_received_artist_names(this.ctxPtr, artistIDs, curX, curY, curZ);
   }
 }
 

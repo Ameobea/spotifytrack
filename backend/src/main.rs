@@ -33,6 +33,8 @@ pub mod spotify_api;
 pub mod spotify_token;
 pub mod stats;
 
+use crate::cache::local_cache::init_spotify_id_map_cache;
+
 use self::spotify_token::SpotifyTokenData;
 
 #[rocket_sync_db_pools::database("spotify_homepage")]
@@ -42,6 +44,7 @@ pub struct DbConn(diesel::MysqlConnection);
 pub async fn main() {
     dotenv::dotenv().expect("dotenv file parsing failed");
 
+    tokio::task::spawn(init_spotify_id_map_cache());
     init_artist_embedding_ctx("https://ameo.dev/artist_embedding_8d.w2v").await;
 
     let all_routes = routes![

@@ -27,7 +27,7 @@ use crate::{
     conf::CONF,
     db_util::{
         self, get_all_top_artists_for_user, get_artist_spotify_ids_by_internal_id,
-        insert_related_artists, retrieve_mapped_spotify_ids,
+        get_internal_ids_by_spotify_id, insert_related_artists,
     },
     models::{
         Artist, ArtistSearchResult, AverageArtistItem, AverageArtistsResponse, CompareToRequest,
@@ -54,21 +54,21 @@ pub(crate) async fn get_current_stats(
     username: String,
     token_data: &State<Mutex<SpotifyTokenData>>,
 ) -> Result<Option<Json<StatsSnapshot>>, String> {
-    start();
+    let tok = start();
     let user = match db_util::get_user_by_spotify_id(&conn, username).await? {
         Some(user) => user,
         None => {
             return Ok(None);
         },
     };
-    mark("Finished getting spotify user by id");
+    mark(tok, "Finished getting spotify user by id");
 
     let spotify_access_token = {
         let token_data = &mut *(&*token_data).lock().await;
         token_data.get().await
     }?;
-    mark("Got spotify access token");
 
+    let tok = start();
     let (artist_stats, track_stats) = match tokio::join!(
         db_util::get_artist_stats(&user, conn, &spotify_access_token),
         db_util::get_track_stats(&user, conn2, &spotify_access_token),
@@ -77,7 +77,7 @@ pub(crate) async fn get_current_stats(
         (Ok(None), _) | (_, Ok(None)) => return Ok(None),
         (Ok(Some(artist_stats)), Ok(Some(track_stats))) => (artist_stats, track_stats),
     };
-    mark("Fetched artist and track stats");
+    mark(tok, "Fetched artist and track stats");
 
     let mut snapshot = StatsSnapshot::new(user.last_update_time);
 
@@ -88,7 +88,6 @@ pub(crate) async fn get_current_stats(
     for (timeframe_id, track) in track_stats {
         snapshot.tracks.add_item_by_id(timeframe_id, track);
     }
-    mark("Constructed snapshot");
 
     Ok(Some(Json(snapshot)))
 }
@@ -109,21 +108,21 @@ pub(crate) async fn get_artist_stats(
     username: String,
     artist_id: String,
 ) -> Result<Option<Json<ArtistStats>>, String> {
-    start();
+    let tok = start();
     let user = match db_util::get_user_by_spotify_id(&conn, username).await? {
         Some(user) => user,
         None => {
             return Ok(None);
         },
     };
-    mark("Finished getting spotify user by id");
+    mark(tok, "Finished getting spotify user by id");
 
     let spotify_access_token = {
         let token_data = &mut *(&*token_data).lock().await;
         token_data.get().await
     }?;
-    mark("Got spotify access token");
 
+    let tok = start();
     let user_clone = user.clone();
     let artist_id_clone = artist_id.clone();
     let spotify_access_token_clone = spotify_access_token.clone();
@@ -150,8 +149,9 @@ pub(crate) async fn get_artist_stats(
         (Ok(None), _) | (_, Ok(None)) => return Ok(None),
         (Ok(Some(a)), Ok(Some(b))) => (a, b),
     };
-    mark("Fetched artists stats and top tracks");
+    mark(tok, "Fetched artists stats and top tracks");
 
+    let tok = start();
     let artist = match crate::spotify_api::fetch_artists(&spotify_access_token, &[&artist_id])
         .await?
         .drain(..)
@@ -160,7 +160,7 @@ pub(crate) async fn get_artist_stats(
         Some(artist) => artist,
         None => return Ok(None),
     };
-    mark("Found matching artist to use");
+    mark(tok, "Found matching artist to use");
 
     let stats = ArtistStats {
         artist,
@@ -1036,7 +1036,7 @@ pub(crate) async fn dump_redis_related_artists_to_database(
 
     for chunk in all_values.chunks(200) {
         let mapped_spotify_ids =
-            retrieve_mapped_spotify_ids(&conn, chunk.chunks_exact(2).map(|chunk| &chunk[0]))
+            get_internal_ids_by_spotify_id(&conn, chunk.chunks_exact(2).map(|chunk| &chunk[0]))
                 .await
                 .map_err(|err| {
                     error!("Error mapping spotify ids: {:?}", err);
@@ -1208,7 +1208,7 @@ pub(crate) async fn get_average_artists_route(
     token_data: &State<Mutex<SpotifyTokenData>>,
 ) -> Result<Json<AverageArtistsResponse>, String> {
     // Look up internal IDs for provided spotify IDs
-    let internal_ids_by_spotify_id = retrieve_mapped_spotify_ids(
+    let internal_ids_by_spotify_id = get_internal_ids_by_spotify_id(
         &conn,
         [artist_1_spotify_id.clone(), artist_2_spotify_id.clone()].iter(),
     )
@@ -1564,12 +1564,14 @@ pub(crate) async fn get_artist_relationships_by_internal_ids(
     token_data: &State<Mutex<SpotifyTokenData>>,
     artist_internal_ids: Json<Vec<i32>>,
 ) -> Result<Json<Vec<Vec<i32>>>, String> {
+    let first_tok = start();
     let spotify_access_token = {
         let token_data = &mut *(&*token_data).lock().await;
         token_data.get().await
     }?;
 
     let artist_internal_ids: Vec<i32> = artist_internal_ids.0;
+    let tok = start();
     let artist_spotify_ids_by_internal_id =
         get_artist_spotify_ids_by_internal_id(&conn, artist_internal_ids.clone())
             .await
@@ -1580,7 +1582,7 @@ pub(crate) async fn get_artist_relationships_by_internal_ids(
                 );
                 String::from("Internal DB error")
             })?;
-    info!("Converted to spotify IDs");
+    mark(tok, "Converted to spotify IDs");
     let artist_spotify_ids = artist_internal_ids
         .iter()
         .filter_map(|internal_id| {
@@ -1590,19 +1592,21 @@ pub(crate) async fn get_artist_relationships_by_internal_ids(
         })
         .collect::<Vec<_>>();
 
+    let tok = start();
     let related_artists =
         get_multiple_related_artists(spotify_access_token, &artist_spotify_ids).await?;
-    info!("Got related artists");
+    mark(tok, "Got related artists");
     assert_eq!(related_artists.len(), artist_spotify_ids.len());
 
-    let related_artists_internal_ids_by_spotify_id = retrieve_mapped_spotify_ids(
+    let tok = start();
+    let related_artists_internal_ids_by_spotify_id = get_internal_ids_by_spotify_id(
         &conn,
         related_artists
             .iter()
             .flat_map(|related_artists| related_artists.iter()),
     )
     .await?;
-    info!("Mapped back to internal IDs");
+    mark(tok, "Mapped back to internal IDs");
 
     let res = related_artists
         .into_iter()
@@ -1617,5 +1621,6 @@ pub(crate) async fn get_artist_relationships_by_internal_ids(
                 .collect()
         })
         .collect();
+    mark(first_tok, "FINISHED");
     Ok(Json(res))
 }
