@@ -13,7 +13,8 @@ use rocket::{http::Status, response::status};
 use serde::Serialize;
 
 use crate::{
-    benchmarking::mark,
+    benchmarking::{mark, start},
+    cache::local_cache::{cache_id_entries, get_cached_internal_ids_by_spotify_id},
     models::{
         Artist, ArtistGenrePair, ArtistRankHistoryResItem, HasSpotifyId, NewRelatedArtistEntry,
         NewSpotifyIdMapping, SpotifyIdMapping, StatsHistoryQueryResItem, TimeFrames, Track,
@@ -71,6 +72,7 @@ pub(crate) async fn get_artist_stats(
         spotify_items::{self, dsl::*},
     };
 
+    let tok = start();
     let query = artist_rank_snapshots
         .filter(user_id.eq(user.id))
         .select(update_time)
@@ -93,12 +95,13 @@ pub(crate) async fn get_artist_stats(
         .run(move |conn| query.load::<StatsQueryResultItem>(conn))
         .await
         .map_err(stringify_diesel_err)?;
-    mark("Got artist stats from database");
+    mark(tok, "Got artist stats from database");
 
     if artist_stats.is_empty() {
         return Ok(None);
     }
 
+    let tok = start();
     let artist_spotify_ids: Vec<&str> = artist_stats
         .iter()
         .map(|entry| entry.spotify_id.as_str())
@@ -113,7 +116,7 @@ pub(crate) async fn get_artist_stats(
                 (timeframe_id, artist)
             })
             .collect::<Vec<_>>();
-    mark("Got artist metadata");
+    mark(tok, "Got artist metadata");
     Ok(Some(fetched_artists))
 }
 
@@ -516,7 +519,7 @@ pub(crate) async fn get_track_stats_history(
 
 /// Retrieves a list of the internal mapped Spotify ID for each of the provided spotify IDs,
 /// inserting new entries as needed and taking care of it all behind the scenes.
-pub(crate) async fn retrieve_mapped_spotify_ids<
+pub(crate) async fn get_internal_ids_by_spotify_id<
     'a,
     T: Iterator<Item = &'a String> + Clone + Send + 'a,
 >(
@@ -525,8 +528,23 @@ pub(crate) async fn retrieve_mapped_spotify_ids<
 ) -> Result<HashMap<String, i32>, String> {
     use crate::schema::spotify_items::dsl::*;
 
-    let spotify_id_items: Vec<NewSpotifyIdMapping> = spotify_ids
-        .clone()
+    let spotify_ids_v = spotify_ids.clone().collect::<Vec<_>>();
+    let cached = get_cached_internal_ids_by_spotify_id(spotify_ids.cloned()).await;
+    let mut mapped_ids_mapping: HashMap<String, i32> = HashMap::default();
+    let mut missing_ids: Vec<String> = Vec::default();
+    for (i, cached_val) in cached.into_iter().enumerate() {
+        if let Some(cached_val) = cached_val {
+            mapped_ids_mapping.insert(spotify_ids_v[i].clone(), cached_val);
+        } else {
+            missing_ids.push(spotify_ids_v[i].clone());
+        }
+    }
+    if missing_ids.is_empty() {
+        return Ok(mapped_ids_mapping);
+    }
+
+    let spotify_id_items: Vec<NewSpotifyIdMapping> = missing_ids
+        .iter()
         .cloned()
         .map(|spotify_id_item| NewSpotifyIdMapping {
             spotify_id: spotify_id_item,
@@ -545,8 +563,7 @@ pub(crate) async fn retrieve_mapped_spotify_ids<
     .await?;
 
     // Retrieve the mapped spotify ids, including any inserted ones
-    let owned_spotify_ids: Vec<String> = spotify_ids.map(String::from).collect();
-    let query = spotify_items.filter(spotify_id.eq_any(owned_spotify_ids));
+    let query = spotify_items.filter(spotify_id.eq_any(missing_ids));
     let mapped_ids: Vec<SpotifyIdMapping> = conn
         .run(move |conn| {
             query.load(conn).map_err(|err| -> String {
@@ -556,8 +573,14 @@ pub(crate) async fn retrieve_mapped_spotify_ids<
         })
         .await?;
 
+    cache_id_entries(
+        mapped_ids
+            .iter()
+            .map(|mapping| (mapping.id, mapping.spotify_id.clone())),
+    )
+    .await;
+
     // Match up the orderings to that the mapped ids are in the same ordering as the provided ids
-    let mut mapped_ids_mapping: HashMap<String, i32> = HashMap::default();
     for mapping in mapped_ids {
         mapped_ids_mapping.insert(mapping.spotify_id, mapping.id);
     }
@@ -619,7 +642,7 @@ pub(crate) async fn populate_tracks_artists_table(
         .flat_map(|track| track.artists.iter().map(|artist| artist.id.clone()))
         .collect();
     let artist_internal_id_mapping =
-        retrieve_mapped_spotify_ids(conn, artist_spotify_ids.iter()).await?;
+        get_internal_ids_by_spotify_id(conn, artist_spotify_ids.iter()).await?;
 
     // Insert mapping items for each of the (track, artist) pairs
     let pairs: Vec<TrackArtistPair> = tracks

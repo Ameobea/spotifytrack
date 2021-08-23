@@ -18,8 +18,9 @@ import DataFetchClient, {
 } from './DataFetchClient';
 import { MovementInputHandler } from './MovementInputHandler';
 import type { WasmClient } from './WasmClient/WasmClient.worker';
-import { filterNils, UnreachableException } from 'ameo-utils';
+import { filterNils, UnimplementedError, UnreachableException } from 'ameo-utils';
 import type { Scale } from 'chroma-js';
+import { UIEventRegistry } from './OverlayUI';
 
 interface ThreeExtra {
   PointerLockControls: typeof import('three/examples/jsm/controls/PointerLockControls')['PointerLockControls'];
@@ -142,6 +143,60 @@ export class ArtistMapInst {
   > = new Map();
   private artistMeshes: THREE.InstancedMesh;
   private movementInputHandler: MovementInputHandler;
+  private lastCameraDirection: THREE.Vector3;
+  private lastCameraPosition: THREE.Vector3;
+  private forceLabelsUpdate = false;
+  private wasmPositionHandlerIsRunning = false;
+
+  public eventRegistry: UIEventRegistry = new UIEventRegistry(
+    (labelID: string | number) => {
+      if (typeof labelID === 'string') {
+        // TODO
+        throw new UnimplementedError();
+      }
+
+      const artistData = this.artistDataByID.get(labelID);
+      if (!artistData) {
+        throw new Error(`Artist ${labelID} is missing`);
+      }
+
+      // Check to see if it is in front of or behind the camera
+      const offsetToCamera = this.camera.position.clone().sub(artistData.pos.clone()).normalize();
+      const cameraDirection = this.camera.getWorldDirection(artistData.pos.clone()).clone();
+      const angle = offsetToCamera.dot(cameraDirection);
+      const shouldRender = angle < 0;
+
+      const point = artistData.pos.clone();
+      point.project(this.camera);
+
+      const canvas = this.renderer.domElement;
+      return {
+        x: Math.round((0.5 + point.x / 2) * (canvas.width / window.devicePixelRatio)),
+        y: Math.round((0.5 - point.y / 2) * (canvas.height / window.devicePixelRatio)),
+        shouldRender,
+        distance: this.camera.position.distanceTo(artistData.pos),
+        popularity: artistData.popularity,
+      };
+    },
+    () => {
+      const curCameraDirection = this.camera.getWorldDirection(VEC3_IDENTITY).clone();
+      const curPosition = this.controls.getObject().position.clone();
+
+      const shouldUpdate =
+        this.forceLabelsUpdate ||
+        this.lastCameraDirection.x !== curCameraDirection.x ||
+        this.lastCameraDirection.y !== curCameraDirection.y ||
+        this.lastCameraDirection.z !== curCameraDirection.z ||
+        this.lastCameraPosition.x !== curPosition.x ||
+        this.lastCameraPosition.y !== curPosition.y ||
+        this.lastCameraPosition.z !== curPosition.z;
+
+      this.lastCameraDirection = curCameraDirection;
+      this.lastCameraPosition = curPosition;
+      this.forceLabelsUpdate = false;
+      return shouldUpdate;
+    }
+  );
 
   constructor(
     THREE: typeof import('three'),
@@ -153,6 +208,7 @@ export class ArtistMapInst {
     this.THREE = THREE;
     this.THREE_EXTRA = THREE_EXTRA;
     VEC3_IDENTITY = new THREE.Vector3();
+    this.lastCameraDirection = VEC3_IDENTITY.clone();
 
     import('chroma-js').then((chroma) => {
       this.chroma = chroma.default;
@@ -163,12 +219,12 @@ export class ArtistMapInst {
 
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(window.devicePixelRatio);
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // TODO: Remove
+    // this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // TODO: Remove
     this.renderer.toneMapping = THREE.ReinhardToneMapping;
     this.clock = new THREE.Clock();
 
-    this.camera = new THREE.PerspectiveCamera(100, canvas.width / canvas.height, 0.1, 200_000);
-    this.camera.position.set(1.4, -0.7, 1);
+    this.camera = new THREE.PerspectiveCamera(80, canvas.width / canvas.height, 0.1, 200_000);
+    this.camera.position.set(20400, -700, 1200);
     this.camera.lookAt(0, 0, 0);
 
     this.movementInputHandler = new MovementInputHandler();
@@ -201,7 +257,7 @@ export class ArtistMapInst {
     // canvas.appendChild(this.stats.domElement);
 
     this.artistMeshes = (() => {
-      const geometry = new this.THREE.IcosahedronGeometry(ARTIST_GEOMETRY_SIZE, 1);
+      const geometry = new this.THREE.IcosahedronGeometry(ARTIST_GEOMETRY_SIZE, 4);
       const material = new this.THREE.MeshPhongMaterial({
         color: BASE_ARTIST_COLOR,
         // wireframe: true,
@@ -365,18 +421,14 @@ export class ArtistMapInst {
   }
 
   private async handleArtistData(artistData: ArtistMapDataWithId[]) {
-    // TODO: Decide if we actually want to render artist names or not based on distance or something
-
-    artistData.forEach(({ id: artistID, name }) => {
-      const data = this.artistDataByID.get(artistID);
-      if (!data) {
-        return;
-      }
-
-      this.renderArtistLabel(artistID, name, data.pos, data.popularity);
-    });
+    const curPos = this.controls.getObject().position;
     wasmClient
-      .handleReceivedArtistNames(new Uint32Array(artistData.map(({ id }) => id)))
+      .handleReceivedArtistNames(
+        new Uint32Array(artistData.map(({ id }) => id)),
+        curPos.x,
+        curPos.y,
+        curPos.z
+      )
       .then((drawCommands) => {
         if (drawCommands.length === 0) {
           return;
@@ -422,7 +474,6 @@ export class ArtistMapInst {
     const allArtistIDs = Array.from(
       new Set(artistRelationships.flatMap((datum) => [datum.id, ...datum.relatedArtists])).values()
     );
-    console.log('Fetching relationships');
     dataFetchClient.getOrFetchArtistRelationships(allArtistIDs);
   }
 
@@ -439,7 +490,7 @@ export class ArtistMapInst {
     const textMaterial = new this.THREE.MeshBasicMaterial({ color: 0xff2333 });
     const textGeometry = new this.THREE.TextGeometry(artistName, {
       font: this.font,
-      size: ARTIST_LABEL_TEXT_SIZE * Math.pow(popularity / 60, 4),
+      size: ARTIST_LABEL_TEXT_SIZE * Math.pow(popularity / 50, 3),
       height: 0.2,
       curveSegments: 1,
     });
@@ -603,8 +654,6 @@ export class ArtistMapInst {
     });
     this.artistMeshes.instanceMatrix.needsUpdate = true;
     this.artistMeshes.instanceColor!.needsUpdate = true;
-
-    console.log('Total rendered artist count: ', this.artistMeshes.count);
   }
 
   private darkenNonBloomed() {
@@ -653,14 +702,18 @@ export class ArtistMapInst {
         .multiplyScalar(MOVEMENT_SPEED_UNITS_PER_SECOND * forward)
     );
 
-    if (this.secondSinceLastPositionUpdate > SECONDS_BETWEEN_POSITION_UPDATES) {
+    if (
+      this.secondSinceLastPositionUpdate > SECONDS_BETWEEN_POSITION_UPDATES &&
+      !this.wasmPositionHandlerIsRunning
+    ) {
       this.secondSinceLastPositionUpdate = 0;
       const curPos = this.controls.getObject().position;
+      this.wasmPositionHandlerIsRunning = true;
       wasmClient.handleNewPosition(curPos.x, curPos.y, curPos.z).then((commands) => {
+        this.wasmPositionHandlerIsRunning = false;
         if (commands.length === 0) {
           return;
         }
-        console.log('Received commands count: ', commands.length);
         this.pendingDrawCommands.push(commands);
       });
     }
@@ -710,6 +763,7 @@ export class ArtistMapInst {
           if (label === 'FETCHING' || label === undefined) {
             throw new UnreachableException('Must have fetched label by now');
           } else if (label === null) {
+            console.log('Missing artist name for id=', artistID);
             // Spotify API must have missing data for this artist
             break;
           }
@@ -719,20 +773,34 @@ export class ArtistMapInst {
             throw new UnreachableException(`Missing data for artist id=${artistID}`);
           }
 
-          this.renderArtistLabel(artistID, label.name, artistData.pos, artistData.popularity);
+          const nameData = dataFetchClient.fetchedArtistDataByID.get(artistID);
+          if (!nameData || nameData === 'FETCHING') {
+            throw new UnreachableException('Must have fetched name by now');
+          }
+
+          this.eventRegistry.createLabel(artistID, nameData.name);
+          this.forceLabelsUpdate = true;
+
+          // this.renderArtistLabel(artistID, label.name, artistData.pos, artistData.popularity);
 
           break;
         }
         case DrawCommand.RemoveLabel: {
-          const label = this.renderedArtistLabelsByID.get(artistID);
-          if (!label) {
-            if (dataFetchClient.fetchedArtistDataByID.get(artistID) !== null) {
-              console.error("Tried to remove label that wasn't rendered; artist id=", artistID);
-            }
-            break;
-          }
-          this.renderedArtistLabelsByID.delete(artistID);
-          this.scene.remove(label.mesh);
+          // const label = this.renderedArtistLabelsByID.get(artistID);
+          // if (!label) {
+          //   if (dataFetchClient.fetchedArtistDataByID.get(artistID) !== null) {
+          //     console.error(
+          //       `Tried to remove label that wasn't rendered; artist id=${artistID},name=${JSON.stringify(
+          //         dataFetchClient.fetchedArtistDataByID.get(artistID)
+          //       )}`
+          //     );
+          //   }
+          //   break;
+          // }
+          // this.renderedArtistLabelsByID.delete(artistID);
+          // this.scene.remove(label.mesh);
+
+          this.eventRegistry.deleteLabel(artistID);
 
           break;
         }
@@ -755,8 +823,6 @@ export class ArtistMapInst {
       }
     }
 
-    console.log('LABEL COUNT:', this.renderedArtistLabelsByID.size);
-
     if (artistIDsToRender.length > 0) {
       this.renderArtists(artistIDsToRender);
     }
@@ -764,6 +830,8 @@ export class ArtistMapInst {
     if (artistIDsToFetch.length > 0) {
       dataFetchClient.getOrFetchArtistData(artistIDsToFetch);
     }
+
+    this.eventRegistry.flush();
   }
 
   private animate() {

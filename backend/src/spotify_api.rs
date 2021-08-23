@@ -325,7 +325,7 @@ pub(crate) async fn store_stats_snapshot(
             acc
         });
     let mapped_artist_spotify_ids =
-        crate::db_util::retrieve_mapped_spotify_ids(conn, genres_by_artist_id.keys()).await?;
+        crate::db_util::get_internal_ids_by_spotify_id(conn, genres_by_artist_id.keys()).await?;
 
     let artist_entries: Vec<NewArtistHistoryEntry> = stats
         .artists
@@ -364,7 +364,7 @@ pub(crate) async fn store_stats_snapshot(
         .flat_map(|(_artist_timeframe, tracks)| tracks.iter().map(|track| track.id.clone()))
         .collect::<Vec<_>>();
     let mapped_track_spotify_ids =
-        crate::db_util::retrieve_mapped_spotify_ids(conn, track_spotify_ids.iter()).await?;
+        crate::db_util::get_internal_ids_by_spotify_id(conn, track_spotify_ids.iter()).await?;
 
     // Create track/artist mapping entries for each (track, artist) pair
     let track_artist_pairs: Vec<TrackArtistPair> = stats

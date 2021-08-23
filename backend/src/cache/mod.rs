@@ -6,6 +6,8 @@ use serde_json;
 
 use crate::conf::CONF;
 
+pub mod local_cache;
+
 lazy_static::lazy_static! {
     pub static ref REDIS_CONN_POOL: r2d2::Pool<RedisConnectionManager> = {
         let manager = RedisConnectionManager::new(CONF.redis_url.as_str())

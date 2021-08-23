@@ -34,26 +34,26 @@ pub struct ArtistState {
 
 pub struct ArtistMapCtx {
     pub last_position: [f32; 3],
-    pub artists_by_id: HashMap<u32, &'static mut ArtistState>,
+    pub artists_indices_by_id: HashMap<u32, usize>,
     pub all_artists: Vec<(u32, ArtistState)>,
     pub partitions: PartitionedUniverse,
+    pub total_rendered_label_count: usize,
 }
 
 impl Default for ArtistMapCtx {
     fn default() -> Self {
         ArtistMapCtx {
             last_position: [f32::INFINITY, f32::INFINITY, f32::INFINITY],
-            artists_by_id: HashMap::new(),
+            artists_indices_by_id: HashMap::new(),
             all_artists: Vec::new(),
             partitions: unsafe { std::mem::MaybeUninit::uninit().assume_init() },
+            total_rendered_label_count: 0,
         }
     }
 }
 
 const DISTANCE_MULTIPLIER: f32 = 7430.;
-const LABEL_RENDER_DISTANCE: f32 = 7320.;
-const ARTIST_GEOMETRY_RENDER_DISTANCE: f32 = 14000.;
-const ARTIST_POPULARITY_RENDER_DISTANCE_COEFFICIENT: f32 = 1200.;
+const LABEL_RENDER_DISTANCE: f32 = 8320.;
 
 const DID_INIT: Once = Once::new();
 
@@ -64,6 +64,26 @@ fn maybe_init() {
             wasm_logger::init(wasm_logger::Config::default());
         }
     })
+}
+
+pub fn should_render_label(
+    total_rendered_label_count: usize,
+    artist_state: &ArtistState,
+    distance: f32,
+) -> bool {
+    if distance < 1000. {
+        return true;
+    }
+
+    let mut score = distance;
+
+    // Higher popularity artists show up further away
+    score -= (artist_state.popularity as f32).powi(2) * 2.2;
+
+    // If we're in a very dense area with many labels rendered, make it harder to render more
+    score += (total_rendered_label_count as f32).powf(1.3) * 20.2;
+
+    score <= LABEL_RENDER_DISTANCE
 }
 
 #[wasm_bindgen]
@@ -115,9 +135,9 @@ pub fn decode_and_record_packed_artist_positions(ctx: *mut ArtistMapCtx, packed:
             ctx.all_artists.push((id, state));
 
             let state_ref = &mut ctx.all_artists.last_mut().unwrap().1;
-            let state_ref: &'static mut ArtistState = std::mem::transmute(state_ref);
 
-            ctx.artists_by_id.insert(id, state_ref);
+            ctx.artists_indices_by_id
+                .insert(id, ctx.all_artists.len() - 1);
         }
     }
 
@@ -188,14 +208,20 @@ fn distance(a: &[f32; 3], b: &[f32; 3]) -> f32 {
 
 /// Returns a vector of draw commands
 #[wasm_bindgen]
-pub fn handle_received_artist_names(ctx: *mut ArtistMapCtx, artist_ids: Vec<u32>) -> Vec<u32> {
+pub fn handle_received_artist_names(
+    ctx: *mut ArtistMapCtx,
+    artist_ids: Vec<u32>,
+    cur_x: f32,
+    cur_y: f32,
+    cur_z: f32,
+) -> Vec<u32> {
     let ctx = unsafe { &mut *ctx };
 
     let mut draw_commands: Vec<u32> = Vec::new();
 
     for artist_id in artist_ids {
-        let artist_state = match ctx.artists_by_id.get_mut(&artist_id) {
-            Some(state) => state,
+        let artist_state = match ctx.artists_indices_by_id.get(&artist_id) {
+            Some(ix) => &mut ctx.all_artists[*ix].1,
             None => {
                 error!(
                     "Artist not in embedding but received name for it; artist_id={}",
@@ -219,12 +245,20 @@ pub fn handle_received_artist_names(ctx: *mut ArtistMapCtx, artist_ids: Vec<u32>
         artist_state
             .render_state
             .set(ArtistRenderState::HAS_NAME, true);
+
+        let distance = distance(&artist_state.position, &[cur_x, cur_y, cur_z]);
         if artist_state
             .render_state
             .contains(ArtistRenderState::RENDER_LABEL)
+            && should_render_label(ctx.total_rendered_label_count, artist_state, distance)
         {
+            ctx.total_rendered_label_count += 1;
             draw_commands.push(0);
             draw_commands.push(artist_id);
+        } else {
+            artist_state
+                .render_state
+                .set(ArtistRenderState::RENDER_LABEL, false);
         }
     }
 
@@ -271,7 +305,8 @@ pub fn handle_new_position(ctx: *mut ArtistMapCtx, cur_x: f32, cur_y: f32, cur_z
     for (artist_id, artist_state) in ctx.all_artists.iter_mut() {
         let distance = distance(&artist_state.position, &ctx.last_position);
 
-        let should_render_label = distance <= LABEL_RENDER_DISTANCE;
+        let should_render_label =
+            should_render_label(ctx.total_rendered_label_count, artist_state, distance);
         if should_render_label
             != artist_state
                 .render_state
@@ -288,6 +323,7 @@ pub fn handle_new_position(ctx: *mut ArtistMapCtx, cur_x: f32, cur_y: f32, cur_z
                 {
                     // Render artist label
                     render_commands.push(0);
+                    ctx.total_rendered_label_count += 1;
                 } else {
                     // Fetch artist name
                     render_commands.push(4);
@@ -295,6 +331,7 @@ pub fn handle_new_position(ctx: *mut ArtistMapCtx, cur_x: f32, cur_y: f32, cur_z
             } else {
                 // Remove artist label
                 render_commands.push(1);
+                ctx.total_rendered_label_count -= 1;
             }
             render_commands.push(*artist_id);
         }
