@@ -11,7 +11,8 @@ use crate::{
 };
 
 // const PACKED_3D_ARTIST_COORDS_URL: &str = "https://ameo.dev/artist_map_embedding_3d.w2v";
-const PACKED_3D_ARTIST_COORDS_URL: &str = "https://ameo.dev/pca.w2v";
+// const PACKED_3D_ARTIST_COORDS_URL: &str = "https://ameo.dev/pca.w2v";
+const PACKED_3D_ARTIST_COORDS_URL: &str = "https://ameo.dev/50k_corpus_4_dims_new_settings_pca.w2v";
 
 async fn build_3d_artist_map_ctx() -> ArtistEmbeddingContext<3> {
     let raw_positions: String = reqwest::get(PACKED_3D_ARTIST_COORDS_URL)

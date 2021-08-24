@@ -17,3 +17,48 @@
   node2vec = Node2Vec(graph, dimensions=3, walk_length=10, num_walks=15, workers=14)
 
   model = node2vec.fit(window=10, min_count=1, workers=14, hs=1, sg=1, alpha=0.1, min_alpha=0.01)
+
+50k_corppus_8_dims_new_settings:
+  node2vec = Node2Vec(graph, dimensions=8, walk_length=10, num_walks=15, workers=14)
+
+  model = node2vec.fit(window=10, min_count=1, workers=14, hs=1, sg=1)
+
+50k_corpus_16_dims_new_settings:
+  node2vec = Node2Vec(graph, dimensions=16, walk_length=10, num_walks=15, workers=14)
+
+  model = node2vec.fit(window=10, min_count=1, workers=14, hs=1, sg=1)
+
+50k_corpus_5_dims_new_settings:
+  node2vec = Node2Vec(graph, dimensions=5, walk_length=10, num_walks=15, workers=14)
+
+  model = node2vec.fit(window=10, min_count=1, workers=14, hs=1, sg=1)
+
+50k_corpus_4_dims_new_settings:
+  node2vec = Node2Vec(graph, dimensions=4, walk_length=10, num_walks=15, workers=14)
+
+  model = node2vec.fit(window=10, min_count=1, workers=14, hs=1, sg=1)
+
+50k_corpus_4_dims_new_settings_smaller_window:
+  node2vec = Node2Vec(graph, dimensions=4, walk_length=10, num_walks=15, workers=14)
+
+  model = node2vec.fit(window=5, min_count=1, workers=14, hs=1, sg=1)
+
+50k_corpus_4_dims_new_settings_tiny_window:
+  node2vec = Node2Vec(graph, dimensions=4, walk_length=10, num_walks=15, workers=14)
+
+  model = node2vec.fit(window=2, min_count=1, workers=14, hs=1, sg=1)
+
+50k_corpus_4_dims_new_settings_window_20:
+  node2vec = Node2Vec(graph, dimensions=4, walk_length=10, num_walks=15, workers=14)
+
+  model = node2vec.fit(window=20, min_count=1, workers=14, hs=1, sg=1)
+
+50k_corpus_4_dims_new_settings_window_7:
+  node2vec = Node2Vec(graph, dimensions=4, walk_length=10, num_walks=15, workers=14)
+
+  model = node2vec.fit(window=7, min_count=1, workers=14, hs=1, sg=1)
+
+100k_corpus_4_dims_new_settings_window_7:
+  node2vec = Node2Vec(graph, dimensions=4, walk_length=10, num_walks=15, workers=14)
+
+  model = node2vec.fit(window=7, min_count=1, workers=14, hs=1, sg=1)

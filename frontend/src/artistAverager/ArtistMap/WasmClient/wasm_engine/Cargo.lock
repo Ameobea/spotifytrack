@@ -42,10 +42,17 @@ version = "0.1.0"
 dependencies = [
  "bitflags",
  "console_error_panic_hook",
+ "float-ord",
  "log",
  "wasm-bindgen",
  "wasm-logger",
 ]
+
+[[package]]
+name = "float-ord"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8ce81f49ae8a0482e4c55ea62ebbd7e5a686af544c00b9d090bba3ff9be97b3d"
 
 [[package]]
 name = "js-sys"
