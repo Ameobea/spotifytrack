@@ -1,7 +1,7 @@
 export const BASE_ARTIST_COLOR = 0x22eecc;
 export const BASE_CONNECTION_COLOR = 0x2288ee;
 
-export const MOVEMENT_SPEED_UNITS_PER_SECOND = 48;
+export const MOVEMENT_SPEED_UNITS_PER_SECOND = 54;
 
 export const ARTIST_LABEL_TEXT_SIZE = 44.8;
 export const ARTIST_GEOMETRY_SIZE = 1.7;
@@ -21,5 +21,5 @@ export const getDistanceScaleFactor = (distance: number, popularity: number) => 
   score -= 1;
   score += (popularity / 100) * 2;
 
-  return Math.min(score, 8);
+  return Math.max(Math.min(score, 8), 0);
 };

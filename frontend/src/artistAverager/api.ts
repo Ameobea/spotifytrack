@@ -48,3 +48,6 @@ export const getArtistRelationshipsByInternalIDs = (internalIDs: number[]): Prom
 
 export const fetchPackedArtistPositions = (): Promise<ArrayBuffer> =>
   fetch(`${API_BASE_URL}/packed_3d_artist_coords`).then((res) => res.arrayBuffer());
+
+export const getPreviewURLsByInternalID = (internalID: number): Promise<string[] | null> =>
+  fetch(`${API_BASE_URL}/get_preview_urls_by_internal_id/${internalID}`).then((res) => res.json());

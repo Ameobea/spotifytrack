@@ -44,6 +44,13 @@ export class WasmClient {
   ) {
     return this.engine.handle_received_artist_names(this.ctxPtr, artistIDs, curX, curY, curZ);
   }
+
+  /**
+   * Returns set of draw commands to execute
+   */
+  public onMusicFinishedPlaying(artistID: number, [curX, curY, curZ]: [number, number, number]) {
+    return this.engine.on_music_finished_playing(this.ctxPtr, artistID, curX, curY, curZ);
+  }
 }
 
 const init = async () => {

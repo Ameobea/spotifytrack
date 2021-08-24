@@ -1624,3 +1624,43 @@ pub(crate) async fn get_artist_relationships_by_internal_ids(
     mark(first_tok, "FINISHED");
     Ok(Json(res))
 }
+
+#[get("/get_preview_urls_by_internal_id/<artist_internal_id>")]
+pub(crate) async fn get_preview_urls_by_internal_id(
+    conn: DbConn,
+    token_data: &State<Mutex<SpotifyTokenData>>,
+    artist_internal_id: i32,
+) -> Result<Json<Option<Vec<String>>>, String> {
+    let spotify_access_token = {
+        let token_data = &mut *(&*token_data).lock().await;
+        token_data.get().await
+    }?;
+
+    let spotify_ids_by_internal_id =
+        get_artist_spotify_ids_by_internal_id(&conn, vec![artist_internal_id])
+            .await
+            .map_err(|err| {
+                error!(
+                    "Error getting artist spotify IDs by internal IDs: {:?}",
+                    err
+                );
+                String::from("Internal DB error")
+            })?;
+
+    let spotify_id = match spotify_ids_by_internal_id.get(&artist_internal_id).cloned() {
+        Some(spotify_id) => spotify_id,
+        None => return Ok(Json(None)),
+    };
+
+    let top_tracks = fetch_top_tracks_for_artist(&spotify_access_token, &spotify_id).await?;
+    if top_tracks.is_empty() {
+        return Ok(Json(None));
+    }
+
+    Ok(Json(
+        top_tracks
+            .iter()
+            .map(|track| track.preview_url.clone())
+            .collect(),
+    ))
+}

@@ -21,6 +21,7 @@ import type { WasmClient } from './WasmClient/WasmClient.worker';
 import { filterNils, UnimplementedError, UnreachableException } from 'ameo-utils';
 import type { Scale } from 'chroma-js';
 import { UIEventRegistry } from './OverlayUI';
+import MusicManager from './MusicManager';
 
 interface ThreeExtra {
   PointerLockControls: typeof import('three/examples/jsm/controls/PointerLockControls')['PointerLockControls'];
@@ -56,7 +57,7 @@ const waitForWasmClientInitialization = async () => {
 
 export const initArtistMapInst = async (canvas: HTMLCanvasElement): Promise<ArtistMapInst> => {
   const [
-    totalArtistCount,
+    ,
     { THREE, PointerLockControls, Stats, RenderPass, ShaderPass, UnrealBloomPass, EffectComposer },
   ] = await Promise.all([
     fetchPackedArtistPositions().then(async (packedArtistPositions) => {
@@ -84,7 +85,7 @@ export const initArtistMapInst = async (canvas: HTMLCanvasElement): Promise<Arti
 
   const allArtistData = await wasmClient.getAllArtistData();
 
-  const inst = new ArtistMapInst(THREE, THREE_EXTRA, totalArtistCount, canvas, allArtistData);
+  const inst = new ArtistMapInst(THREE, THREE_EXTRA, canvas, allArtistData);
   // Render initial artists
   const initialArtistIDsToRender = await initialArtistIDsToRenderPromise.then((ids) => {
     // Optimization to allow us to start fetching artist data as soon as we have the IDs regardless of whether we've
@@ -107,6 +108,8 @@ enum DrawCommand {
   AddArtistGeometry = 2,
   RemoveArtistGeometry = 3,
   FetchArtistLabel = 4,
+  StartPlayingMusic = 5,
+  StopPlayingMusic = 6,
 }
 
 export class ArtistMapInst {
@@ -127,14 +130,12 @@ export class ArtistMapInst {
   private chroma: typeof import('chroma-js');
   private connectionColorScale: Scale;
 
-  private totalArtistCount: number;
   private renderedArtistIDs: Set<number> = new Set();
   private renderedConnectionsBySrcID: Map<number, number[]> = new Map();
   private bloomedConnectionsGeometry: THREE.BufferGeometry;
   private bloomedConnectionsMesh: THREE.Line;
   private nonBloomedConnectionsGeometry: THREE.BufferGeometry;
   private nonBloomedConnectionsMesh: THREE.Line;
-  private artistPointsGeometry: THREE.BufferGeometry;
   private artistDataByID: Map<number, { pos: THREE.Vector3; popularity: number }> = new Map();
   private pendingDrawCommands: Uint32Array[] = [];
   private renderedArtistLabelsByID: Map<
@@ -147,6 +148,8 @@ export class ArtistMapInst {
   private lastCameraPosition: THREE.Vector3;
   private forceLabelsUpdate = false;
   private wasmPositionHandlerIsRunning = false;
+
+  private musicManager: MusicManager;
 
   public eventRegistry: UIEventRegistry = new UIEventRegistry(
     (labelID: string | number) => {
@@ -201,7 +204,6 @@ export class ArtistMapInst {
   constructor(
     THREE: typeof import('three'),
     THREE_EXTRA: ThreeExtra,
-    totalArtistCount: number,
     canvas: HTMLCanvasElement,
     allArtistData: Float32Array
   ) {
@@ -215,22 +217,20 @@ export class ArtistMapInst {
       this.connectionColorScale = this.chroma.scale(['red', 'green', 'blue']).domain([0, 1]);
     });
 
-    this.totalArtistCount = totalArtistCount;
-
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(window.devicePixelRatio);
     // this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // TODO: Remove
     this.renderer.toneMapping = THREE.ReinhardToneMapping;
     this.clock = new THREE.Clock();
 
-    this.camera = new THREE.PerspectiveCamera(80, canvas.width / canvas.height, 0.1, 200_000);
+    this.camera = new THREE.PerspectiveCamera(92, canvas.width / canvas.height, 0.1, 200_000);
     this.camera.position.set(20400, -700, 1200);
     this.camera.lookAt(0, 0, 0);
 
     this.movementInputHandler = new MovementInputHandler();
 
     this.scene = new THREE.Scene();
-    this.scene.fog = new this.THREE.Fog(0x000000, 1, 172_000);
+    this.scene.fog = new this.THREE.Fog(0x000000, 1, 472_000);
 
     const light = new THREE.AmbientLight(0x404040); // soft white light
     this.scene.add(light);
@@ -257,7 +257,7 @@ export class ArtistMapInst {
     // canvas.appendChild(this.stats.domElement);
 
     this.artistMeshes = (() => {
-      const geometry = new this.THREE.IcosahedronGeometry(ARTIST_GEOMETRY_SIZE, 4);
+      const geometry = new this.THREE.IcosahedronGeometry(ARTIST_GEOMETRY_SIZE, 2);
       const material = new this.THREE.MeshPhongMaterial({
         color: BASE_ARTIST_COLOR,
         // wireframe: true,
@@ -325,17 +325,9 @@ export class ArtistMapInst {
       );
     }
 
-    this.artistPointsGeometry = new this.THREE.BufferGeometry();
-    // this.artistPointsGeometry.setAttribute('position', artistPointsPositionsAttribute);
-    // const pointMaterial = new this.THREE.PointsMaterial({
-    //   color: 0x11ee33,
-    //   size: 1,
-    //   sizeAttenuation: true,
-    // });
-    // const pointMesh = new this.THREE.Points(this.artistPointsGeometry, pointMaterial);
-    // this.scene.add(pointMesh);
-
     this.initBloomPass();
+
+    this.musicManager = new MusicManager();
 
     this.initAsync();
 
@@ -555,7 +547,7 @@ export class ArtistMapInst {
 
         const isBloomed = (() => {
           // TODO: Make this better
-          if (distance < 2600) {
+          if (distance < 3600) {
             return true;
           }
 
@@ -741,6 +733,14 @@ export class ArtistMapInst {
       mesh.matrixAutoUpdate = false;
     });
 
+    const cameraDirection = this.camera.getWorldDirection(new this.THREE.Vector3());
+    const cameraUp = this.camera.up;
+    this.musicManager.setListenerPosition(
+      this.controls.getObject().position,
+      cameraDirection,
+      cameraUp
+    );
+
     this.darkenNonBloomed();
     this.bloomComposer.render();
     this.restoreNonBloomed();
@@ -748,6 +748,10 @@ export class ArtistMapInst {
   }
 
   private processDrawCommands(commands: Uint32Array) {
+    if (commands.length % 2 !== 0) {
+      throw new UnreachableException('Invalid command count');
+    }
+
     const cmdCount = commands.length / 2;
 
     const artistIDsToRender = [];
@@ -815,6 +819,16 @@ export class ArtistMapInst {
         }
         case DrawCommand.FetchArtistLabel: {
           artistIDsToFetch.push(artistID);
+          break;
+        }
+        // TODO: Make the playing artist glow or something so we know which one is playing
+        case DrawCommand.StartPlayingMusic: {
+          const artistPos = this.artistDataByID.get(artistID)!.pos;
+          this.musicManager.startPlaying(artistID, artistPos);
+          break;
+        }
+        case DrawCommand.StopPlayingMusic: {
+          this.musicManager.stopPlaying(artistID);
           break;
         }
         default: {
