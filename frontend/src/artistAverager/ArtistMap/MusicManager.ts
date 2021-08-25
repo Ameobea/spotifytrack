@@ -2,9 +2,12 @@
  * Keeps track of which artist's music is currently playing and handles fading in/out when changing which artist is playing.
  */
 
-import { UnreachableException } from 'ameo-utils';
-
 import { getPreviewURLsByInternalID } from '../api';
+import {
+  MUSIC_DISTANCE_ROLLOFF_FACTOR,
+  MUSIC_FADE_IN_TIME_SECS,
+  MUSIC_FADE_OUT_TIME_SECS,
+} from './conf';
 
 interface PlayingArtist {
   artistID: number;
@@ -48,26 +51,42 @@ export default class MusicManager {
     listener.upZ.value = cameraUp.z;
   }
 
-  public async startPlaying(artistID: number, pos: { x: number; y: number; z: number }) {
+  public async startPlaying(
+    artistID: number,
+    pos: { x: number; y: number; z: number },
+    onEnded: () => void
+  ) {
+    console.log(`start playback; artistID=${artistID}`);
     if (this.curPlaying) {
-      throw new UnreachableException(
-        'Tried to start playing while a different artist was already playing'
+      console.warn(
+        `Tried to start playing while a different artist was already playing; cur_playing=${this.curPlaying.artistID}, requested=${artistID}`
       );
+      return;
     }
 
     const panner = this.ctx.createPanner();
     panner.panningModel = 'equalpower';
     panner.distanceModel = 'linear';
     panner.refDistance = 1;
-    panner.rolloffFactor = 10;
+    panner.rolloffFactor = MUSIC_DISTANCE_ROLLOFF_FACTOR;
 
     panner.positionX.value = pos.x;
     panner.positionY.value = pos.y;
     panner.positionZ.value = pos.z;
 
     const previewURLs = await getPreviewURLsByInternalID(artistID);
-    if (!previewURLs) {
-      // TODO: Send message back to Wasm
+    if (!previewURLs || previewURLs.length === 0) {
+      console.log('No preview URLs for artist_id=', artistID);
+      onEnded();
+      return;
+    }
+
+    // Check to see if we were too slow and someone else beat us to start playing
+    if ((this.curPlaying as PlayingArtist | null)?.artistID) {
+      console.warn(
+        `Cur playing artist changed while we were fetching; aborting playback.  artist_id=${artistID}`
+      );
+      onEnded();
       return;
     }
 
@@ -77,13 +96,17 @@ export default class MusicManager {
     audioElement.crossOrigin = 'anonymous';
     const track = this.ctx.createMediaElementSource(audioElement);
     track.connect(panner);
+    audioElement.addEventListener('ended', () => {
+      onEnded();
+      if (this.curPlaying?.artistID === artistID) {
+        this.curPlaying = null;
+      }
+    });
     audioElement.play();
 
-    // TODO: Add event listener to fire back to wasm when playback finishes. Make sure it's cancelled if playback ends early.
-
     const gain = this.ctx.createGain();
-    // TODO: Fade in
-    gain.gain.value = 1;
+    gain.gain.setValueAtTime(0, this.ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(1, this.ctx.currentTime + MUSIC_FADE_IN_TIME_SECS);
     panner.connect(gain);
     gain.connect(this.mainGain);
 
@@ -91,19 +114,26 @@ export default class MusicManager {
   }
 
   public stopPlaying(artistID: number) {
-    if (this.curPlaying && this.curPlaying.artistID !== artistID) {
-      throw new UnreachableException(
-        'Tried to stop playing while a different artist was already playing'
-      );
-    }
-
-    if (!this.curPlaying) {
+    console.log(`stop playback; artistID=${artistID}, curID=${this.curPlaying?.artistID}`);
+    if (!this.curPlaying || this.curPlaying.artistID !== artistID) {
+      if (this.curPlaying)
+        console.warn(
+          `Not stopping playback because cur playing ID doesn't match; cur=${this.curPlaying?.artistID}, requested=${artistID}`
+        );
       return;
     }
 
-    // TODO: fade out
-    this.curPlaying.gain.disconnect(this.mainGain);
-    this.curPlaying.panner.disconnect(this.curPlaying.gain);
+    const curPlaying = this.curPlaying;
     this.curPlaying = null;
+
+    curPlaying.gain.gain.cancelScheduledValues(0);
+    curPlaying.gain.gain.linearRampToValueAtTime(
+      0,
+      this.ctx.currentTime + MUSIC_FADE_OUT_TIME_SECS
+    );
+    setTimeout(() => {
+      curPlaying.gain.disconnect(this.mainGain);
+      curPlaying.panner.disconnect(curPlaying.gain);
+    }, MUSIC_FADE_OUT_TIME_SECS * 1000);
   }
 }

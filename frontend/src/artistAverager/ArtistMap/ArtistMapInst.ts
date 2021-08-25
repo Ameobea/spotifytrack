@@ -1,25 +1,21 @@
 import type { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls';
 import type { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer';
 import * as Comlink from 'comlink';
+import { UnimplementedError, UnreachableException } from 'ameo-utils';
+import type { Scale } from 'chroma-js';
 
 import { fetchPackedArtistPositions } from '../api';
 import {
   ARTIST_GEOMETRY_SIZE,
-  ARTIST_LABEL_TEXT_SIZE,
   BASE_ARTIST_COLOR,
   BASE_CONNECTION_COLOR,
   getArtistSize,
   MOVEMENT_SPEED_UNITS_PER_SECOND,
   SECONDS_BETWEEN_POSITION_UPDATES,
 } from './conf';
-import DataFetchClient, {
-  ArtistMapDataWithId,
-  ArtistRelationshipDataWithId,
-} from './DataFetchClient';
+import DataFetchClient, { ArtistMapDataWithId, ArtistRelationshipData } from './DataFetchClient';
 import { MovementInputHandler } from './MovementInputHandler';
 import type { WasmClient } from './WasmClient/WasmClient.worker';
-import { filterNils, UnimplementedError, UnreachableException } from 'ameo-utils';
-import type { Scale } from 'chroma-js';
 import { UIEventRegistry } from './OverlayUI';
 import MusicManager from './MusicManager';
 
@@ -91,7 +87,7 @@ export const initArtistMapInst = async (canvas: HTMLCanvasElement): Promise<Arti
     // Optimization to allow us to start fetching artist data as soon as we have the IDs regardless of whether we've
     // finished fetching the wasm client, three, packed artist positions, etc.
     dataFetchClient.getOrFetchArtistData(ids);
-    dataFetchClient.getOrFetchArtistRelationships(ids);
+    dataFetchClient.fetchArtistRelationships(ids);
 
     return ids;
   });
@@ -122,26 +118,19 @@ export class ArtistMapInst {
   private isPointerLocked = false;
   private bloomComposer: EffectComposer;
   private finalComposer: EffectComposer;
-  private font: THREE.Font;
   private clock: THREE.Clock;
   private timeElapsed = 0;
   private secondSinceLastPositionUpdate = 0;
-  private stats: ReturnType<ThreeExtra['Stats']>;
   private chroma: typeof import('chroma-js');
   private connectionColorScale: Scale;
 
-  private renderedArtistIDs: Set<number> = new Set();
-  private renderedConnectionsBySrcID: Map<number, number[]> = new Map();
+  private renderedArtistBufferIndicesByArtistID: Map<number, number> = new Map();
   private bloomedConnectionsGeometry: THREE.BufferGeometry;
   private bloomedConnectionsMesh: THREE.Line;
   private nonBloomedConnectionsGeometry: THREE.BufferGeometry;
   private nonBloomedConnectionsMesh: THREE.Line;
   private artistDataByID: Map<number, { pos: THREE.Vector3; popularity: number }> = new Map();
   private pendingDrawCommands: Uint32Array[] = [];
-  private renderedArtistLabelsByID: Map<
-    number,
-    { mesh: THREE.Mesh; pos: THREE.Vector3; width: number }
-  > = new Map();
   private artistMeshes: THREE.InstancedMesh;
   private movementInputHandler: MovementInputHandler;
   private lastCameraDirection: THREE.Vector3;
@@ -224,7 +213,11 @@ export class ArtistMapInst {
     this.clock = new THREE.Clock();
 
     this.camera = new THREE.PerspectiveCamera(92, canvas.width / canvas.height, 0.1, 200_000);
-    this.camera.position.set(20400, -700, 1200);
+    this.camera.position.set(
+      (Math.random() - 0.5) * 80_000,
+      (Math.random() - 0.5) * 80_000,
+      (Math.random() - 0.5) * 80_000
+    );
     this.camera.lookAt(0, 0, 0);
 
     this.movementInputHandler = new MovementInputHandler();
@@ -329,7 +322,10 @@ export class ArtistMapInst {
 
     this.musicManager = new MusicManager();
 
-    this.initAsync();
+    dataFetchClient.registerCallbacks(
+      (data) => this.handleArtistData(data),
+      (data) => this.handleArtistRelationships(data)
+    );
 
     this.animate();
   }
@@ -395,23 +391,6 @@ export class ArtistMapInst {
     this.finalComposer.addPass(finalPass);
   }
 
-  private loadFont(): Promise<THREE.Font> {
-    return new Promise((resolve) => {
-      const fontLoader = new this.THREE.FontLoader();
-      fontLoader.load('/optimer_regular.typeface.json', resolve);
-    });
-  }
-
-  private async initAsync() {
-    this.font = await this.loadFont();
-
-    // We're now able to actually render artist labels, so register the data fetch client callbacks
-    dataFetchClient.registerCallbacks(
-      (data) => this.handleArtistData(data),
-      (data) => this.handleArtistRelationships(data)
-    );
-  }
-
   private async handleArtistData(artistData: ArtistMapDataWithId[]) {
     const curPos = this.controls.getObject().position;
     wasmClient
@@ -428,209 +407,50 @@ export class ArtistMapInst {
 
         this.pendingDrawCommands.push(drawCommands);
       });
-    // dataFetchClient.getOrFetchArtistRelationships(artistIDs);
   }
 
-  private async handleArtistRelationships(artistRelationships: ArtistRelationshipDataWithId[]) {
-    // TODO: Decide if we actually want to render the artists or not based on distance or something
+  private async handleArtistRelationships(relationshipData: ArtistRelationshipData) {
+    const artistIDs = new Uint32Array(relationshipData.artistIDs);
+    const packedRelationshipData = new Uint8Array(relationshipData.res);
 
-    // TODO: Render connections between artists
-
-    const connsToRender = artistRelationships.flatMap(({ id, relatedArtists }) => {
-      const data = this.artistDataByID.get(id);
-      if (!data) {
-        return [];
-      }
-      const artistPosition = data.pos;
-
-      return filterNils(
-        relatedArtists.map((relatedID) => {
-          const relatedData = this.artistDataByID.get(relatedID);
-          if (!relatedData) {
-            return null;
-          }
-          const relatedPosition = relatedData.pos;
-
-          return {
-            artist1ID: id,
-            artist2ID: relatedID,
-            artist1Pos: artistPosition,
-            artist2Pos: relatedPosition,
-          };
-        })
-      );
-    });
-    this.renderConnections(connsToRender);
-
-    // dataFetchClient.getOrFetchArtistData(allArtistIDs);
-    const allArtistIDs = Array.from(
-      new Set(artistRelationships.flatMap((datum) => [datum.id, ...datum.relatedArtists])).values()
-    );
-    dataFetchClient.getOrFetchArtistRelationships(allArtistIDs);
-  }
-
-  private renderArtistLabel(
-    artistID: number,
-    artistName: string,
-    artistPosition: THREE.Vector3,
-    popularity: number
-  ) {
-    if (this.renderedArtistLabelsByID.has(artistID)) {
-      return;
-    }
-
-    const textMaterial = new this.THREE.MeshBasicMaterial({ color: 0xff2333 });
-    const textGeometry = new this.THREE.TextGeometry(artistName, {
-      font: this.font,
-      size: ARTIST_LABEL_TEXT_SIZE * Math.pow(popularity / 50, 3),
-      height: 0.2,
-      curveSegments: 1,
-    });
-    const textMesh = new this.THREE.Mesh(textGeometry, textMaterial);
-    // Create a bounding box to measure the text so we can know how wide it is in order to
-    // accurately center it
-    const bbox = new this.THREE.Box3().setFromObject(textMesh);
-    const dims = new this.THREE.Vector3();
-    bbox.getSize(dims);
-    const width = dims.x;
-
-    // The label's position is set every frame in the render function
-    this.scene.add(textMesh);
-
-    this.renderedArtistLabelsByID.set(artistID, {
-      mesh: textMesh,
-      pos: artistPosition,
-      width,
-    });
-  }
-
-  public renderConnections(
-    connections: {
-      artist1ID: number;
-      artist1Pos: THREE.Vector3;
-      artist2ID: number;
-      artist2Pos: THREE.Vector3;
-    }[]
-  ) {
-    const existingBloomed = this.bloomedConnectionsGeometry.getAttribute('position') as
-      | THREE.Float32BufferAttribute
-      | undefined;
-    const existingBloomedCount = existingBloomed?.array.length ?? 0;
-
-    const existingNonBloomed = this.nonBloomedConnectionsGeometry.getAttribute('position') as
-      | THREE.Float32BufferAttribute
-      | undefined;
-    const existingNonBloomedCount = existingNonBloomed?.array.length ?? 0;
-
-    let bloomedUpdated = false;
-    let nonBloomedUpdated = false;
-
-    const allToRender = filterNils(
-      connections.map(({ artist1ID, artist2ID, artist1Pos, artist2Pos }) => {
-        if (
-          this.renderedConnectionsBySrcID.get(artist1ID)?.includes(artist2ID) ||
-          this.renderedConnectionsBySrcID.get(artist2ID)?.includes(artist1ID)
-        ) {
-          return null;
-        }
-
-        // Prune very long distance connections to de-clutter the universe
-        const distance = artist1Pos.distanceTo(artist2Pos);
-        if (distance > 8_000) {
-          // return null;
-        }
-
-        if (!this.renderedConnectionsBySrcID.has(artist1ID)) {
-          this.renderedConnectionsBySrcID.set(artist1ID, []);
-        }
-        this.renderedConnectionsBySrcID.get(artist1ID)!.push(artist2ID);
-
-        const isBloomed = (() => {
-          // TODO: Make this better
-          if (distance < 3600) {
-            return true;
-          }
-
-          return false; // TODO
-        })();
-
-        if (isBloomed) {
-          bloomedUpdated = true;
-        } else {
-          nonBloomedUpdated = true;
-        }
-
-        return { artist1ID, artist2ID, artist1Pos, artist2Pos, isBloomed };
-      })
+    const bytesToSkip = artistIDs.length + (artistIDs.length % 4);
+    const u32Offset = bytesToSkip / 4;
+    const allArtistIDs = new Uint32Array(packedRelationshipData.buffer).subarray(u32Offset);
+    const artistIDsToRecursivelyRequest = [...new Set(allArtistIDs)].filter((id) =>
+      this.artistDataByID.has(id)
     );
 
-    if (bloomedUpdated) {
-      const toRender = allToRender.filter(({ isBloomed }) => isBloomed);
-
-      const newPositions = new Float32Array(existingBloomedCount + toRender.length * 6);
-      if (existingBloomed) {
-        newPositions.set(existingBloomed.array);
-      }
-      let startIx = existingBloomedCount;
-      toRender.forEach((connection) => {
-        newPositions[startIx + 0] = connection.artist1Pos.x;
-        newPositions[startIx + 1] = connection.artist1Pos.y;
-        newPositions[startIx + 2] = connection.artist1Pos.z;
-
-        newPositions[startIx + 3] = connection.artist2Pos.x;
-        newPositions[startIx + 4] = connection.artist2Pos.y;
-        newPositions[startIx + 5] = connection.artist2Pos.z;
-
-        startIx += 6;
+    wasmClient
+      .handleArtistRelationshipData(
+        Comlink.transfer(artistIDs, [artistIDs.buffer]),
+        Comlink.transfer(packedRelationshipData, [packedRelationshipData.buffer])
+      )
+      .then((connectionsDataBuffer) => {
+        this.bloomedConnectionsGeometry.setAttribute(
+          'position',
+          new this.THREE.BufferAttribute(connectionsDataBuffer, 3)
+        );
+        this.bloomedConnectionsGeometry.computeBoundingSphere();
       });
 
-      const newAttr = new this.THREE.BufferAttribute(newPositions, 3);
-      this.bloomedConnectionsGeometry.setAttribute('position', newAttr);
-      this.bloomedConnectionsGeometry.computeBoundingSphere();
-    }
-
-    if (nonBloomedUpdated) {
-      const toRender = allToRender.filter(({ isBloomed }) => !isBloomed);
-
-      const newPositions = new Float32Array(existingNonBloomedCount + toRender.length * 6);
-      if (existingNonBloomed) {
-        newPositions.set(existingNonBloomed.array);
-      }
-      let startIx = existingNonBloomedCount;
-      toRender.forEach((connection) => {
-        newPositions[startIx + 0] = connection.artist1Pos.x;
-        newPositions[startIx + 1] = connection.artist1Pos.y;
-        newPositions[startIx + 2] = connection.artist1Pos.z;
-
-        newPositions[startIx + 3] = connection.artist2Pos.x;
-        newPositions[startIx + 4] = connection.artist2Pos.y;
-        newPositions[startIx + 5] = connection.artist2Pos.z;
-
-        startIx += 6;
-      });
-
-      const newAttr = new this.THREE.BufferAttribute(newPositions, 3);
-      this.nonBloomedConnectionsGeometry.setAttribute('position', newAttr);
-      this.nonBloomedConnectionsGeometry.computeBoundingSphere();
+    // Recursively fetch artist IDs to grow the graph
+    if (artistIDsToRecursivelyRequest.length > 0) {
+      dataFetchClient.fetchArtistRelationships(artistIDsToRecursivelyRequest);
     }
   }
 
   public renderArtists(artistInternalIDs: number[]) {
     // Skip artists that are already rendered
-    const artistsToRender = artistInternalIDs.filter((id) => {
-      if (!this.renderedArtistIDs.has(id)) {
-        this.renderedArtistIDs.add(id);
-        return true;
-      }
-      return false;
-    });
+    const artistsToRender = artistInternalIDs.filter(
+      (id) => !this.renderedArtistBufferIndicesByArtistID.has(id)
+    );
 
     const startIx = this.artistMeshes.count;
     this.artistMeshes.count = startIx + artistsToRender.length;
 
     const matrix = new this.THREE.Matrix4();
 
-    const artistColor = new this.THREE.Color(/* BASE_ARTIST_COLOR */);
+    const artistColor = new this.THREE.Color(BASE_ARTIST_COLOR);
     artistsToRender.forEach((id, i) => {
       const artistData = this.artistDataByID.get(id);
       if (!artistData) {
@@ -643,24 +463,17 @@ export class ArtistMapInst {
       matrix.setPosition(artistData.pos);
       this.artistMeshes.setMatrixAt(startIx + i, matrix);
       this.artistMeshes.setColorAt(startIx + i, artistColor);
+      this.renderedArtistBufferIndicesByArtistID.set(id, startIx + i);
     });
     this.artistMeshes.instanceMatrix.needsUpdate = true;
     this.artistMeshes.instanceColor!.needsUpdate = true;
   }
 
   private darkenNonBloomed() {
-    this.renderedArtistLabelsByID.forEach(({ mesh }) => {
-      (mesh as any).materialOld = mesh.material;
-      mesh.material = new this.THREE.MeshBasicMaterial({ color: 0x000000 });
-    });
     (this.nonBloomedConnectionsMesh.material as THREE.LineBasicMaterial).color.set(0);
   }
 
   private restoreNonBloomed() {
-    this.renderedArtistLabelsByID.forEach(({ mesh }) => {
-      mesh.material = (mesh as any).materialOld;
-    });
-
     (this.nonBloomedConnectionsMesh
       .material as THREE.LineBasicMaterial).color = new this.THREE.Color(0xa1fc03);
     (this.nonBloomedConnectionsMesh.material as THREE.LineBasicMaterial).needsUpdate = true;
@@ -709,29 +522,6 @@ export class ArtistMapInst {
         this.pendingDrawCommands.push(commands);
       });
     }
-
-    // Make all labels appear above their respective artists and face the camera
-    this.renderedArtistLabelsByID.forEach(({ mesh, pos, width }) => {
-      const cameraOffset = this.camera.position.clone().sub(pos);
-      const inverseCameraPos = pos.clone().sub(cameraOffset.multiplyScalar(2));
-
-      mesh.matrix.copy(mesh.matrix.lookAt(pos, inverseCameraPos, this.camera.up));
-      mesh.matrix.setPosition(
-        pos
-          .clone()
-          // Move the label up with respect to the camera, less distance the closer it is
-          .add(this.camera.up.clone().multiplyScalar(8))
-          // And move it left to center it
-          .add(
-            this.camera.up
-              .clone()
-              .cross(cameraOffset)
-              .normalize()
-              .multiplyScalar(-0.5 * width)
-          )
-      );
-      mesh.matrixAutoUpdate = false;
-    });
 
     const cameraDirection = this.camera.getWorldDirection(new this.THREE.Vector3());
     const cameraUp = this.camera.up;
@@ -785,25 +575,9 @@ export class ArtistMapInst {
           this.eventRegistry.createLabel(artistID, nameData.name);
           this.forceLabelsUpdate = true;
 
-          // this.renderArtistLabel(artistID, label.name, artistData.pos, artistData.popularity);
-
           break;
         }
         case DrawCommand.RemoveLabel: {
-          // const label = this.renderedArtistLabelsByID.get(artistID);
-          // if (!label) {
-          //   if (dataFetchClient.fetchedArtistDataByID.get(artistID) !== null) {
-          //     console.error(
-          //       `Tried to remove label that wasn't rendered; artist id=${artistID},name=${JSON.stringify(
-          //         dataFetchClient.fetchedArtistDataByID.get(artistID)
-          //       )}`
-          //     );
-          //   }
-          //   break;
-          // }
-          // this.renderedArtistLabelsByID.delete(artistID);
-          // this.scene.remove(label.mesh);
-
           this.eventRegistry.deleteLabel(artistID);
 
           break;
@@ -824,7 +598,13 @@ export class ArtistMapInst {
         // TODO: Make the playing artist glow or something so we know which one is playing
         case DrawCommand.StartPlayingMusic: {
           const artistPos = this.artistDataByID.get(artistID)!.pos;
-          this.musicManager.startPlaying(artistID, artistPos);
+          this.musicManager.startPlaying(artistID, artistPos, () =>
+            wasmClient
+              .onMusicFinishedPlaying(artistID, [artistPos.x, artistPos.y, artistPos.z])
+              .then((commands) => {
+                this.pendingDrawCommands.push(commands);
+              })
+          );
           break;
         }
         case DrawCommand.StopPlayingMusic: {

@@ -40,11 +40,11 @@ export const getArtistDataByInternalIDs = (internalIDs: number[]): Promise<(stri
     body: JSON.stringify(internalIDs),
   }).then((res) => res.json());
 
-export const getArtistRelationshipsByInternalIDs = (internalIDs: number[]): Promise<number[][]> =>
+export const getArtistRelationshipsByInternalIDs = (internalIDs: number[]): Promise<ArrayBuffer> =>
   fetch(`${API_BASE_URL}/map_artist_relationships_by_internal_ids`, {
     method: 'POST',
     body: JSON.stringify(internalIDs),
-  }).then((res) => res.json());
+  }).then((res) => res.arrayBuffer());
 
 export const fetchPackedArtistPositions = (): Promise<ArrayBuffer> =>
   fetch(`${API_BASE_URL}/packed_3d_artist_coords`).then((res) => res.arrayBuffer());

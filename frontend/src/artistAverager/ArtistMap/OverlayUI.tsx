@@ -6,16 +6,23 @@ import './OverlayUI.scss';
 interface LabelProps {
   id: string | number;
   text: string;
+  eventRegistry: UIEventRegistry;
+  width: number;
+  height: number;
 }
 
-const Label: React.FC<LabelProps> = ({ id, text }) => (
-  <div className="artist-map-label" data-artist-id={id}>
+const Label: React.FC<LabelProps> = ({ id, text, eventRegistry, width, height }) => (
+  <div
+    ref={(node) => node && setLabelStyle(eventRegistry, node, width, height)}
+    className="artist-map-label"
+    data-artist-id={id}
+  >
     {text}
   </div>
 );
 
 interface State {
-  labels: { [id: string]: LabelProps };
+  labels: { [id: string]: { id: string | number; text: string } };
 }
 
 type Action =
@@ -118,6 +125,39 @@ const measureText: (text: string) => number = (() => {
   };
 })();
 
+const setLabelStyle = (
+  eventRegistry: UIEventRegistry,
+  node: HTMLElement,
+  width: number,
+  height: number
+) => {
+  const rawID = node.getAttribute('data-artist-id');
+  if (rawID === null) {
+    console.error('Missing "data-artist-id" attribute on label');
+    return;
+  }
+
+  const id = Number.isNaN(+rawID) ? rawID : +rawID;
+  const { x, y, shouldRender, distance, popularity } = eventRegistry.getLabelPosition(id);
+  const scale = getDistanceScaleFactor(distance, popularity);
+
+  if (
+    !shouldRender ||
+    x < -0.2 * width ||
+    x > 1.2 * width ||
+    y < -0.2 * height ||
+    y > 1.2 * height
+  ) {
+    node.style.display = 'none';
+  } else {
+    node.style.display = 'block';
+    node.style.left = `${x - (measureText(node.innerText) * scale) / 2}px`;
+    node.style.top = `${y}px`;
+    node.style.transform = `scale(${scale})`;
+    node.style.zIndex = `${Math.round(9_100_000 - distance)}`;
+  }
+};
+
 const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height }) => {
   const [state, dispatch] = useReducer(reducer, initialState);
 
@@ -144,33 +184,7 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height }) =
 
       const allLabels: NodeListOf<HTMLDivElement> = document.querySelectorAll('.artist-map-label');
 
-      allLabels.forEach((node) => {
-        const rawID = node.getAttribute('data-artist-id');
-        if (rawID === null) {
-          console.error('Missing "data-artist-id" attribute on label');
-          return;
-        }
-
-        const id = Number.isNaN(+rawID) ? rawID : +rawID;
-        const { x, y, shouldRender, distance, popularity } = eventRegistry.getLabelPosition(id);
-        const scale = getDistanceScaleFactor(distance, popularity);
-
-        if (
-          !shouldRender ||
-          x < -0.2 * width ||
-          x > 1.2 * width ||
-          y < -0.2 * height ||
-          y > 1.2 * height
-        ) {
-          node.style.display = 'none';
-        } else {
-          node.style.display = 'block';
-          node.style.left = `${x - (measureText(node.innerText) * scale) / 2}px`;
-          node.style.top = `${y}px`;
-          node.style.transform = `scale(${scale})`;
-          node.style.zIndex = `${Math.round(9_100_000 - distance)}`;
-        }
-      });
+      allLabels.forEach((node) => setLabelStyle(eventRegistry, node, width, height));
     };
 
     const handle = requestAnimationFrame(updateLabelPositions);
@@ -183,7 +197,16 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height }) =
   return (
     <div className="artist-map-overlay-ui" style={{ width, height }}>
       {Object.entries(state.labels).map(([id, { text }]) => {
-        return <Label key={id} id={id} text={text} />;
+        return (
+          <Label
+            key={id}
+            id={id}
+            text={text}
+            eventRegistry={eventRegistry}
+            width={width}
+            height={height}
+          />
+        );
       })}
     </div>
   );

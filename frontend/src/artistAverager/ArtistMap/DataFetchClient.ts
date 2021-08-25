@@ -17,11 +17,8 @@ export interface ArtistMapDataWithId extends ArtistMapData {
 }
 
 export interface ArtistRelationshipData {
-  relatedArtists: number[];
-}
-
-export interface ArtistRelationshipDataWithId extends ArtistRelationshipData {
-  id: number;
+  artistIDs: number[];
+  res: ArrayBuffer;
 }
 
 const MAX_CONCURRENT_REQUESTS = { data: 4, relationship: 2 };
@@ -29,13 +26,10 @@ const CHUNK_SIZE = 450;
 
 export default class DataFetchClient {
   public fetchedArtistDataByID: Map<number, ArtistMapData | null | 'FETCHING'> = new Map();
-  private fetchedArtistRelationshipsByID: Map<
-    number,
-    ArtistRelationshipData | 'FETCHING'
-  > = new Map();
+  private fetchedArtistRelationships: Set<number> = new Set();
 
   private artistDataCallback: ((data: ArtistMapData[]) => void) | null;
-  private artistRelationshipsCallback: ((data: ArtistRelationshipData[]) => void) | null;
+  private artistRelationshipsCallback: ((data: ArtistRelationshipData) => void) | null;
 
   private pendingArtistData: ArtistMapData[] = [];
   private pendingArtistRelationships: ArtistRelationshipData[] = [];
@@ -82,7 +76,7 @@ export default class DataFetchClient {
 
   public registerCallbacks(
     artistDataCallback: (data: ArtistMapDataWithId[]) => void,
-    artistRelationshipsCallback: (data: ArtistRelationshipDataWithId[]) => void
+    artistRelationshipsCallback: (data: ArtistRelationshipData) => void
   ) {
     if (this.artistDataCallback || this.artistRelationshipsCallback) {
       throw new Error('Cannot register callback more than once');
@@ -92,7 +86,7 @@ export default class DataFetchClient {
     this.artistRelationshipsCallback = artistRelationshipsCallback;
 
     this.artistDataCallback(this.pendingArtistData);
-    this.artistRelationshipsCallback(this.pendingArtistRelationships);
+    this.pendingArtistRelationships.forEach((data) => artistRelationshipsCallback(data));
     this.pendingArtistData = [];
     this.pendingArtistRelationships = [];
   }
@@ -124,10 +118,11 @@ export default class DataFetchClient {
     }
   }
 
-  private async fetchArtistRelationships(allIDs: number[]) {
+  private async fetchArtistRelationshipsInner(allIDs: number[]) {
     await this.getRequestPermit('relationship');
 
-    const ids = allIDs.filter((id) => !this.fetchedArtistRelationshipsByID.has(id));
+    const ids = allIDs.filter((id) => !this.fetchedArtistRelationships.has(id));
+    ids.forEach((id) => this.fetchedArtistRelationships.add(id));
     if (ids.length === 0) {
       this.releaseRequestPermit('relationship');
       return;
@@ -135,16 +130,12 @@ export default class DataFetchClient {
 
     try {
       const res = await getArtistRelationshipsByInternalIDs(ids);
+      const toEmit: ArtistRelationshipData = { artistIDs: ids, res };
 
-      res.forEach((data, i) => {
-        this.fetchedArtistRelationshipsByID.set(ids[i], { relatedArtists: data });
-      });
-
-      const toEmit = filterNils(res).map((relatedArtists, i) => ({ id: ids[i], relatedArtists }));
       if (this.artistRelationshipsCallback) {
         this.artistRelationshipsCallback(toEmit);
       } else {
-        this.pendingArtistRelationships.push(...toEmit);
+        this.pendingArtistRelationships.push(toEmit);
       }
     } finally {
       this.releaseRequestPermit('relationship');
@@ -175,27 +166,15 @@ export default class DataFetchClient {
     return res;
   }
 
-  public getOrFetchArtistRelationships(ids: number[]): (ArtistRelationshipData | null)[] {
-    const idsNeedingFetch: number[] = [];
-    const res = ids.map((id) => {
-      if (!this.fetchedArtistRelationshipsByID.has(id)) {
-        idsNeedingFetch.push(id);
-      }
-
-      const data = this.fetchedArtistRelationshipsByID.get(id);
-      if (!data || data === 'FETCHING') {
-        return null;
-      }
-      return data;
-    });
+  // TODO: Coalesce small requests
+  public fetchArtistRelationships(ids: number[]) {
+    const idsNeedingFetch: number[] = ids.filter((id) => !this.fetchedArtistRelationships.has(id));
 
     // Kick off request to fetch the missing data in the background
     if (idsNeedingFetch.length > 0) {
       R.splitEvery(CHUNK_SIZE, idsNeedingFetch).forEach((ids) => {
-        this.fetchArtistRelationships(ids);
+        this.fetchArtistRelationshipsInner(ids);
       });
     }
-
-    return res;
   }
 }
