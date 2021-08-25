@@ -19,7 +19,8 @@ export class WasmClient {
   }
 
   public getAllArtistData(): Float32Array {
-    return this.engine.get_all_artist_data(this.ctxPtr);
+    const allArtistData = this.engine.get_all_artist_data(this.ctxPtr);
+    return Comlink.transfer(allArtistData, [allArtistData.buffer]);
   }
 
   public ping() {
@@ -30,7 +31,8 @@ export class WasmClient {
    * Returns set of draw commands to execute
    */
   public handleNewPosition(x: number, y: number, z: number) {
-    return this.engine.handle_new_position(this.ctxPtr, x, y, z);
+    const drawCommands = this.engine.handle_new_position(this.ctxPtr, x, y, z);
+    return Comlink.transfer(drawCommands, [drawCommands.buffer]);
   }
 
   /**
@@ -42,14 +44,43 @@ export class WasmClient {
     curY: number,
     curZ: number
   ) {
-    return this.engine.handle_received_artist_names(this.ctxPtr, artistIDs, curX, curY, curZ);
+    const drawCommands = this.engine.handle_received_artist_names(
+      this.ctxPtr,
+      artistIDs,
+      curX,
+      curY,
+      curZ
+    );
+    return Comlink.transfer(drawCommands, [drawCommands.buffer]);
   }
 
   /**
    * Returns set of draw commands to execute
    */
   public onMusicFinishedPlaying(artistID: number, [curX, curY, curZ]: [number, number, number]) {
-    return this.engine.on_music_finished_playing(this.ctxPtr, artistID, curX, curY, curZ);
+    const drawCommands = this.engine.on_music_finished_playing(
+      this.ctxPtr,
+      artistID,
+      curX,
+      curY,
+      curZ
+    );
+    return Comlink.transfer(drawCommands, [drawCommands.buffer]);
+  }
+
+  /**
+   * Returns the new connection data buffer to be rendered
+   */
+  public handleArtistRelationshipData(
+    artistIDs: Uint32Array,
+    relationshipData: Uint8Array
+  ): Float32Array {
+    const connectionData = this.engine.handle_artist_relationship_data(
+      this.ctxPtr,
+      artistIDs,
+      relationshipData
+    );
+    return Comlink.transfer(connectionData, [connectionData.buffer]);
   }
 }
 

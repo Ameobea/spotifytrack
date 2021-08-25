@@ -1563,7 +1563,7 @@ pub(crate) async fn get_artist_relationships_by_internal_ids(
     conn: DbConn,
     token_data: &State<Mutex<SpotifyTokenData>>,
     artist_internal_ids: Json<Vec<i32>>,
-) -> Result<Json<Vec<Vec<i32>>>, String> {
+) -> Result<Vec<u8>, String> {
     let first_tok = start();
     let spotify_access_token = {
         let token_data = &mut *(&*token_data).lock().await;
@@ -1618,11 +1618,41 @@ pub(crate) async fn get_artist_relationships_by_internal_ids(
                         .get(artist_spotify_id)
                         .copied()
                 })
-                .collect()
+                .collect::<Vec<_>>()
         })
-        .collect();
+        .collect::<Vec<_>>();
     mark(first_tok, "FINISHED");
-    Ok(Json(res))
+
+    // Encoding:
+    // artist count * u8: related artist count
+    // 0-3 bytes of padding to make total byte count divisible by 4
+    // The rest: u32s, in order, for each artist.
+    let mut packed: Vec<u8> = Vec::new();
+    for related_artists in &res {
+        let artist_count = related_artists.len();
+        assert!(artist_count <= 255);
+        packed.push(artist_count as u8);
+    }
+
+    // padding
+    let padding_byte_count = 4 - (packed.len() % 4);
+    for _ in 0..padding_byte_count {
+        packed.push(0);
+    }
+    assert_eq!(packed.len() % 4, 0);
+
+    for mut related_artists in res {
+        related_artists.sort_unstable();
+        for id in related_artists {
+            let bytes: [u8; 4] = unsafe { std::mem::transmute(id as u32) };
+            for byte in bytes {
+                packed.push(byte);
+            }
+        }
+    }
+    assert_eq!(packed.len() % 4, 0);
+
+    Ok(packed)
 }
 
 #[get("/get_preview_urls_by_internal_id/<artist_internal_id>")]

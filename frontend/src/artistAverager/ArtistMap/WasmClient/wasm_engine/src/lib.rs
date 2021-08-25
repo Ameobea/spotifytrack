@@ -5,18 +5,15 @@
 extern crate log;
 
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     sync::Once,
 };
 
 use bitflags::bitflags;
 use float_ord::FloatOrd;
-use partitioning::{IteredPartition, PartitionedUniverse};
 use wasm_bindgen::prelude::*;
 
-use crate::partitioning::{create_partitions, InRange};
-
-mod partitioning;
+// mod partitioning;
 
 bitflags! {
     pub struct ArtistRenderState: u8 {
@@ -38,20 +35,35 @@ pub struct ArtistState {
     pub render_state: ArtistRenderState,
 }
 
+#[derive(Default)]
+pub struct ArtistRelationship {
+    pub related_artist_index: usize,
+    pub connections_buffer_index: Option<usize>,
+}
+
+#[derive(Default)]
+pub struct ArtistRelationships {
+    pub count: usize,
+    pub related_artist_indices: [ArtistRelationship; MAX_RELATED_ARTIST_COUNT],
+}
+
 pub struct ArtistMapCtx {
     pub last_position: [f32; 3],
     pub artists_indices_by_id: HashMap<u32, usize>,
     pub all_artists: Vec<(u32, ArtistState)>,
-    pub partitions: PartitionedUniverse,
+    pub all_artist_relationships: Vec<ArtistRelationships>,
     pub total_rendered_label_count: usize,
     pub playing_music_artist_id: Option<u32>,
     pub most_recently_played_artist_ids: VecDeque<u32>,
+    pub connections_buffer: Vec<[[f32; 3]; 2]>,
+    pub rendered_connections: HashSet<(usize, usize)>,
 }
 
 const DISTANCE_MULTIPLIER: [f32; 3] = [18430., 18430., 22430.];
 const LABEL_RENDER_DISTANCE: f32 = 8320.;
-const MAX_MUSIC_PLAY_DISTANCE: f32 = 4_000.;
+const MAX_MUSIC_PLAY_DISTANCE: f32 = 4000.;
 const MAX_RECENTLY_PLAYED_ARTISTS_TO_TRACK: usize = 32;
+const MAX_RELATED_ARTIST_COUNT: usize = 20;
 
 impl Default for ArtistMapCtx {
     fn default() -> Self {
@@ -59,10 +71,12 @@ impl Default for ArtistMapCtx {
             last_position: [f32::INFINITY, f32::INFINITY, f32::INFINITY],
             artists_indices_by_id: HashMap::new(),
             all_artists: Vec::new(),
-            partitions: unsafe { std::mem::MaybeUninit::uninit().assume_init() },
+            all_artist_relationships: Vec::new(),
             total_rendered_label_count: 0,
             playing_music_artist_id: None,
             most_recently_played_artist_ids: VecDeque::new(),
+            connections_buffer: Vec::new(),
+            rendered_connections: HashSet::new(),
         }
     }
 }
@@ -144,6 +158,50 @@ impl ArtistMapCtx {
 
         self.maybe_start_playing_new_music(draw_commands, cur_x, cur_y, cur_z);
     }
+
+    pub fn update_connections_buffer(&mut self, new_artist_ids: &[u32]) {
+        // Just render everything for now
+        for artist_id in new_artist_ids {
+            let src_artist_ix = *self.artists_indices_by_id.get(artist_id).unwrap();
+            let src_pos = self.all_artists[src_artist_ix].1.position;
+            let relationship_state = &mut self.all_artist_relationships[src_artist_ix];
+
+            if relationship_state.related_artist_indices[0]
+                .connections_buffer_index
+                .is_some()
+            {
+                warn!(
+                    "Double-received relationship data for artist_id={}",
+                    artist_id
+                );
+                continue;
+            }
+
+            for relationship in
+                &mut relationship_state.related_artist_indices[..relationship_state.count]
+            {
+                let related_artist_ix = relationship.related_artist_index;
+                let dst_pos = self.all_artists[related_artist_ix].1.position;
+
+                // Skip rendering very long connections for now
+                if distance(&src_pos, &dst_pos) > 3600. {
+                    continue;
+                }
+
+                // Skip rendering connection if one already exists from the other direction
+                let connection_key = (
+                    src_artist_ix.min(related_artist_ix),
+                    src_artist_ix.max(related_artist_ix),
+                );
+                if !self.rendered_connections.insert(connection_key) {
+                    continue;
+                }
+
+                self.connections_buffer.push([src_pos, dst_pos]);
+                relationship.connections_buffer_index = Some(self.connections_buffer.len() - 1);
+            }
+        }
+    }
 }
 
 const DID_INIT: Once = Once::new();
@@ -224,16 +282,12 @@ pub fn decode_and_record_packed_artist_positions(ctx: *mut ArtistMapCtx, packed:
                 render_state: ArtistRenderState::empty(),
             };
             ctx.all_artists.push((id, state));
+            ctx.all_artist_relationships.push(Default::default());
 
             ctx.artists_indices_by_id
                 .insert(id, ctx.all_artists.len() - 1);
         }
     }
-
-    let partitions = create_partitions(mins, maxs, &ctx.all_artists);
-    // We didn't initialize the partitions when creating the context, so don't run destructors when
-    // we set it now
-    unsafe { std::ptr::write((&mut ctx.partitions) as *mut _, partitions) };
 
     info!("Successfully parsed + stored {} artist positions", count);
     count
@@ -381,7 +435,6 @@ pub fn handle_new_position(ctx: *mut ArtistMapCtx, cur_x: f32, cur_y: f32, cur_z
     {
         return Vec::new();
     }
-    let delta_distance = distance(&ctx.last_position, &[cur_x, cur_y, cur_z]);
     ctx.last_position = [cur_x, cur_y, cur_z];
 
     // 0: label to add
@@ -483,9 +536,73 @@ pub fn on_music_finished_playing(
 
     debug!("Music finished playing for artist id={}", artist_id);
 
-    assert_eq!(ctx.playing_music_artist_id, Some(artist_id));
+    if ctx.playing_music_artist_id != Some(artist_id) {
+        return draw_commands;
+    }
 
     ctx.stop_playing_music(artist_id, &mut draw_commands, cur_x, cur_y, cur_z);
 
     draw_commands
+}
+
+#[wasm_bindgen]
+pub fn handle_artist_relationship_data(
+    ctx: *mut ArtistMapCtx,
+    artist_ids: Vec<u32>,
+    packed_relationship_data: Vec<u8>,
+) -> Vec<f32> {
+    let ctx = unsafe { &mut *ctx };
+
+    let artist_ids_byte_offset = artist_ids.len() + 4 - (artist_ids.len() % 4);
+
+    assert_eq!(packed_relationship_data.len() % 4, 0);
+    let u32_view = unsafe {
+        std::slice::from_raw_parts(
+            packed_relationship_data
+                .as_ptr()
+                .add(artist_ids_byte_offset) as *const u32,
+            (packed_relationship_data.len() - artist_ids_byte_offset) / 4,
+        )
+    };
+
+    let mut offset = 0;
+    for i in 0..artist_ids.len() {
+        let artist_id = artist_ids[i];
+        let artist_index = *ctx.artists_indices_by_id.get(&artist_id).unwrap();
+        let relationship_state = &mut ctx.all_artist_relationships[artist_index];
+
+        let count = packed_relationship_data[i] as usize;
+        let mut actual_count = 0;
+        for relationship_ix in 0..count {
+            let related_artist_id = u32_view[offset + relationship_ix];
+            let related_artist_index = match ctx.artists_indices_by_id.get(&related_artist_id) {
+                Some(ix) => *ix,
+                // It's possible the artist is related to one that's not in the embedding
+                None => continue,
+            };
+
+            relationship_state.related_artist_indices[actual_count] = ArtistRelationship {
+                related_artist_index,
+                connections_buffer_index: None,
+            };
+            actual_count += 1;
+        }
+        relationship_state.count = actual_count;
+
+        offset += count;
+    }
+
+    assert_eq!(
+        artist_ids_byte_offset + offset * 4,
+        packed_relationship_data.len()
+    );
+    ctx.update_connections_buffer(&artist_ids);
+
+    unsafe {
+        std::slice::from_raw_parts(
+            ctx.connections_buffer.as_ptr() as *const f32,
+            ctx.connections_buffer.len() * 6,
+        )
+    }
+    .to_owned()
 }
