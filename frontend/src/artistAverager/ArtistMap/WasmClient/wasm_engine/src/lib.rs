@@ -25,6 +25,7 @@ bitflags! {
         const HAS_NAME = 0b0000_1000;
         /// Artist's music has recently been played
         const HAS_RECENTLY_PLAYED = 0b0001_0000;
+        const IS_HIGHLIGHTED = 0b0010_0000;
     }
 }
 
@@ -59,11 +60,12 @@ pub struct ArtistMapCtx {
     pub rendered_connections: HashSet<(usize, usize)>,
 }
 
-const DISTANCE_MULTIPLIER: [f32; 3] = [18430., 18430., 22430.];
-const LABEL_RENDER_DISTANCE: f32 = 8320.;
+const DISTANCE_MULTIPLIER: [f32; 3] = [24000., 24000., 32430.];
+const LABEL_RENDER_DISTANCE: f32 = 12320.;
 const MAX_MUSIC_PLAY_DISTANCE: f32 = 4000.;
 const MAX_RECENTLY_PLAYED_ARTISTS_TO_TRACK: usize = 32;
 const MAX_RELATED_ARTIST_COUNT: usize = 20;
+const MAX_RENDERED_CONNECTION_LENGTH: f32 = 6400.;
 
 impl Default for ArtistMapCtx {
     fn default() -> Self {
@@ -184,7 +186,7 @@ impl ArtistMapCtx {
                 let dst_pos = self.all_artists[related_artist_ix].1.position;
 
                 // Skip rendering very long connections for now
-                if distance(&src_pos, &dst_pos) > 3600. {
+                if distance(&src_pos, &dst_pos) > MAX_RENDERED_CONNECTION_LENGTH {
                     continue;
                 }
 
@@ -230,7 +232,14 @@ pub fn should_render_label(
     score -= (artist_state.popularity as f32).powi(2) * 2.2;
 
     // If we're in a very dense area with many labels rendered, make it harder to render more
-    score += (total_rendered_label_count as f32).powf(1.3) * 20.2;
+    score += fastapprox::faster::pow(total_rendered_label_count as f32, 1.3) * 22.2;
+
+    if artist_state
+        .render_state
+        .contains(ArtistRenderState::IS_HIGHLIGHTED)
+    {
+        score *= 0.7;
+    }
 
     score <= LABEL_RENDER_DISTANCE
 }
@@ -292,33 +301,6 @@ pub fn decode_and_record_packed_artist_positions(ctx: *mut ArtistMapCtx, packed:
     info!("Successfully parsed + stored {} artist positions", count);
     count
 }
-
-// #[wasm_bindgen]
-// pub fn get_artist_positions(ctx: *mut ArtistMapCtx, artist_ids: Vec<u32>) -> Vec<f32> {
-//     let ctx = unsafe { &mut *ctx };
-
-//     let mut out = Vec::with_capacity(3 * artist_ids.len());
-//     unsafe { out.set_len(3 * artist_ids.len()) };
-
-//     for (artist_ix, artist_id) in artist_ids.into_iter().enumerate() {
-//         let pos = ctx
-//             .artists_positions_by_id
-//             .get(&artist_id)
-//             .unwrap_or_else(|| {
-//                 // error!(
-//                 //     "Artist id not in embedding: {}, using 0,0,0 position",
-//                 //     artist_id
-//                 // );
-//                 &MISSING_POS
-//             });
-
-//         for (dim_ix, val_for_dim) in pos.iter().enumerate() {
-//             out[artist_ix * 3 + dim_ix] = *val_for_dim;
-//         }
-//     }
-
-//     out
-// }
 
 #[wasm_bindgen]
 pub fn get_all_artist_data(ctx: *mut ArtistMapCtx) -> Vec<f32> {
@@ -408,25 +390,36 @@ pub fn handle_received_artist_names(
     draw_commands
 }
 
-// TODO: Lookup table by popularity
-fn should_render_artist(distance: f32, popularity: u8) -> bool {
+fn should_render_artist(distance: f32, popularity: u8, render_state: &ArtistRenderState) -> bool {
     if popularity >= 85 {
         return true;
     }
 
-    if distance < 1000. {
+    if distance < 2000. {
+        return true;
+    }
+
+    if render_state.contains(ArtistRenderState::IS_HIGHLIGHTED) {
         return true;
     }
 
     let mut score = distance;
-    score -= (popularity as f32).powf(2.8) * 0.12;
+    score -= (popularity as f32).powi(3) * 0.07;
 
-    score < 1000.
+    score < 10_000.
 }
 
 /// Returns a vector of draw commands
 #[wasm_bindgen]
-pub fn handle_new_position(ctx: *mut ArtistMapCtx, cur_x: f32, cur_y: f32, cur_z: f32) -> Vec<u32> {
+pub fn handle_new_position(
+    ctx: *mut ArtistMapCtx,
+    cur_x: f32,
+    cur_y: f32,
+    cur_z: f32,
+    projected_next_x: f32,
+    projected_next_y: f32,
+    projected_next_z: f32,
+) -> Vec<u32> {
     let ctx = unsafe { &mut *ctx };
 
     if ctx.last_position[0] == cur_x
@@ -480,7 +473,11 @@ pub fn handle_new_position(ctx: *mut ArtistMapCtx, cur_x: f32, cur_y: f32, cur_z
             render_commands.push(*artist_id);
         }
 
-        let should_render_geometry = should_render_artist(distance, artist_state.popularity);
+        let should_render_geometry = should_render_artist(
+            distance,
+            artist_state.popularity,
+            &artist_state.render_state,
+        );
         if should_render_geometry
             != artist_state
                 .render_state
@@ -499,23 +496,35 @@ pub fn handle_new_position(ctx: *mut ArtistMapCtx, cur_x: f32, cur_y: f32, cur_z
         }
     }
 
+    let projected_next_pos = [projected_next_x, projected_next_y, projected_next_z];
     match ctx.playing_music_artist_id {
         Some(artist_id) => {
             let artist_index = ctx.artists_indices_by_id.get(&artist_id).unwrap();
             if distance(
                 &ctx.all_artists[*artist_index].1.position,
-                &ctx.last_position,
+                &projected_next_pos,
             ) > MAX_MUSIC_PLAY_DISTANCE
             {
                 debug!(
                     "Stopping music for artist_id={} due to movement out of range",
                     artist_id
                 );
-                ctx.stop_playing_music(artist_id, &mut render_commands, cur_x, cur_y, cur_z);
+                ctx.stop_playing_music(
+                    artist_id,
+                    &mut render_commands,
+                    projected_next_x,
+                    projected_next_y,
+                    projected_next_z,
+                );
             }
         },
         None => {
-            ctx.maybe_start_playing_new_music(&mut render_commands, cur_x, cur_y, cur_z);
+            ctx.maybe_start_playing_new_music(
+                &mut render_commands,
+                projected_next_x,
+                projected_next_y,
+                projected_next_z,
+            );
         },
     }
 
@@ -545,12 +554,13 @@ pub fn on_music_finished_playing(
     draw_commands
 }
 
+/// Returns connection buffer length
 #[wasm_bindgen]
 pub fn handle_artist_relationship_data(
     ctx: *mut ArtistMapCtx,
     artist_ids: Vec<u32>,
     packed_relationship_data: Vec<u8>,
-) -> Vec<f32> {
+) -> usize {
     let ctx = unsafe { &mut *ctx };
 
     let artist_ids_byte_offset = artist_ids.len() + 4 - (artist_ids.len() % 4);
@@ -598,11 +608,67 @@ pub fn handle_artist_relationship_data(
     );
     ctx.update_connections_buffer(&artist_ids);
 
-    unsafe {
-        std::slice::from_raw_parts(
-            ctx.connections_buffer.as_ptr() as *const f32,
-            ctx.connections_buffer.len() * 6,
-        )
+    ctx.connections_buffer.len() * 6
+}
+
+#[wasm_bindgen]
+pub fn get_connections_buffer_ptr(ctx: *mut ArtistMapCtx) -> *const f32 {
+    let ctx = unsafe { &mut *ctx };
+    ctx.connections_buffer.as_ptr() as *const f32
+}
+
+#[wasm_bindgen]
+pub fn get_memory() -> JsValue { wasm_bindgen::memory() }
+
+/// Returns a list of draw commands to execute
+#[wasm_bindgen]
+pub fn handle_set_highlighted_artists(
+    ctx: *mut ArtistMapCtx,
+    highlighted_artist_ids: Vec<u32>,
+    cur_x: f32,
+    cur_y: f32,
+    cur_z: f32,
+) -> Vec<u32> {
+    let ctx = unsafe { &mut *ctx };
+    let cur_pos = [cur_x, cur_y, cur_z];
+
+    let mut draw_commands = Vec::new();
+
+    // First, un-mark all artists as highlighted.  If they should no longer be rendered, dispatch
+    // draw commands to remove them.
+    for (artist_id, state) in ctx.all_artists.iter_mut() {
+        let was_highlighted = state
+            .render_state
+            .contains(ArtistRenderState::IS_HIGHLIGHTED);
+        if !was_highlighted {
+            continue;
+        }
+
+        state.render_state.toggle(ArtistRenderState::IS_HIGHLIGHTED);
+        let distance_to_artist = distance(&state.position, &cur_pos);
+        let should_render =
+            should_render_artist(distance_to_artist, state.popularity, &state.render_state);
+        if should_render {
+            draw_commands.push(2);
+            draw_commands.push(*artist_id);
+        } else {
+            draw_commands.push(3);
+            draw_commands.push(*artist_id);
+        }
     }
-    .to_owned()
+
+    for highlighted_artist_id in highlighted_artist_ids {
+        let artist_index = match ctx.artists_indices_by_id.get(&highlighted_artist_id) {
+            Some(&id) => id,
+            None => continue,
+        };
+        let (_, state) = &mut ctx.all_artists[artist_index];
+        state
+            .render_state
+            .set(ArtistRenderState::IS_HIGHLIGHTED, true);
+        draw_commands.push(2);
+        draw_commands.push(highlighted_artist_id);
+    }
+
+    draw_commands
 }

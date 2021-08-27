@@ -4,14 +4,19 @@ import * as Comlink from 'comlink';
 import { UnimplementedError, UnreachableException } from 'ameo-utils';
 import type { Scale } from 'chroma-js';
 
-import { fetchPackedArtistPositions } from '../api';
+import { fetchPackedArtistPositions, getAllTopArtistInternalIDsForUser } from '../api';
 import {
-  ARTIST_GEOMETRY_SIZE,
+  BASE_ARTIST_GEOMETRY_SIZE,
   BASE_ARTIST_COLOR,
   BASE_CONNECTION_COLOR,
   getArtistSize,
   MOVEMENT_SPEED_UNITS_PER_SECOND,
   SECONDS_BETWEEN_POSITION_UPDATES,
+  ARTIST_GEOMETRY_OPACITY,
+  PLAYING_ARTIST_COLOR,
+  DEFAULT_FOV,
+  getArtistColor,
+  BLOOMED_CONNECTION_OPACITY,
 } from './conf';
 import DataFetchClient, { ArtistMapDataWithId, ArtistRelationshipData } from './DataFetchClient';
 import { MovementInputHandler } from './MovementInputHandler';
@@ -21,7 +26,6 @@ import MusicManager from './MusicManager';
 
 interface ThreeExtra {
   PointerLockControls: typeof import('three/examples/jsm/controls/PointerLockControls')['PointerLockControls'];
-  Stats: typeof import('three/examples/jsm/libs/stats.module.js')['default'];
   RenderPass: typeof import('three/examples/jsm/postprocessing/RenderPass')['RenderPass'];
   ShaderPass: typeof import('three/examples/jsm/postprocessing/ShaderPass')['ShaderPass'];
   UnrealBloomPass: typeof import('three/examples/jsm/postprocessing/UnrealBloomPass')['UnrealBloomPass'];
@@ -54,7 +58,7 @@ const waitForWasmClientInitialization = async () => {
 export const initArtistMapInst = async (canvas: HTMLCanvasElement): Promise<ArtistMapInst> => {
   const [
     ,
-    { THREE, PointerLockControls, Stats, RenderPass, ShaderPass, UnrealBloomPass, EffectComposer },
+    { THREE, PointerLockControls, RenderPass, ShaderPass, UnrealBloomPass, EffectComposer },
   ] = await Promise.all([
     fetchPackedArtistPositions().then(async (packedArtistPositions) => {
       // The wasm client web worker needs to do some async initialization.  Wait for it to do that so we
@@ -72,7 +76,6 @@ export const initArtistMapInst = async (canvas: HTMLCanvasElement): Promise<Arti
   const initialArtistIDsToRenderPromise = getInitialArtistIDsToRender();
   const THREE_EXTRA: ThreeExtra = {
     PointerLockControls,
-    Stats,
     RenderPass,
     ShaderPass,
     UnrealBloomPass,
@@ -91,6 +94,12 @@ export const initArtistMapInst = async (canvas: HTMLCanvasElement): Promise<Arti
 
     return ids;
   });
+
+  // Set highlighted artists.
+  // TODO: Should be user-specific with OAuth flow etc.
+  getAllTopArtistInternalIDsForUser('royhayoon').then((artistIDs) =>
+    inst.setHighlightedArtistIDs(artistIDs)
+  );
 
   await inst.renderArtists(initialArtistIDsToRender);
   return inst;
@@ -125,6 +134,7 @@ export class ArtistMapInst {
   private connectionColorScale: Scale;
 
   private renderedArtistBufferIndicesByArtistID: Map<number, number> = new Map();
+  private artistIDByRenderedArtistBufferIndex: Map<number, number> = new Map();
   private bloomedConnectionsGeometry: THREE.BufferGeometry;
   private bloomedConnectionsMesh: THREE.Line;
   private nonBloomedConnectionsGeometry: THREE.BufferGeometry;
@@ -137,6 +147,7 @@ export class ArtistMapInst {
   private lastCameraPosition: THREE.Vector3;
   private forceLabelsUpdate = false;
   private wasmPositionHandlerIsRunning = false;
+  private highlightedArtistIDs: Set<number> = new Set();
 
   private musicManager: MusicManager;
 
@@ -190,6 +201,59 @@ export class ArtistMapInst {
     }
   );
 
+  public handleScroll(deltaY: number) {
+    this.camera.fov = Math.max(10, Math.min(120, this.camera.fov + deltaY * 0.12));
+    this.camera.updateProjectionMatrix();
+    this.forceLabelsUpdate = true;
+  }
+
+  public maybePointerLock() {
+    // if (this.isPointerLocked) {
+    //   return;
+    // }
+
+    this.isPointerLocked = true;
+    this.controls.lock();
+    this.scene.add(this.controls.getObject());
+  }
+
+  public setHighlightedArtistIDs(artistIDs: number[]) {
+    // Wasm client is the source of truth for what artists are rendered.  We indicate to it that highlighted artists have changed
+    // and let it deal with dispatching draw commands to re-render them and possibly de-render the old ones.
+    const curPosition = this.controls.getObject().position;
+    wasmClient
+      .setHighlightedArtists(
+        new Uint32Array(artistIDs),
+        curPosition.x,
+        curPosition.y,
+        curPosition.z
+      )
+      .then((drawCommands) => this.pendingDrawCommands.push(drawCommands));
+
+    // Setting these here allows us to know whether or not an artist is highlighted during rendering.  We don't do that now, but
+    // will do it once the draw commands returned above are processed.
+    this.highlightedArtistIDs = new Set(artistIDs);
+  }
+
+  private buildInstancedArtistMeshes() {
+    const geometry = new this.THREE.IcosahedronGeometry(BASE_ARTIST_GEOMETRY_SIZE, 3);
+    const instanceColorBuffer = new Float32Array(100000 * 3);
+    const instanceColor = new this.THREE.InstancedBufferAttribute(instanceColorBuffer, 3);
+    instanceColor.count = 0;
+    geometry.setAttribute('instanceColor', instanceColor);
+
+    const material = new this.THREE.MeshPhongMaterial({
+      transparent: true,
+      opacity: ARTIST_GEOMETRY_OPACITY,
+      depthWrite: true,
+    });
+    const meshes = new this.THREE.InstancedMesh(geometry, material, 100000);
+    meshes.instanceColor = instanceColor;
+
+    meshes.count = 0;
+    return meshes;
+  }
+
   constructor(
     THREE: typeof import('three'),
     THREE_EXTRA: ThreeExtra,
@@ -212,7 +276,12 @@ export class ArtistMapInst {
     this.renderer.toneMapping = THREE.ReinhardToneMapping;
     this.clock = new THREE.Clock();
 
-    this.camera = new THREE.PerspectiveCamera(92, canvas.width / canvas.height, 0.1, 200_000);
+    this.camera = new THREE.PerspectiveCamera(
+      DEFAULT_FOV,
+      canvas.width / canvas.height,
+      0.1,
+      200_000
+    );
     this.camera.position.set(
       (Math.random() - 0.5) * 80_000,
       (Math.random() - 0.5) * 80_000,
@@ -220,13 +289,17 @@ export class ArtistMapInst {
     );
     this.camera.lookAt(0, 0, 0);
 
-    this.movementInputHandler = new MovementInputHandler();
+    this.movementInputHandler = new MovementInputHandler((newRolloffFactor) =>
+      this.musicManager.setRolloffFactor(newRolloffFactor)
+    );
 
     this.scene = new THREE.Scene();
     this.scene.fog = new this.THREE.Fog(0x000000, 1, 472_000);
 
     const light = new THREE.AmbientLight(0x404040); // soft white light
     this.scene.add(light);
+
+    canvas.addEventListener('mousedown', () => this.maybePointerLock());
 
     this.controls = new THREE_EXTRA.PointerLockControls(this.camera, canvas);
     this.controls.addEventListener('unlock', () => {
@@ -236,42 +309,15 @@ export class ArtistMapInst {
       }
     });
 
-    canvas.addEventListener('mousedown', () => {
-      if (this.isPointerLocked) {
-        return;
-      }
-
-      this.isPointerLocked = true;
-      this.controls.lock();
-      this.scene.add(this.controls.getObject());
-    });
-
-    // this.stats = THREE_EXTRA.Stats.default();
-    // canvas.appendChild(this.stats.domElement);
-
-    this.artistMeshes = (() => {
-      const geometry = new this.THREE.IcosahedronGeometry(ARTIST_GEOMETRY_SIZE, 2);
-      const material = new this.THREE.MeshPhongMaterial({
-        color: BASE_ARTIST_COLOR,
-        // wireframe: true,
-        // shininess: 38,
-        // fog: true,
-        // specular: 0x996633,
-        reflectivity: 0,
-        transparent: true,
-        opacity: 0.2,
-      });
-      const meshes = new this.THREE.InstancedMesh(geometry, material, 100000);
-      meshes.count = 0;
-      return meshes;
-    })();
+    this.artistMeshes = this.buildInstancedArtistMeshes();
     this.scene.add(this.artistMeshes);
 
     this.bloomedConnectionsGeometry = new this.THREE.BufferGeometry();
     const bloomedLineMaterial = new this.THREE.LineBasicMaterial({
       color: BASE_CONNECTION_COLOR,
       transparent: true,
-      opacity: 0.01,
+      depthWrite: false,
+      opacity: BLOOMED_CONNECTION_OPACITY,
     });
     this.bloomedConnectionsMesh = new this.THREE.Line(
       this.bloomedConnectionsGeometry,
@@ -430,7 +476,10 @@ export class ArtistMapInst {
           'position',
           new this.THREE.BufferAttribute(connectionsDataBuffer, 3)
         );
-        this.bloomedConnectionsGeometry.computeBoundingSphere();
+        this.bloomedConnectionsGeometry.boundingSphere?.set(
+          new this.THREE.Vector3(0, 0, 0),
+          1_000_000_000
+        );
       });
 
     // Recursively fetch artist IDs to grow the graph
@@ -439,32 +488,88 @@ export class ArtistMapInst {
     }
   }
 
-  public renderArtists(artistInternalIDs: number[]) {
+  public renderArtists(artistsToRender: number[]) {
     // Skip artists that are already rendered
-    const artistsToRender = artistInternalIDs.filter(
-      (id) => !this.renderedArtistBufferIndicesByArtistID.has(id)
-    );
+    const newArtistCount = artistsToRender.filter(
+      (id) => id !== null && id !== undefined && !this.renderedArtistBufferIndicesByArtistID.has(id)
+    ).length;
 
     const startIx = this.artistMeshes.count;
-    this.artistMeshes.count = startIx + artistsToRender.length;
+    this.artistMeshes.count = startIx + newArtistCount;
+    if (this.artistMeshes.instanceColor) {
+      this.artistMeshes.instanceColor.count = startIx + newArtistCount;
+    }
 
     const matrix = new this.THREE.Matrix4();
 
-    const artistColor = new this.THREE.Color(BASE_ARTIST_COLOR);
-    artistsToRender.forEach((id, i) => {
+    let newRenderedArtistCount = 0;
+    artistsToRender.forEach((id) => {
       const artistData = this.artistDataByID.get(id);
       if (!artistData) {
         throw new UnreachableException(`Artist ${id} has no pos`);
       }
 
-      const size = getArtistSize(artistData.popularity);
+      const isHighlighted = this.highlightedArtistIDs.has(id);
+      const size = getArtistSize(artistData.popularity, isHighlighted);
       matrix.makeScale(size, size, size);
-
       matrix.setPosition(artistData.pos);
-      this.artistMeshes.setMatrixAt(startIx + i, matrix);
-      this.artistMeshes.setColorAt(startIx + i, artistColor);
-      this.renderedArtistBufferIndicesByArtistID.set(id, startIx + i);
+
+      const existingBufferIndex = this.renderedArtistBufferIndicesByArtistID.get(id);
+      const bufferIndex = existingBufferIndex ?? startIx + newRenderedArtistCount;
+      if (existingBufferIndex === undefined) {
+        newRenderedArtistCount += 1;
+      }
+
+      this.artistMeshes.setMatrixAt(bufferIndex, matrix);
+      const isPlaying = this.musicManager.curPlaying?.artistID === id;
+      const color = new this.THREE.Color(getArtistColor(isHighlighted, isPlaying));
+      this.artistMeshes.setColorAt(bufferIndex, color);
+
+      this.renderedArtistBufferIndicesByArtistID.set(id, bufferIndex);
+      this.artistIDByRenderedArtistBufferIndex.set(bufferIndex, id);
     });
+
+    this.artistMeshes.instanceMatrix.needsUpdate = true;
+    this.artistMeshes.instanceColor!.needsUpdate = true;
+  }
+
+  public removeArtists(artistInternalIDs: number[]) {
+    const artistsToRemove = artistInternalIDs.filter((id) =>
+      this.renderedArtistBufferIndicesByArtistID.has(id)
+    );
+
+    const matrix = new this.THREE.Matrix4();
+    const color = new this.THREE.Color();
+    artistsToRemove.forEach((id) => {
+      const targetBufferIndex = this.renderedArtistBufferIndicesByArtistID.get(id);
+      const idOfLastArtist = this.artistIDByRenderedArtistBufferIndex.get(
+        this.artistMeshes.count - 1
+      );
+      if (
+        targetBufferIndex === null ||
+        targetBufferIndex === undefined ||
+        idOfLastArtist === null ||
+        idOfLastArtist === undefined
+      ) {
+        throw new UnreachableException();
+      }
+
+      this.renderedArtistBufferIndicesByArtistID.delete(id);
+      this.artistIDByRenderedArtistBufferIndex.delete(targetBufferIndex);
+
+      if (idOfLastArtist !== id) {
+        // Swap the last element into the position of the one that's being removed
+        this.artistMeshes.getMatrixAt(this.artistMeshes.count - 1, matrix);
+        this.artistMeshes.setMatrixAt(targetBufferIndex, matrix);
+        this.artistMeshes.getColorAt(this.artistMeshes.count - 1, color);
+        this.artistMeshes.setColorAt(targetBufferIndex, color);
+        this.artistIDByRenderedArtistBufferIndex.set(targetBufferIndex, idOfLastArtist);
+        this.renderedArtistBufferIndicesByArtistID.set(idOfLastArtist, targetBufferIndex);
+      }
+
+      this.artistMeshes.count -= 1;
+    });
+
     this.artistMeshes.instanceMatrix.needsUpdate = true;
     this.artistMeshes.instanceColor!.needsUpdate = true;
   }
@@ -497,14 +602,13 @@ export class ArtistMapInst {
     this.timeElapsed += timeDelta;
     this.secondSinceLastPositionUpdate += timeDelta;
 
-    // this.stats.update();
     const { forward, sideways } = this.movementInputHandler.getDirectionVector();
-    this.controls.moveRight(sideways * MOVEMENT_SPEED_UNITS_PER_SECOND);
+    this.controls.moveRight(sideways * MOVEMENT_SPEED_UNITS_PER_SECOND * timeDelta);
     this.controls.getObject().position.add(
       this.controls
         .getDirection(VEC3_IDENTITY)
         .clone()
-        .multiplyScalar(MOVEMENT_SPEED_UNITS_PER_SECOND * forward)
+        .multiplyScalar(MOVEMENT_SPEED_UNITS_PER_SECOND * timeDelta * forward)
     );
 
     if (
@@ -512,15 +616,33 @@ export class ArtistMapInst {
       !this.wasmPositionHandlerIsRunning
     ) {
       this.secondSinceLastPositionUpdate = 0;
-      const curPos = this.controls.getObject().position;
       this.wasmPositionHandlerIsRunning = true;
-      wasmClient.handleNewPosition(curPos.x, curPos.y, curPos.z).then((commands) => {
-        this.wasmPositionHandlerIsRunning = false;
-        if (commands.length === 0) {
-          return;
-        }
-        this.pendingDrawCommands.push(commands);
-      });
+
+      const curPos = this.controls.getObject().position;
+      const projectedNextPos = this.controls.getObject().position.clone();
+      projectedNextPos.add(
+        this.controls
+          .getDirection(VEC3_IDENTITY)
+          .clone()
+          .multiplyScalar(MOVEMENT_SPEED_UNITS_PER_SECOND * 0.15 * forward)
+      );
+
+      wasmClient
+        .handleNewPosition(
+          curPos.x,
+          curPos.y,
+          curPos.z,
+          projectedNextPos.x,
+          projectedNextPos.y,
+          projectedNextPos.z
+        )
+        .then((commands) => {
+          this.wasmPositionHandlerIsRunning = false;
+          if (commands.length === 0) {
+            return;
+          }
+          this.pendingDrawCommands.push(commands);
+        });
     }
 
     const cameraDirection = this.camera.getWorldDirection(new this.THREE.Vector3());
@@ -545,6 +667,7 @@ export class ArtistMapInst {
     const cmdCount = commands.length / 2;
 
     const artistIDsToRender = [];
+    const artistIDsToRemove = [];
     const artistIDsToFetch = [];
 
     for (let i = 0; i < cmdCount; i++) {
@@ -587,34 +710,79 @@ export class ArtistMapInst {
           break;
         }
         case DrawCommand.RemoveArtistGeometry: {
-          // const artist = this.artistMeshes.get(artistID);
-          // TODO
+          artistIDsToRemove.push(artistID);
           break;
         }
         case DrawCommand.FetchArtistLabel: {
           artistIDsToFetch.push(artistID);
           break;
         }
-        // TODO: Make the playing artist glow or something so we know which one is playing
         case DrawCommand.StartPlayingMusic: {
           const artistPos = this.artistDataByID.get(artistID)!.pos;
-          this.musicManager.startPlaying(artistID, artistPos, () =>
-            wasmClient
-              .onMusicFinishedPlaying(artistID, [artistPos.x, artistPos.y, artistPos.z])
-              .then((commands) => {
-                this.pendingDrawCommands.push(commands);
-              })
-          );
+          this.musicManager
+            .startPlaying(artistID, artistPos, () => {
+              wasmClient
+                .onMusicFinishedPlaying(artistID, [artistPos.x, artistPos.y, artistPos.z])
+                .then((commands) => {
+                  this.pendingDrawCommands.push(commands);
+                });
+
+              const bufferIx = this.renderedArtistBufferIndicesByArtistID.get(artistID);
+              if (bufferIx === undefined) {
+                return;
+              }
+
+              const isHighlighted = this.highlightedArtistIDs.has(artistID);
+              this.artistMeshes.setColorAt(
+                bufferIx,
+                new this.THREE.Color(getArtistColor(isHighlighted, false))
+              );
+              this.artistMeshes.instanceColor!.needsUpdate = true;
+            })
+            .then(() => {
+              const isActuallyPlaying = this.musicManager.curPlaying?.artistID === artistID;
+              if (!isActuallyPlaying) {
+                return;
+              }
+
+              // Playing has actually started; color the artist to indicate that it's playing
+              const bufferIx = this.renderedArtistBufferIndicesByArtistID.get(artistID);
+              if (bufferIx === undefined) {
+                return;
+              }
+
+              const isHighlighted = this.highlightedArtistIDs.has(artistID);
+              this.artistMeshes.setColorAt(
+                bufferIx,
+                new this.THREE.Color(getArtistColor(isHighlighted, true))
+              );
+              this.artistMeshes.instanceColor!.needsUpdate = true;
+            });
           break;
         }
         case DrawCommand.StopPlayingMusic: {
           this.musicManager.stopPlaying(artistID);
+          const bufferIx = this.renderedArtistBufferIndicesByArtistID.get(artistID);
+          if (bufferIx === undefined) {
+            break;
+          }
+
+          const isHighlighted = this.highlightedArtistIDs.has(artistID);
+          this.artistMeshes.setColorAt(
+            bufferIx,
+            new this.THREE.Color(getArtistColor(isHighlighted, false))
+          );
+          this.artistMeshes.instanceColor!.needsUpdate = true;
           break;
         }
         default: {
           throw new UnreachableException();
         }
       }
+    }
+
+    if (artistIDsToRemove.length > 0) {
+      this.removeArtists(artistIDsToRemove);
     }
 
     if (artistIDsToRender.length > 0) {

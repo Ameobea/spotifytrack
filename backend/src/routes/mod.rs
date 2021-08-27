@@ -1694,3 +1694,29 @@ pub(crate) async fn get_preview_urls_by_internal_id(
             .collect(),
     ))
 }
+
+#[get("/top_artists_internal_ids_for_user/<user_id>")]
+pub(crate) async fn get_top_artists_internal_ids_for_user(
+    conn: DbConn,
+    user_id: String,
+) -> Result<Option<Json<Vec<i32>>>, String> {
+    let user = match db_util::get_user_by_spotify_id(&conn, user_id).await? {
+        Some(user) => user,
+        None => {
+            return Ok(None);
+        },
+    };
+
+    let top_artists = get_all_top_artists_for_user(&conn, user.id)
+        .await
+        .map_err(|err| {
+            error!("Error getting top artists for user: {:?}", err);
+            String::from("Internal DB error")
+        })?;
+    Ok(Some(Json(
+        top_artists
+            .into_iter()
+            .map(|(internal_id, spotify_id)| internal_id)
+            .collect(),
+    )))
+}

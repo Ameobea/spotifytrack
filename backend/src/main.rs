@@ -72,7 +72,8 @@ pub async fn main() {
         routes::refetch_cached_artists_missing_popularity,
         routes::get_artists_by_internal_ids,
         routes::get_artist_relationships_by_internal_ids,
-        routes::get_preview_urls_by_internal_id
+        routes::get_preview_urls_by_internal_id,
+        routes::get_top_artists_internal_ids_for_user
     ];
 
     // Pre-populate the packed 3D artist map embedding to make the first request for it instant

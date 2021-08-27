@@ -51,3 +51,6 @@ export const fetchPackedArtistPositions = (): Promise<ArrayBuffer> =>
 
 export const getPreviewURLsByInternalID = (internalID: number): Promise<string[] | null> =>
   fetch(`${API_BASE_URL}/get_preview_urls_by_internal_id/${internalID}`).then((res) => res.json());
+
+export const getAllTopArtistInternalIDsForUser = (userID: string): Promise<number[]> =>
+  fetch(`${API_BASE_URL}/top_artists_internal_ids_for_user/${userID}`).then((res) => res.json());

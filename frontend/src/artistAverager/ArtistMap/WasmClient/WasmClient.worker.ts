@@ -30,8 +30,23 @@ export class WasmClient {
   /**
    * Returns set of draw commands to execute
    */
-  public handleNewPosition(x: number, y: number, z: number) {
-    const drawCommands = this.engine.handle_new_position(this.ctxPtr, x, y, z);
+  public handleNewPosition(
+    x: number,
+    y: number,
+    z: number,
+    projectedNextX: number,
+    projectedNextY: number,
+    projectedNextZ: number
+  ) {
+    const drawCommands = this.engine.handle_new_position(
+      this.ctxPtr,
+      x,
+      y,
+      z,
+      projectedNextX,
+      projectedNextY,
+      projectedNextZ
+    );
     return Comlink.transfer(drawCommands, [drawCommands.buffer]);
   }
 
@@ -75,12 +90,28 @@ export class WasmClient {
     artistIDs: Uint32Array,
     relationshipData: Uint8Array
   ): Float32Array {
-    const connectionData = this.engine.handle_artist_relationship_data(
+    const connectionsBufferLength = this.engine.handle_artist_relationship_data(
       this.ctxPtr,
       artistIDs,
       relationshipData
     );
-    return Comlink.transfer(connectionData, [connectionData.buffer]);
+    const connectionsBufferPtr = this.engine.get_connections_buffer_ptr(this.ctxPtr);
+    const memory: WebAssembly.Memory = this.engine.get_memory();
+    const connectionsBuffer = new Float32Array(
+      memory.buffer.slice(connectionsBufferPtr, connectionsBufferPtr + connectionsBufferLength * 4)
+    );
+    return Comlink.transfer(connectionsBuffer, [connectionsBuffer.buffer]);
+  }
+
+  public setHighlightedArtists(artistIDs: Uint32Array, curX: number, curY: number, curZ: number) {
+    const drawCommands = this.engine.handle_set_highlighted_artists(
+      this.ctxPtr,
+      artistIDs,
+      curX,
+      curY,
+      curZ
+    );
+    return Comlink.transfer(drawCommands, [drawCommands.buffer]);
   }
 }
 
