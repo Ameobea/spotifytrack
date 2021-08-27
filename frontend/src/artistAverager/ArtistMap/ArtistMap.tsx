@@ -19,9 +19,24 @@ const ArtistMap: React.FC = () => {
   }, []);
 
   return (
-    <div className="artist-map">
+    <div
+      className="artist-map"
+      onWheel={(evt) => {
+        const deltaY = evt.deltaY;
+        if (deltaY === 0) {
+          return;
+        }
+
+        inst?.handleScroll(deltaY);
+      }}
+    >
       {eventRegistry ? (
-        <OverlayUI eventRegistry={eventRegistry} width={1920} height={1080} />
+        <OverlayUI
+          eventRegistry={eventRegistry}
+          width={1920}
+          height={1000}
+          onClick={() => inst?.maybePointerLock()}
+        />
       ) : null}
       <canvas className="artist-map-canvas" height={1000} width={1920} ref={canvas} />
     </div>

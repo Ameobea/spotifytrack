@@ -1,28 +1,11 @@
-import React, { useEffect, useReducer } from 'react';
-import { getDistanceScaleFactor } from './conf';
+import React, { useEffect, useRef } from 'react';
 
+import { getArtistLabelScaleFactor } from './conf';
 import './OverlayUI.scss';
 
-interface LabelProps {
-  id: string | number;
-  text: string;
-  eventRegistry: UIEventRegistry;
-  width: number;
-  height: number;
-}
-
-const Label: React.FC<LabelProps> = ({ id, text, eventRegistry, width, height }) => (
-  <div
-    ref={(node) => node && setLabelStyle(eventRegistry, node, width, height)}
-    className="artist-map-label"
-    data-artist-id={id}
-  >
-    {text}
-  </div>
-);
-
 interface State {
-  labels: { [id: string]: { id: string | number; text: string } };
+  labels: Map<string | number, { id: string | number; text: string; width: number }>;
+  textImages: Map<string | number, HTMLImageElement>;
 }
 
 type Action =
@@ -76,34 +59,16 @@ export class UIEventRegistry {
   }
 }
 
-const reducer = (state: State, action: Action): State => {
-  switch (action.type) {
-    case 'createLabel':
-      return {
-        ...state,
-        labels: {
-          ...state.labels,
-          [action.id]: { id: action.id, text: action.text },
-        },
-      };
-    case 'deleteLabel':
-      const newState = { ...state, labels: { ...state.labels } };
-      delete newState.labels[action.id];
-      return newState;
-    default:
-      console.error('Unhandled action type:' + (action as any).type);
-      return state;
-  }
-};
-
 interface OverlayUIProps {
   width: number;
   height: number;
   eventRegistry: UIEventRegistry;
+  onClick: () => void;
 }
 
 const initialState: State = {
-  labels: {},
+  labels: new Map(),
+  textImages: new Map(),
 };
 
 const textWidthCache: Map<string, number> = new Map();
@@ -125,45 +90,26 @@ const measureText: (text: string) => number = (() => {
   };
 })();
 
-const setLabelStyle = (
-  eventRegistry: UIEventRegistry,
-  node: HTMLElement,
-  width: number,
-  height: number
-) => {
-  const rawID = node.getAttribute('data-artist-id');
-  if (rawID === null) {
-    console.error('Missing "data-artist-id" attribute on label');
-    return;
-  }
-
-  const id = Number.isNaN(+rawID) ? rawID : +rawID;
-  const { x, y, shouldRender, distance, popularity } = eventRegistry.getLabelPosition(id);
-  const scale = getDistanceScaleFactor(distance, popularity);
-
-  if (
-    !shouldRender ||
-    x < -0.2 * width ||
-    x > 1.2 * width ||
-    y < -0.2 * height ||
-    y > 1.2 * height
-  ) {
-    node.style.display = 'none';
-  } else {
-    node.style.display = 'block';
-    node.style.left = `${x - (measureText(node.innerText) * scale) / 2}px`;
-    node.style.top = `${y}px`;
-    node.style.transform = `scale(${scale})`;
-    node.style.zIndex = `${Math.round(9_100_000 - distance)}`;
-  }
-};
-
-const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height }) => {
-  const [state, dispatch] = useReducer(reducer, initialState);
+const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onClick }) => {
+  const state = useRef(initialState);
+  const canvasRef = useRef<CanvasRenderingContext2D | null>(null);
 
   useEffect(() => {
     const handleActions = (actions: Action[]) => {
-      actions.forEach(dispatch);
+      actions.forEach((action) => {
+        switch (action.type) {
+          case 'createLabel':
+            state.current.labels.set(action.id, {
+              id: action.id,
+              text: action.text,
+              width: measureText(action.text),
+            });
+            break;
+          case 'deleteLabel':
+            state.current.labels.delete(action.id);
+            break;
+        }
+      });
     };
 
     eventRegistry.registerCallbacks(handleActions);
@@ -177,14 +123,47 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height }) =
     const updateLabelPositions = () => {
       requestAnimationFrame(updateLabelPositions);
 
+      if (!canvasRef.current) {
+        return;
+      }
+
       const shouldUpdate = eventRegistry.getShouldUpdate();
       if (!shouldUpdate) {
         return;
       }
 
-      const allLabels: NodeListOf<HTMLDivElement> = document.querySelectorAll('.artist-map-label');
+      const ctx = canvasRef.current!;
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.fillStyle = 'rgba(0, 0, 0, 0)';
+      ctx.clearRect(0, 0, width, height);
 
-      allLabels.forEach((node) => setLabelStyle(eventRegistry, node, width, height));
+      for (const label of state.current.labels.values()) {
+        const { x, y, shouldRender, distance, popularity } = eventRegistry.getLabelPosition(
+          label.id
+        );
+
+        if (
+          !shouldRender ||
+          x < -300 ||
+          x > ctx.canvas.width + 300 ||
+          y < -300 ||
+          y > ctx.canvas.height + 300
+        ) {
+          continue;
+        }
+
+        const scale = getArtistLabelScaleFactor(distance, popularity);
+
+        if (scale === 0) {
+          continue;
+        }
+
+        const fontSize = Math.round(12 * scale * 10) / 10;
+        ctx.font = `${fontSize}px PT Sans`;
+        ctx.fillStyle = '#e3e3e3';
+        ctx.fillText(label.text, x - (label.width * scale) / 2.3, y);
+      }
     };
 
     const handle = requestAnimationFrame(updateLabelPositions);
@@ -195,20 +174,19 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height }) =
   }, [eventRegistry, height, width]);
 
   return (
-    <div className="artist-map-overlay-ui" style={{ width, height }}>
-      {Object.entries(state.labels).map(([id, { text }]) => {
-        return (
-          <Label
-            key={id}
-            id={id}
-            text={text}
-            eventRegistry={eventRegistry}
-            width={width}
-            height={height}
-          />
-        );
-      })}
-    </div>
+    <canvas
+      onClick={onClick}
+      className="artist-map-overlay-ui"
+      width={width}
+      height={height}
+      style={{ width, height }}
+      ref={(node) => {
+        if (!node) {
+          return;
+        }
+        canvasRef.current = node?.getContext('2d');
+      }}
+    />
   );
 };
 

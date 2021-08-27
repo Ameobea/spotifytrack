@@ -4,6 +4,7 @@
 
 import { getPreviewURLsByInternalID } from '../api';
 import {
+  MIN_MUSIC_PLAY_TIME_SECS,
   MUSIC_DISTANCE_ROLLOFF_FACTOR,
   MUSIC_FADE_IN_TIME_SECS,
   MUSIC_FADE_OUT_TIME_SECS,
@@ -14,12 +15,23 @@ interface PlayingArtist {
   pos: { x: number; y: number; z: number };
   panner: PannerNode;
   gain: GainNode;
+  startTime: number;
 }
 
 export default class MusicManager {
   private ctx: AudioContext;
-  private curPlaying: PlayingArtist | null = null;
+  /**
+   * Artist that is *actually* playing; music has been fetched, webaudio is initialized, sound is flowing
+   */
+  public curPlaying: PlayingArtist | null = null;
+  /**
+   * Artist that has been requested to start playing.  Preview URL is being fetched.
+   *
+   * This is set when the artist is first requested to start playing.
+   */
+  private pendingPlayingArtistID: number | null = null;
   private mainGain: GainNode;
+  private curRolloffFactor = MUSIC_DISTANCE_ROLLOFF_FACTOR;
 
   constructor() {
     this.ctx = new AudioContext();
@@ -39,16 +51,35 @@ export default class MusicManager {
   ) {
     const listener = this.ctx.listener;
 
-    listener.positionX.value = pos.x;
-    listener.positionY.value = pos.y;
-    listener.positionZ.value = pos.z;
+    // Firefox :shrug:
+    if (
+      !listener.positionX ||
+      !listener.positionY ||
+      !listener.positionZ ||
+      !listener.forwardX ||
+      !listener.upX
+    ) {
+      listener.setOrientation?.(
+        cameraForward.x,
+        cameraForward.y,
+        cameraForward.z,
+        cameraUp.x,
+        cameraUp.y,
+        cameraUp.z
+      );
+      listener.setPosition?.(pos.x, pos.y, pos.z);
+    } else {
+      listener.positionX.value = pos.x;
+      listener.positionY.value = pos.y;
+      listener.positionZ.value = pos.z;
 
-    listener.forwardX.value = cameraForward.x;
-    listener.forwardY.value = cameraForward.y;
-    listener.forwardZ.value = cameraForward.z;
-    listener.upX.value = cameraUp.x;
-    listener.upY.value = cameraUp.y;
-    listener.upZ.value = cameraUp.z;
+      listener.forwardX.value = cameraForward.x;
+      listener.forwardY.value = cameraForward.y;
+      listener.forwardZ.value = cameraForward.z;
+      listener.upX.value = cameraUp.x;
+      listener.upY.value = cameraUp.y;
+      listener.upZ.value = cameraUp.z;
+    }
   }
 
   public async startPlaying(
@@ -56,6 +87,7 @@ export default class MusicManager {
     pos: { x: number; y: number; z: number },
     onEnded: () => void
   ) {
+    this.pendingPlayingArtistID = artistID;
     console.log(`start playback; artistID=${artistID}`);
     if (this.curPlaying) {
       console.warn(
@@ -68,7 +100,7 @@ export default class MusicManager {
     panner.panningModel = 'equalpower';
     panner.distanceModel = 'linear';
     panner.refDistance = 1;
-    panner.rolloffFactor = MUSIC_DISTANCE_ROLLOFF_FACTOR;
+    panner.rolloffFactor = this.curRolloffFactor;
 
     panner.positionX.value = pos.x;
     panner.positionY.value = pos.y;
@@ -78,6 +110,12 @@ export default class MusicManager {
     if (!previewURLs || previewURLs.length === 0) {
       console.log('No preview URLs for artist_id=', artistID);
       onEnded();
+      return;
+    } else if (this.pendingPlayingArtistID !== artistID) {
+      console.warn(
+        'A different artist started playing since we fetched preview URLs for artist_id=',
+        artistID
+      );
       return;
     }
 
@@ -110,11 +148,14 @@ export default class MusicManager {
     panner.connect(gain);
     gain.connect(this.mainGain);
 
-    this.curPlaying = { artistID, pos, panner, gain };
+    this.curPlaying = { artistID, pos, panner, gain, startTime: this.ctx.currentTime };
   }
 
   public stopPlaying(artistID: number) {
     console.log(`stop playback; artistID=${artistID}, curID=${this.curPlaying?.artistID}`);
+    if (this.pendingPlayingArtistID === artistID) {
+      this.pendingPlayingArtistID = null;
+    }
     if (!this.curPlaying || this.curPlaying.artistID !== artistID) {
       if (this.curPlaying)
         console.warn(
@@ -126,14 +167,27 @@ export default class MusicManager {
     const curPlaying = this.curPlaying;
     this.curPlaying = null;
 
-    curPlaying.gain.gain.cancelScheduledValues(0);
-    curPlaying.gain.gain.linearRampToValueAtTime(
-      0,
-      this.ctx.currentTime + MUSIC_FADE_OUT_TIME_SECS
-    );
+    const timePlayed = this.ctx.currentTime - curPlaying.startTime;
+    const timeToWait = MIN_MUSIC_PLAY_TIME_SECS - timePlayed;
     setTimeout(() => {
-      curPlaying.gain.disconnect(this.mainGain);
-      curPlaying.panner.disconnect(curPlaying.gain);
-    }, MUSIC_FADE_OUT_TIME_SECS * 1000);
+      curPlaying.gain.gain.cancelScheduledValues(0);
+      curPlaying.gain.gain.linearRampToValueAtTime(
+        0,
+        this.ctx.currentTime + MUSIC_FADE_OUT_TIME_SECS
+      );
+      setTimeout(() => {
+        curPlaying.gain.disconnect(this.mainGain);
+        curPlaying.panner.disconnect(curPlaying.gain);
+      }, MUSIC_FADE_OUT_TIME_SECS * 1000);
+    }, timeToWait * 1000);
+  }
+
+  public setRolloffFactor(newRolloffFactor: number) {
+    this.curRolloffFactor = newRolloffFactor;
+    if (!this.curPlaying) {
+      return;
+    }
+    console.log({ newRolloffFactor });
+    this.curPlaying.panner.rolloffFactor = newRolloffFactor;
   }
 }
