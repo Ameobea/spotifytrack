@@ -4,13 +4,11 @@
 #[macro_use]
 extern crate log;
 
-use std::{
-    collections::{HashMap, HashSet, VecDeque},
-    sync::Once,
-};
+use std::{collections::VecDeque, sync::Once};
 
 use bitflags::bitflags;
 use float_ord::FloatOrd;
+use fnv::{FnvHashMap as HashMap, FnvHashSet as HashSet};
 use wasm_bindgen::prelude::*;
 
 // mod partitioning;
@@ -65,20 +63,20 @@ const LABEL_RENDER_DISTANCE: f32 = 12320.;
 const MAX_MUSIC_PLAY_DISTANCE: f32 = 4000.;
 const MAX_RECENTLY_PLAYED_ARTISTS_TO_TRACK: usize = 32;
 const MAX_RELATED_ARTIST_COUNT: usize = 20;
-const MAX_RENDERED_CONNECTION_LENGTH: f32 = 6400.;
+const MAX_RENDERED_CONNECTION_LENGTH: f32 = 4740.;
 
 impl Default for ArtistMapCtx {
     fn default() -> Self {
         ArtistMapCtx {
             last_position: [f32::INFINITY, f32::INFINITY, f32::INFINITY],
-            artists_indices_by_id: HashMap::new(),
+            artists_indices_by_id: HashMap::default(),
             all_artists: Vec::new(),
             all_artist_relationships: Vec::new(),
             total_rendered_label_count: 0,
             playing_music_artist_id: None,
             most_recently_played_artist_ids: VecDeque::new(),
             connections_buffer: Vec::new(),
-            rendered_connections: HashSet::new(),
+            rendered_connections: HashSet::default(),
         }
     }
 }
@@ -222,7 +220,7 @@ pub fn should_render_label(
     artist_state: &ArtistState,
     distance: f32,
 ) -> bool {
-    if distance < 1000. {
+    if distance < 3000. {
         return true;
     }
 
@@ -238,7 +236,7 @@ pub fn should_render_label(
         .render_state
         .contains(ArtistRenderState::IS_HIGHLIGHTED)
     {
-        score *= 0.7;
+        score *= 0.42;
     }
 
     score <= LABEL_RENDER_DISTANCE
@@ -404,9 +402,9 @@ fn should_render_artist(distance: f32, popularity: u8, render_state: &ArtistRend
     }
 
     let mut score = distance;
-    score -= (popularity as f32).powi(3) * 0.07;
+    score -= (popularity as f32).powi(3) * 0.1;
 
-    score < 10_000.
+    score < 10_800.
 }
 
 /// Returns a vector of draw commands
@@ -468,7 +466,13 @@ pub fn handle_new_position(
             } else {
                 // Remove artist label
                 render_commands.push(1);
-                ctx.total_rendered_label_count -= 1;
+                if ctx.total_rendered_label_count == 0 {
+                    error!(
+                        "Total rendered label count accounting error; was zero and tried to \
+                         subtract one when removing artist label"
+                    );
+                }
+                ctx.total_rendered_label_count = ctx.total_rendered_label_count.saturating_sub(1);
             }
             render_commands.push(*artist_id);
         }

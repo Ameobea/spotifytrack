@@ -135,7 +135,7 @@ export default class MusicManager {
     const track = this.ctx.createMediaElementSource(audioElement);
     track.connect(panner);
     audioElement.addEventListener('ended', () => {
-      onEnded();
+      // onEnded(); // TODO: Uncomment
       if (this.curPlaying?.artistID === artistID) {
         this.curPlaying = null;
       }
@@ -187,7 +187,6 @@ export default class MusicManager {
     if (!this.curPlaying) {
       return;
     }
-    console.log({ newRolloffFactor });
     this.curPlaying.panner.rolloffFactor = newRolloffFactor;
   }
 }
