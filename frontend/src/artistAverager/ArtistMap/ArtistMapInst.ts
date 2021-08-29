@@ -3,20 +3,20 @@ import type { EffectComposer } from 'three/examples/jsm/postprocessing/EffectCom
 import * as Comlink from 'comlink';
 import { UnimplementedError, UnreachableException } from 'ameo-utils';
 import type { Scale } from 'chroma-js';
+import type { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass';
 
 import { fetchPackedArtistPositions, getAllTopArtistInternalIDsForUser } from '../api';
 import {
   BASE_ARTIST_GEOMETRY_SIZE,
-  BASE_ARTIST_COLOR,
   BASE_CONNECTION_COLOR,
   getArtistSize,
   MOVEMENT_SPEED_UNITS_PER_SECOND,
   SECONDS_BETWEEN_POSITION_UPDATES,
   ARTIST_GEOMETRY_OPACITY,
-  PLAYING_ARTIST_COLOR,
   DEFAULT_FOV,
   getArtistColor,
   BLOOMED_CONNECTION_OPACITY,
+  BLOOM_PARAMS,
 } from './conf';
 import DataFetchClient, { ArtistMapDataWithId, ArtistRelationshipData } from './DataFetchClient';
 import { MovementInputHandler } from './MovementInputHandler';
@@ -97,7 +97,8 @@ export const initArtistMapInst = async (canvas: HTMLCanvasElement): Promise<Arti
 
   // Set highlighted artists.
   // TODO: Should be user-specific with OAuth flow etc.
-  getAllTopArtistInternalIDsForUser('royhayoon').then((artistIDs) =>
+  // getAllTopArtistInternalIDsForUser('tt65cl3nc7wxnzgyzlm447571').then((artistIDs) =>
+  getAllTopArtistInternalIDsForUser('ameobea').then((artistIDs) =>
     inst.setHighlightedArtistIDs(artistIDs)
   );
 
@@ -125,6 +126,7 @@ export class ArtistMapInst {
   private camera: THREE.PerspectiveCamera;
   private controls: PointerLockControls;
   private isPointerLocked = false;
+  private bloomPass: UnrealBloomPass;
   private bloomComposer: EffectComposer;
   private finalComposer: EffectComposer;
   private clock: THREE.Clock;
@@ -151,36 +153,38 @@ export class ArtistMapInst {
 
   private musicManager: MusicManager;
 
+  public getLabelPosition(labelID: string | number) {
+    if (typeof labelID === 'string') {
+      // TODO
+      throw new UnimplementedError();
+    }
+
+    const artistData = this.artistDataByID.get(labelID);
+    if (!artistData) {
+      throw new Error(`Artist ${labelID} is missing`);
+    }
+
+    // Check to see if it is in front of or behind the camera
+    const offsetToCamera = this.camera.position.clone().sub(artistData.pos.clone()).normalize();
+    const cameraDirection = this.camera.getWorldDirection(artistData.pos.clone()).clone();
+    const angle = offsetToCamera.dot(cameraDirection);
+    const isInFrontOfCamera = angle < 0;
+
+    const point = artistData.pos.clone();
+    point.project(this.camera);
+
+    const canvas = this.renderer.domElement;
+    return {
+      x: (0.5 + point.x / 2) * (canvas.width / window.devicePixelRatio),
+      y: (0.5 - point.y / 2) * (canvas.height / window.devicePixelRatio),
+      isInFrontOfCamera,
+      distance: this.camera.position.distanceTo(artistData.pos),
+      popularity: artistData.popularity,
+    };
+  }
+
   public eventRegistry: UIEventRegistry = new UIEventRegistry(
-    (labelID: string | number) => {
-      if (typeof labelID === 'string') {
-        // TODO
-        throw new UnimplementedError();
-      }
-
-      const artistData = this.artistDataByID.get(labelID);
-      if (!artistData) {
-        throw new Error(`Artist ${labelID} is missing`);
-      }
-
-      // Check to see if it is in front of or behind the camera
-      const offsetToCamera = this.camera.position.clone().sub(artistData.pos.clone()).normalize();
-      const cameraDirection = this.camera.getWorldDirection(artistData.pos.clone()).clone();
-      const angle = offsetToCamera.dot(cameraDirection);
-      const shouldRender = angle < 0;
-
-      const point = artistData.pos.clone();
-      point.project(this.camera);
-
-      const canvas = this.renderer.domElement;
-      return {
-        x: Math.round((0.5 + point.x / 2) * (canvas.width / window.devicePixelRatio)),
-        y: Math.round((0.5 - point.y / 2) * (canvas.height / window.devicePixelRatio)),
-        shouldRender,
-        distance: this.camera.position.distanceTo(artistData.pos),
-        popularity: artistData.popularity,
-      };
-    },
+    (labelID: string | number) => this.getLabelPosition(labelID),
     () => {
       const curCameraDirection = this.camera.getWorldDirection(VEC3_IDENTITY).clone();
       const curPosition = this.controls.getObject().position.clone();
@@ -198,20 +202,26 @@ export class ArtistMapInst {
       this.lastCameraPosition = curPosition;
       this.forceLabelsUpdate = false;
       return shouldUpdate;
+    },
+    (artistID: number) => {
+      const data = dataFetchClient.fetchedArtistDataByID.get(artistID);
+      if (!data || data === 'FETCHING') {
+        return '';
+      }
+      return data.name;
     }
   );
 
   public handleScroll(deltaY: number) {
-    this.camera.fov = Math.max(10, Math.min(120, this.camera.fov + deltaY * 0.12));
+    const newFOV = Math.max(10, Math.min(120, this.camera.fov + deltaY * 0.08));
+    this.camera.fov = newFOV;
+    this.eventRegistry.currentFOV = newFOV;
     this.camera.updateProjectionMatrix();
     this.forceLabelsUpdate = true;
   }
 
   public maybePointerLock() {
-    // if (this.isPointerLocked) {
-    //   return;
-    // }
-
+    this.musicManager.startCtx();
     this.isPointerLocked = true;
     this.controls.lock();
     this.scene.add(this.controls.getObject());
@@ -246,6 +256,7 @@ export class ArtistMapInst {
       transparent: true,
       opacity: ARTIST_GEOMETRY_OPACITY,
       depthWrite: true,
+      blending: this.THREE.AdditiveBlending,
     });
     const meshes = new this.THREE.InstancedMesh(geometry, material, 100000);
     meshes.instanceColor = instanceColor;
@@ -282,11 +293,12 @@ export class ArtistMapInst {
       0.1,
       200_000
     );
-    this.camera.position.set(
-      (Math.random() - 0.5) * 80_000,
-      (Math.random() - 0.5) * 80_000,
-      (Math.random() - 0.5) * 80_000
-    );
+    // this.camera.position.set(
+    //   (Math.random() - 0.5) * 80_000,
+    //   (Math.random() - 0.5) * 80_000,
+    //   (Math.random() - 0.5) * 80_000
+    // );
+    this.camera.position.set(-55323.035, -7979.134, -33066.244);
     this.camera.lookAt(0, 0, 0);
 
     this.movementInputHandler = new MovementInputHandler((newRolloffFactor) =>
@@ -299,7 +311,18 @@ export class ArtistMapInst {
     const light = new THREE.AmbientLight(0x404040); // soft white light
     this.scene.add(light);
 
-    canvas.addEventListener('mousedown', () => this.maybePointerLock());
+    canvas.addEventListener('mousedown', () => {
+      this.maybePointerLock();
+    });
+
+    window.addEventListener('resize', () => {
+      this.camera.aspect = window.innerWidth / window.innerHeight;
+      this.camera.updateProjectionMatrix();
+      this.renderer.setSize(window.innerWidth, window.innerHeight);
+      this.bloomPass.setSize(window.innerWidth, window.innerHeight);
+      this.bloomComposer.setSize(window.innerWidth, window.innerHeight);
+      this.forceLabelsUpdate = true;
+    });
 
     this.controls = new THREE_EXTRA.PointerLockControls(this.camera, canvas);
     this.controls.addEventListener('unlock', () => {
@@ -318,6 +341,7 @@ export class ArtistMapInst {
       transparent: true,
       depthWrite: false,
       opacity: BLOOMED_CONNECTION_OPACITY,
+      blending: this.THREE.AdditiveBlending,
     });
     this.bloomedConnectionsMesh = new this.THREE.Line(
       this.bloomedConnectionsGeometry,
@@ -379,28 +403,22 @@ export class ArtistMapInst {
   // Adapted from:
   // https://github.com/mrdoob/three.js/blob/master/examples/webgl_postprocessing_unreal_bloom_selective.html
   private initBloomPass() {
-    const params = {
-      bloomStrength: 2.8,
-      bloomThreshold: 0,
-      bloomRadius: 0.45,
-    };
-
     const renderScene = new this.THREE_EXTRA.RenderPass(this.scene, this.camera);
 
-    const bloomPass = new this.THREE_EXTRA.UnrealBloomPass(
+    this.bloomPass = new this.THREE_EXTRA.UnrealBloomPass(
       new this.THREE.Vector2(this.renderer.domElement.width, this.renderer.domElement.height),
-      params.bloomStrength,
-      params.bloomRadius,
-      params.bloomThreshold
+      BLOOM_PARAMS.bloomStrength,
+      BLOOM_PARAMS.bloomRadius,
+      BLOOM_PARAMS.bloomThreshold
     );
-    bloomPass.threshold = params.bloomThreshold;
-    bloomPass.strength = params.bloomStrength;
-    bloomPass.radius = params.bloomRadius;
+    this.bloomPass.threshold = BLOOM_PARAMS.bloomThreshold;
+    this.bloomPass.strength = BLOOM_PARAMS.bloomStrength;
+    this.bloomPass.radius = BLOOM_PARAMS.bloomRadius;
 
     this.bloomComposer = new this.THREE_EXTRA.EffectComposer(this.renderer);
     this.bloomComposer.renderToScreen = false;
     this.bloomComposer.addPass(renderScene);
-    this.bloomComposer.addPass(bloomPass);
+    this.bloomComposer.addPass(this.bloomPass);
 
     const finalPass = new this.THREE_EXTRA.ShaderPass(
       new this.THREE.ShaderMaterial({
@@ -602,14 +620,17 @@ export class ArtistMapInst {
     this.timeElapsed += timeDelta;
     this.secondSinceLastPositionUpdate += timeDelta;
 
-    const { forward, sideways } = this.movementInputHandler.getDirectionVector();
+    const { forward, sideways, up } = this.movementInputHandler.getDirectionVector();
     this.controls.moveRight(sideways * MOVEMENT_SPEED_UNITS_PER_SECOND * timeDelta);
-    this.controls.getObject().position.add(
-      this.controls
-        .getDirection(VEC3_IDENTITY)
-        .clone()
-        .multiplyScalar(MOVEMENT_SPEED_UNITS_PER_SECOND * timeDelta * forward)
-    );
+    this.controls
+      .getObject()
+      .position.add(
+        this.controls
+          .getDirection(VEC3_IDENTITY)
+          .clone()
+          .multiplyScalar(MOVEMENT_SPEED_UNITS_PER_SECOND * timeDelta * forward)
+      )
+      .add(this.camera.up.clone().multiplyScalar(MOVEMENT_SPEED_UNITS_PER_SECOND * timeDelta * up));
 
     if (
       this.secondSinceLastPositionUpdate > SECONDS_BETWEEN_POSITION_UPDATES &&
@@ -719,6 +740,7 @@ export class ArtistMapInst {
         }
         case DrawCommand.StartPlayingMusic: {
           const artistPos = this.artistDataByID.get(artistID)!.pos;
+          this.eventRegistry.curPlaying = artistID;
           this.musicManager
             .startPlaying(artistID, artistPos, () => {
               wasmClient
@@ -761,6 +783,7 @@ export class ArtistMapInst {
           break;
         }
         case DrawCommand.StopPlayingMusic: {
+          this.eventRegistry.curPlaying = null;
           this.musicManager.stopPlaying(artistID);
           const bufferIx = this.renderedArtistBufferIndicesByArtistID.get(artistID);
           if (bufferIx === undefined) {

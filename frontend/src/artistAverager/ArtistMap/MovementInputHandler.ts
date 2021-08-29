@@ -10,6 +10,8 @@ class MovementInputFlags {
   public right = false;
   public left = false;
   public shift = false;
+  public descend = false;
+  public ascend = false;
 }
 
 export class MovementInputHandler {
@@ -40,6 +42,13 @@ export class MovementInputHandler {
           // Movement speed is increased so increase sound rolloff factor so sound can be heard for longer
           setSoundRolloffFactor(SPEED_BOOST_MUSIC_DISTANCE_ROLLOFF_FACTOR);
           break;
+        case 'KeyQ':
+        case 'Space':
+          this.inputs.ascend = true;
+          break;
+        case 'KeyZ':
+          this.inputs.descend = true;
+          break;
         default:
         // pass
       }
@@ -68,19 +77,29 @@ export class MovementInputHandler {
           // Movement speed is restored to normal.  Restore the sound travel distance to normal as well.
           setSoundRolloffFactor(MUSIC_DISTANCE_ROLLOFF_FACTOR);
           break;
+        case 'KeyQ':
+        case 'Space':
+          this.inputs.ascend = false;
+          break;
+        case 'KeyZ':
+          this.inputs.descend = false;
+          break;
         default:
         // pass
       }
     });
   }
 
-  public getDirectionVector(): { forward: number; sideways: number } {
+  public getDirectionVector(): { forward: number; sideways: number; up: number } {
     return {
       sideways:
         (-+this.inputs.left + +this.inputs.right) *
         (this.inputs.shift ? SHIFT_SPEED_MULTIPLIER : 1),
       forward:
         (-+this.inputs.down + +this.inputs.up) * (this.inputs.shift ? SHIFT_SPEED_MULTIPLIER : 1),
+      up:
+        (-+this.inputs.descend + +this.inputs.ascend) *
+        (this.inputs.shift ? SHIFT_SPEED_MULTIPLIER : 1),
     };
   }
 }

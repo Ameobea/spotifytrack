@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 
-import { getArtistLabelScaleFactor } from './conf';
+import { DEFAULT_FOV, getArtistLabelScaleFactor } from './conf';
 import './OverlayUI.scss';
 
 interface State {
@@ -16,19 +16,24 @@ export class UIEventRegistry {
   private callback: ((actions: Action[]) => void) | null = null;
   private pendingActions: Action[] = [];
 
+  public currentFOV = DEFAULT_FOV;
   public getLabelPosition: (
     id: number | string
-  ) => { x: number; y: number; shouldRender: boolean; distance: number; popularity: number };
+  ) => { x: number; y: number; isInFrontOfCamera: boolean; distance: number; popularity: number };
   public getShouldUpdate: () => boolean;
+  public getArtistName: (artistID: number) => string;
+  public curPlaying: number | null = null;
 
   constructor(
     getLabelPosition: (
       artistID: number | string
-    ) => { x: number; y: number; shouldRender: boolean; distance: number; popularity: number },
-    getShouldUpdate: () => boolean
+    ) => { x: number; y: number; isInFrontOfCamera: boolean; distance: number; popularity: number },
+    getShouldUpdate: () => boolean,
+    getArtistName: (artistID: number) => string
   ) {
     this.getLabelPosition = getLabelPosition;
     this.getShouldUpdate = getShouldUpdate;
+    this.getArtistName = getArtistName;
   }
 
   public createLabel(id: number | string, text: string) {
@@ -90,6 +95,80 @@ const measureText: (text: string) => number = (() => {
   };
 })();
 
+const renderCurPlaying = (
+  {
+    x,
+    y,
+    text,
+    isInFrontOfCamera,
+  }: { x: number; y: number; text: string; isInFrontOfCamera: boolean },
+  ctx: CanvasRenderingContext2D
+) => {
+  const isBehind = !isInFrontOfCamera;
+  const width = measureText(text) * 1.5;
+
+  let actualX = x;
+  let actualY = y;
+
+  const x1 = ctx.canvas.width / 2;
+  const y1 = ctx.canvas.height / 2;
+  const x2 = x;
+  const y2 = y;
+  const slope = (y2 - y1) / (x2 - x1);
+  const yIntercept = y1 - slope * x1;
+
+  const screenTopIntercept = (0 - yIntercept) / slope;
+  const screenBottomIntercept = (ctx.canvas.height - yIntercept) / slope;
+
+  const pos =
+    y1 - y2 > 0 !== isBehind
+      ? { x: screenTopIntercept, y: 0 }
+      : { x: screenBottomIntercept, y: ctx.canvas.height };
+
+  if (!Number.isFinite(slope) || !Number.isFinite(yIntercept)) {
+    actualX = 0;
+    actualY = 0;
+  } else if (!isBehind && x > 0 && x < ctx.canvas.width && y > 0 && y < ctx.canvas.height) {
+    actualX = x;
+    actualY = y;
+  } else {
+    const x1 = ctx.canvas.width / 2;
+    const y1 = ctx.canvas.height / 2;
+    const x2 = pos.x;
+    const y2 = pos.y;
+
+    const slope = (y2 - y1) / (x2 - x1);
+    const yIntercept = y1 - slope * x1;
+
+    const screenLeftIntercept = slope * 0 + yIntercept;
+    const screenRightIntercept = slope * ctx.canvas.width + yIntercept;
+
+    const isTopOrBottom = pos.x >= 0 && pos.x <= ctx.canvas.width;
+    if (isTopOrBottom) {
+      const isTop = pos.y === 0;
+      actualX = isTop ? screenTopIntercept : screenBottomIntercept;
+      actualY = pos.y;
+    } else {
+      const isLeft = pos.x < 0;
+      actualX = isLeft ? 0 : ctx.canvas.width;
+      actualY = isLeft ? screenLeftIntercept : screenRightIntercept;
+    }
+  }
+
+  actualX -= width / 2;
+  actualY -= 30;
+
+  actualX = Math.max(20, Math.min(actualX, ctx.canvas.width - width - 20));
+  actualY = Math.max(20, Math.min(actualY, ctx.canvas.height - 20));
+
+  ctx.fillStyle = '#373737';
+  ctx.fillRect(actualX - 10, actualY - 10, width + 20, 32);
+  ctx.fill();
+  ctx.fillStyle = '#eee';
+  ctx.font = '18px PT Sans';
+  ctx.fillText(text, actualX, actualY + 13);
+};
+
 const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onClick }) => {
   const state = useRef(initialState);
   const canvasRef = useRef<CanvasRenderingContext2D | null>(null);
@@ -136,15 +215,15 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onC
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
       ctx.fillStyle = 'rgba(0, 0, 0, 0)';
-      ctx.clearRect(0, 0, width, height);
+      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 
       for (const label of state.current.labels.values()) {
-        const { x, y, shouldRender, distance, popularity } = eventRegistry.getLabelPosition(
+        const { x, y, isInFrontOfCamera, distance, popularity } = eventRegistry.getLabelPosition(
           label.id
         );
 
         if (
-          !shouldRender ||
+          !isInFrontOfCamera ||
           x < -300 ||
           x > ctx.canvas.width + 300 ||
           y < -300 ||
@@ -153,7 +232,7 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onC
           continue;
         }
 
-        const scale = getArtistLabelScaleFactor(distance, popularity);
+        const scale = getArtistLabelScaleFactor(distance, popularity, eventRegistry.currentFOV);
 
         if (scale === 0) {
           continue;
@@ -163,6 +242,17 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onC
         ctx.font = `${fontSize}px PT Sans`;
         ctx.fillStyle = '#e3e3e3';
         ctx.fillText(label.text, x - (label.width * scale) / 2.3, y);
+      }
+
+      if (eventRegistry.curPlaying !== null) {
+        const curPlayingPos = eventRegistry.getLabelPosition(eventRegistry.curPlaying);
+        renderCurPlaying(
+          {
+            ...curPlayingPos,
+            text: eventRegistry.getArtistName(eventRegistry.curPlaying),
+          },
+          ctx
+        );
       }
     };
 

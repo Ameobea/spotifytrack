@@ -1,4 +1,4 @@
-import { UnreachableException } from 'ameo-utils';
+import { UnreachableException, useWindowSize } from 'ameo-utils';
 import React, { useEffect, useRef, useState } from 'react';
 
 import { ArtistMapInst, initArtistMapInst } from './ArtistMapInst';
@@ -17,6 +17,7 @@ const ArtistMap: React.FC = () => {
       setEventRegistry(inst.eventRegistry);
     });
   }, []);
+  const { width, height } = useWindowSize();
 
   return (
     <div
@@ -33,12 +34,12 @@ const ArtistMap: React.FC = () => {
       {eventRegistry ? (
         <OverlayUI
           eventRegistry={eventRegistry}
-          width={1920}
-          height={1000}
+          width={width}
+          height={height}
           onClick={() => inst?.maybePointerLock()}
         />
       ) : null}
-      <canvas className="artist-map-canvas" height={1000} width={1920} ref={canvas} />
+      <canvas className="artist-map-canvas" width={width} height={height} ref={canvas} />
     </div>
   );
 };
