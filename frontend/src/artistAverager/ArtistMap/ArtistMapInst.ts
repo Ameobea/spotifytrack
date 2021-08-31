@@ -17,6 +17,10 @@ import {
   getArtistColor,
   BLOOMED_CONNECTION_OPACITY,
   BLOOM_PARAMS,
+  SHIFT_SPEED_MULTIPLIER,
+  MAX_ARTIST_PLAY_CLICK_DISTANCE,
+  ARTIST_GEOMETRY_DETAIL,
+  PLAYING_ARTIST_COLOR,
 } from './conf';
 import DataFetchClient, { ArtistMapDataWithId, ArtistRelationshipData } from './DataFetchClient';
 import { MovementInputHandler } from './MovementInputHandler';
@@ -144,12 +148,16 @@ export class ArtistMapInst {
   private artistDataByID: Map<number, { pos: THREE.Vector3; popularity: number }> = new Map();
   private pendingDrawCommands: Uint32Array[] = [];
   private artistMeshes: THREE.InstancedMesh;
+  private playingArtistScale = 1;
+  private playingArtistGeometry: THREE.Mesh | null = null;
   private movementInputHandler: MovementInputHandler;
   private lastCameraDirection: THREE.Vector3;
   private lastCameraPosition: THREE.Vector3;
   private forceLabelsUpdate = false;
   private wasmPositionHandlerIsRunning = false;
   private highlightedArtistIDs: Set<number> = new Set();
+  private raycaster: THREE.Raycaster;
+  private enableRaycasting = false;
 
   private musicManager: MusicManager;
 
@@ -209,7 +217,8 @@ export class ArtistMapInst {
         return '';
       }
       return data.name;
-    }
+    },
+    () => this.enableRaycasting
   );
 
   public handleScroll(deltaY: number) {
@@ -220,11 +229,33 @@ export class ArtistMapInst {
     this.forceLabelsUpdate = true;
   }
 
-  public maybePointerLock() {
+  public handlePointerDown() {
     this.musicManager.startCtx();
     this.isPointerLocked = true;
     this.controls.lock();
     this.scene.add(this.controls.getObject());
+
+    if (this.enableRaycasting) {
+      this.raycaster.setFromCamera(new this.THREE.Vector2(0, 0), this.camera);
+      const intersection = this.raycaster.intersectObject(this.artistMeshes, false)[0];
+      console.log(intersection);
+      if (
+        !intersection ||
+        intersection.distance > MAX_ARTIST_PLAY_CLICK_DISTANCE ||
+        intersection.instanceId === undefined
+      ) {
+        return;
+      }
+
+      const artistID = this.artistIDByRenderedArtistBufferIndex.get(intersection.instanceId);
+      if (!artistID) {
+        console.error("Artist clicked but isn't tracked in `artistIDByRenderedArtistBufferIndex`");
+        return;
+      }
+      wasmClient
+        .handleArtistManualPlay(artistID)
+        .then((drawCommands) => this.pendingDrawCommands.push(drawCommands));
+    }
   }
 
   public setHighlightedArtistIDs(artistIDs: number[]) {
@@ -246,7 +277,10 @@ export class ArtistMapInst {
   }
 
   private buildInstancedArtistMeshes() {
-    const geometry = new this.THREE.IcosahedronGeometry(BASE_ARTIST_GEOMETRY_SIZE, 3);
+    const geometry = new this.THREE.IcosahedronGeometry(
+      BASE_ARTIST_GEOMETRY_SIZE,
+      ARTIST_GEOMETRY_DETAIL
+    );
     const instanceColorBuffer = new Float32Array(100000 * 3);
     const instanceColor = new this.THREE.InstancedBufferAttribute(instanceColorBuffer, 3);
     instanceColor.count = 0;
@@ -301,6 +335,8 @@ export class ArtistMapInst {
     this.camera.position.set(-55323.035, -7979.134, -33066.244);
     this.camera.lookAt(0, 0, 0);
 
+    this.raycaster = new THREE.Raycaster();
+
     this.movementInputHandler = new MovementInputHandler((newRolloffFactor) =>
       this.musicManager.setRolloffFactor(newRolloffFactor)
     );
@@ -312,7 +348,7 @@ export class ArtistMapInst {
     this.scene.add(light);
 
     canvas.addEventListener('mousedown', () => {
-      this.maybePointerLock();
+      this.handlePointerDown();
     });
 
     window.addEventListener('resize', () => {
@@ -528,7 +564,8 @@ export class ArtistMapInst {
       }
 
       const isHighlighted = this.highlightedArtistIDs.has(id);
-      const size = getArtistSize(artistData.popularity, isHighlighted);
+      const isPlaying = this.musicManager.curPlaying?.artistID === id;
+      const size = getArtistSize(artistData.popularity, isHighlighted, isPlaying);
       matrix.makeScale(size, size, size);
       matrix.setPosition(artistData.pos);
 
@@ -539,7 +576,6 @@ export class ArtistMapInst {
       }
 
       this.artistMeshes.setMatrixAt(bufferIndex, matrix);
-      const isPlaying = this.musicManager.curPlaying?.artistID === id;
       const color = new this.THREE.Color(getArtistColor(isHighlighted, isPlaying));
       this.artistMeshes.setColorAt(bufferIndex, color);
 
@@ -615,6 +651,25 @@ export class ArtistMapInst {
     return new this.THREE.Color(r, g, b);
   }
 
+  private maybeAnimatePlayingArtist() {
+    if (!this.playingArtistGeometry) {
+      return;
+    }
+
+    const gain = this.musicManager.getCurPlayingMusicVolume();
+    if (!Number.isFinite(gain)) {
+      throw new UnreachableException('Bad gain returned from music manager: ' + gain);
+    }
+    const scale = Math.pow(2, gain * 8.4);
+    // Low-pass filter the scale to avoid it flickering
+    this.playingArtistScale = this.playingArtistScale * 0.7 + scale * 0.3;
+    const newMatrix = new this.THREE.Matrix4();
+    const pos = this.playingArtistGeometry.position.clone();
+    newMatrix.makeScale(this.playingArtistScale, this.playingArtistScale, this.playingArtistScale);
+    newMatrix.setPosition(pos);
+    this.playingArtistGeometry.matrix.copy(newMatrix);
+  }
+
   private render() {
     const timeDelta = this.clock.getDelta();
     this.timeElapsed += timeDelta;
@@ -645,7 +700,12 @@ export class ArtistMapInst {
         this.controls
           .getDirection(VEC3_IDENTITY)
           .clone()
-          .multiplyScalar(MOVEMENT_SPEED_UNITS_PER_SECOND * 0.15 * forward)
+          .multiplyScalar(
+            MOVEMENT_SPEED_UNITS_PER_SECOND *
+              0.15 *
+              (this.movementInputHandler.isSpeedBoosted() ? SHIFT_SPEED_MULTIPLIER * 1.4 : 1) *
+              forward
+          )
       );
 
       wasmClient
@@ -674,10 +734,50 @@ export class ArtistMapInst {
       cameraUp
     );
 
+    this.maybeAnimatePlayingArtist();
+
     this.darkenNonBloomed();
     this.bloomComposer.render();
     this.restoreNonBloomed();
     this.finalComposer.render();
+  }
+
+  private removePlayingArtistGeometry(artistID: number) {
+    if (!this.playingArtistGeometry) {
+      console.warn('Tried to remove playing artist geometry, but none exists');
+      return;
+    }
+
+    this.scene.remove(this.playingArtistGeometry);
+    this.playingArtistGeometry = null;
+
+    // Trigger the old geometry to come back to normal size
+    this.renderArtists([artistID]);
+  }
+
+  private createPlayingArtistGeometry(artistID: number) {
+    if (this.playingArtistGeometry) {
+      console.error('A playing artist geometry already exists');
+      this.scene.remove(this.playingArtistGeometry);
+    }
+
+    const artistData = this.artistDataByID.get(artistID)!;
+    if (!artistData) {
+      throw new UnreachableException(`Missing data for artist id=${artistID}`);
+    }
+    const size = getArtistSize(artistData.popularity, true, false) * 1.3;
+    const geometry = new this.THREE.IcosahedronGeometry(size, ARTIST_GEOMETRY_DETAIL);
+    const material = new this.THREE.MeshPhongMaterial({
+      color: new this.THREE.Color(PLAYING_ARTIST_COLOR),
+      opacity: 1,
+    });
+    this.playingArtistGeometry = new this.THREE.Mesh(geometry, material);
+    this.playingArtistGeometry.position.copy(artistData.pos);
+    this.playingArtistGeometry.matrixAutoUpdate = false;
+    this.scene.add(this.playingArtistGeometry);
+
+    // Trigger the old geometry to have a very tiny size
+    this.renderArtists([artistID]);
   }
 
   private processDrawCommands(commands: Uint32Array) {
@@ -740,62 +840,33 @@ export class ArtistMapInst {
         }
         case DrawCommand.StartPlayingMusic: {
           const artistPos = this.artistDataByID.get(artistID)!.pos;
-          this.eventRegistry.curPlaying = artistID;
-          this.musicManager
-            .startPlaying(artistID, artistPos, () => {
-              wasmClient
-                .onMusicFinishedPlaying(artistID, [artistPos.x, artistPos.y, artistPos.z])
-                .then((commands) => {
-                  this.pendingDrawCommands.push(commands);
-                });
+          const onEnded = () => {
+            this.removePlayingArtistGeometry(artistID);
 
-              const bufferIx = this.renderedArtistBufferIndicesByArtistID.get(artistID);
-              if (bufferIx === undefined) {
-                return;
-              }
+            wasmClient
+              .onMusicFinishedPlaying(artistID, [artistPos.x, artistPos.y, artistPos.z])
+              .then((commands) => {
+                this.pendingDrawCommands.push(commands);
+              });
+          };
 
-              const isHighlighted = this.highlightedArtistIDs.has(artistID);
-              this.artistMeshes.setColorAt(
-                bufferIx,
-                new this.THREE.Color(getArtistColor(isHighlighted, false))
-              );
-              this.artistMeshes.instanceColor!.needsUpdate = true;
-            })
-            .then(() => {
-              const isActuallyPlaying = this.musicManager.curPlaying?.artistID === artistID;
-              if (!isActuallyPlaying) {
-                return;
-              }
+          this.musicManager.startPlaying(artistID, artistPos, onEnded).then(() => {
+            const isActuallyPlaying = this.musicManager.curPlaying?.artistID === artistID;
+            if (!isActuallyPlaying) {
+              return;
+            }
 
-              // Playing has actually started; color the artist to indicate that it's playing
-              const bufferIx = this.renderedArtistBufferIndicesByArtistID.get(artistID);
-              if (bufferIx === undefined) {
-                return;
-              }
+            this.eventRegistry.curPlaying = artistID;
 
-              const isHighlighted = this.highlightedArtistIDs.has(artistID);
-              this.artistMeshes.setColorAt(
-                bufferIx,
-                new this.THREE.Color(getArtistColor(isHighlighted, true))
-              );
-              this.artistMeshes.instanceColor!.needsUpdate = true;
-            });
+            // Playing has actually started; color the artist to indicate that it's playing
+            this.createPlayingArtistGeometry(artistID);
+          });
           break;
         }
         case DrawCommand.StopPlayingMusic: {
           this.eventRegistry.curPlaying = null;
           this.musicManager.stopPlaying(artistID);
-          const bufferIx = this.renderedArtistBufferIndicesByArtistID.get(artistID);
-          if (bufferIx === undefined) {
-            break;
-          }
-
-          const isHighlighted = this.highlightedArtistIDs.has(artistID);
-          this.artistMeshes.setColorAt(
-            bufferIx,
-            new this.THREE.Color(getArtistColor(isHighlighted, false))
-          );
-          this.artistMeshes.instanceColor!.needsUpdate = true;
+          this.removePlayingArtistGeometry(artistID);
           break;
         }
         default: {

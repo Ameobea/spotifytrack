@@ -2,15 +2,22 @@ export const BASE_ARTIST_COLOR = 0x11aa99;
 export const PLAYING_ARTIST_COLOR = 0xee44ab;
 export const HIGHLIGHTED_ARTIST_COLOR = 0xffa30a;
 export const BASE_CONNECTION_COLOR = 0x2288ee;
+export const ARTIST_GEOMETRY_DETAIL = 3;
 
 export const DEFAULT_FOV = 88;
 
 export const MOVEMENT_SPEED_UNITS_PER_SECOND = 1490;
-export const SHIFT_SPEED_MULTIPLIER = 3.635;
+export const SHIFT_SPEED_MULTIPLIER = 2.835;
+export const MAX_ARTIST_PLAY_CLICK_DISTANCE = 30_000;
+
+export const PLAYING_ARTIST_LABEL_FADE_OUT_TIME_MS = 2800;
 
 export const BASE_ARTIST_GEOMETRY_SIZE = 1.7;
 export const ARTIST_GEOMETRY_OPACITY = 0.48;
 export const BLOOMED_CONNECTION_OPACITY = 0.009;
+
+export const CROSSHAIR_COLOR = 'rgba(188, 188, 188, 0.38)';
+export const CROSSHAIR_WIDTH_PX = 2;
 
 export const BLOOM_PARAMS = {
   bloomStrength: 2.2,
@@ -26,7 +33,17 @@ export const MUSIC_DISTANCE_ROLLOFF_FACTOR = 4;
 export const SPEED_BOOST_MUSIC_DISTANCE_ROLLOFF_FACTOR = 0.6;
 export const MIN_MUSIC_PLAY_TIME_SECS = 0.8;
 
-export const getArtistSize = (popularity: number, isHighlighted: boolean): number => {
+export const getArtistSize = (
+  popularity: number,
+  isHighlighted: boolean,
+  isPlaying: boolean
+): number => {
+  // Playing artists have a separate, dedicated geometry so we want to hide this one without dealing with actually removing
+  // it from the instanced mesh.
+  if (isPlaying) {
+    return 0.001;
+  }
+
   const x = popularity / 100;
   let size = Math.pow(Math.pow(x, 2) * 10, 2.5) + 4.89 * Math.pow(x, 6) + 41 * x + 10;
   if (isHighlighted) {

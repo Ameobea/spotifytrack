@@ -1,11 +1,19 @@
 import React, { useEffect, useRef } from 'react';
 
-import { DEFAULT_FOV, getArtistLabelScaleFactor } from './conf';
+import {
+  CROSSHAIR_COLOR,
+  CROSSHAIR_WIDTH_PX,
+  DEFAULT_FOV,
+  getArtistLabelScaleFactor,
+  PLAYING_ARTIST_LABEL_FADE_OUT_TIME_MS,
+} from './conf';
 import './OverlayUI.scss';
 
 interface State {
   labels: Map<string | number, { id: string | number; text: string; width: number }>;
   textImages: Map<string | number, HTMLImageElement>;
+  fadingOutPlayingArtistLabels: { artistID: number; fadeOutStartTime: number }[];
+  lastPlayingArtistID: number | null;
 }
 
 type Action =
@@ -22,6 +30,7 @@ export class UIEventRegistry {
   ) => { x: number; y: number; isInFrontOfCamera: boolean; distance: number; popularity: number };
   public getShouldUpdate: () => boolean;
   public getArtistName: (artistID: number) => string;
+  public getShouldRenderCrosshair: () => boolean;
   public curPlaying: number | null = null;
 
   constructor(
@@ -29,11 +38,13 @@ export class UIEventRegistry {
       artistID: number | string
     ) => { x: number; y: number; isInFrontOfCamera: boolean; distance: number; popularity: number },
     getShouldUpdate: () => boolean,
-    getArtistName: (artistID: number) => string
+    getArtistName: (artistID: number) => string,
+    getShouldRenderCrosshair: () => boolean
   ) {
     this.getLabelPosition = getLabelPosition;
     this.getShouldUpdate = getShouldUpdate;
     this.getArtistName = getArtistName;
+    this.getShouldRenderCrosshair = getShouldRenderCrosshair;
   }
 
   public createLabel(id: number | string, text: string) {
@@ -74,6 +85,8 @@ interface OverlayUIProps {
 const initialState: State = {
   labels: new Map(),
   textImages: new Map(),
+  fadingOutPlayingArtistLabels: [],
+  lastPlayingArtistID: null,
 };
 
 const textWidthCache: Map<string, number> = new Map();
@@ -95,6 +108,25 @@ const measureText: (text: string) => number = (() => {
   };
 })();
 
+const renderCrosshair = (ctx: CanvasRenderingContext2D) => {
+  ctx.strokeStyle = CROSSHAIR_COLOR;
+  ctx.lineWidth = CROSSHAIR_WIDTH_PX;
+  ctx.beginPath();
+
+  const midpointX = ctx.canvas.width / 2;
+  const midpointY = ctx.canvas.height / 2;
+
+  ctx.moveTo(midpointX, midpointY - 9);
+  ctx.lineTo(midpointX, midpointY - 2.6);
+  ctx.moveTo(midpointX, midpointY + 2.6);
+  ctx.lineTo(midpointX, midpointY + 9);
+  ctx.moveTo(midpointX - 9, midpointY);
+  ctx.lineTo(midpointX - 2.6, midpointY);
+  ctx.moveTo(midpointX + 2.6, midpointY);
+  ctx.lineTo(midpointX + 9, midpointY);
+  ctx.stroke();
+};
+
 const renderCurPlaying = (
   {
     x,
@@ -102,7 +134,8 @@ const renderCurPlaying = (
     text,
     isInFrontOfCamera,
   }: { x: number; y: number; text: string; isInFrontOfCamera: boolean },
-  ctx: CanvasRenderingContext2D
+  ctx: CanvasRenderingContext2D,
+  opacity?: number
 ) => {
   const isBehind = !isInFrontOfCamera;
   const width = measureText(text) * 1.5;
@@ -161,12 +194,14 @@ const renderCurPlaying = (
   actualX = Math.max(20, Math.min(actualX, ctx.canvas.width - width - 20));
   actualY = Math.max(20, Math.min(actualY, ctx.canvas.height - 20));
 
-  ctx.fillStyle = '#373737';
+  ctx.globalAlpha = opacity ?? 1;
+  ctx.fillStyle = '#141414';
   ctx.fillRect(actualX - 10, actualY - 10, width + 20, 32);
   ctx.fill();
-  ctx.fillStyle = '#eee';
+  ctx.fillStyle = opacity === undefined ? '#ee44ab' : '#eee';
   ctx.font = '18px PT Sans';
   ctx.fillText(text, actualX, actualY + 13);
+  ctx.globalAlpha = 1;
 };
 
 const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onClick }) => {
@@ -207,7 +242,11 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onC
       }
 
       const shouldUpdate = eventRegistry.getShouldUpdate();
-      if (!shouldUpdate) {
+      if (
+        !shouldUpdate &&
+        state.current.fadingOutPlayingArtistLabels.length === 0 &&
+        state.current.lastPlayingArtistID === eventRegistry.curPlaying
+      ) {
         return;
       }
 
@@ -217,7 +256,24 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onC
       ctx.fillStyle = 'rgba(0, 0, 0, 0)';
       ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 
-      for (const label of state.current.labels.values()) {
+      if (eventRegistry.curPlaying !== state.current.lastPlayingArtistID) {
+        if (state.current.lastPlayingArtistID !== null) {
+          state.current.fadingOutPlayingArtistLabels.push({
+            artistID: state.current.lastPlayingArtistID,
+            fadeOutStartTime: Date.now(),
+          });
+        }
+        state.current.lastPlayingArtistID = eventRegistry.curPlaying;
+      }
+
+      for (const [artistID, label] of state.current.labels.entries()) {
+        if (
+          artistID === eventRegistry.curPlaying ||
+          state.current.fadingOutPlayingArtistLabels.some((f) => f.artistID === artistID)
+        ) {
+          continue;
+        }
+
         const { x, y, isInFrontOfCamera, distance, popularity } = eventRegistry.getLabelPosition(
           label.id
         );
@@ -244,15 +300,31 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onC
         ctx.fillText(label.text, x - (label.width * scale) / 2.3, y);
       }
 
+      const now = Date.now();
+      state.current.fadingOutPlayingArtistLabels = state.current.fadingOutPlayingArtistLabels.filter(
+        (datum) => now - datum.fadeOutStartTime < PLAYING_ARTIST_LABEL_FADE_OUT_TIME_MS
+      );
+
+      for (const { artistID, fadeOutStartTime } of state.current.fadingOutPlayingArtistLabels) {
+        const pos = eventRegistry.getLabelPosition(artistID);
+        // Linearly fade out over the fade duration
+        const opacity = 1 - (now - fadeOutStartTime) / PLAYING_ARTIST_LABEL_FADE_OUT_TIME_MS;
+        renderCurPlaying({ ...pos, text: eventRegistry.getArtistName(artistID) }, ctx, opacity);
+      }
+
       if (eventRegistry.curPlaying !== null) {
-        const curPlayingPos = eventRegistry.getLabelPosition(eventRegistry.curPlaying);
+        const pos = eventRegistry.getLabelPosition(eventRegistry.curPlaying);
         renderCurPlaying(
           {
-            ...curPlayingPos,
+            ...pos,
             text: eventRegistry.getArtistName(eventRegistry.curPlaying),
           },
           ctx
         );
+      }
+
+      if (eventRegistry.getShouldRenderCrosshair()) {
+        renderCrosshair(ctx);
       }
     };
 

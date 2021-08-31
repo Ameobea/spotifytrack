@@ -90,6 +90,10 @@ export class MovementInputHandler {
     });
   }
 
+  public isSpeedBoosted(): boolean {
+    return this.inputs.shift;
+  }
+
   public getDirectionVector(): { forward: number; sideways: number; up: number } {
     return {
       sideways:
