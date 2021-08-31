@@ -113,6 +113,11 @@ export class WasmClient {
     );
     return Comlink.transfer(drawCommands, [drawCommands.buffer]);
   }
+
+  public handleArtistManualPlay(artistID: number) {
+    const drawCommands = this.engine.handle_artist_manual_play(this.ctxPtr, artistID);
+    return Comlink.transfer(drawCommands, [drawCommands.buffer]);
+  }
 }
 
 const init = async () => {

@@ -82,7 +82,6 @@ impl Default for ArtistMapCtx {
 }
 
 impl ArtistMapCtx {
-    // TODO: Take movement direction into account
     pub fn get_next_artist_to_play(&self, cur_x: f32, cur_y: f32, cur_z: f32) -> Option<u32> {
         let cur_position = [cur_x, cur_y, cur_z];
 
@@ -673,6 +672,34 @@ pub fn handle_set_highlighted_artists(
         draw_commands.push(2);
         draw_commands.push(highlighted_artist_id);
     }
+
+    draw_commands
+}
+
+/// Returns a list of draw commands to execute
+#[wasm_bindgen]
+pub fn handle_artist_manual_play(ctx: *mut ArtistMapCtx, artist_id: u32) -> Vec<u32> {
+    let ctx = unsafe { &mut *ctx };
+
+    let mut draw_commands = Vec::new();
+
+    if let Some(playing_artist_id) = ctx.playing_music_artist_id {
+        if playing_artist_id == artist_id {
+            return draw_commands;
+        }
+
+        ctx.stop_playing_music(
+            playing_artist_id,
+            &mut draw_commands,
+            std::f32::NEG_INFINITY,
+            std::f32::NEG_INFINITY,
+            std::f32::NEG_INFINITY,
+        );
+    }
+
+    ctx.playing_music_artist_id = Some(artist_id);
+    draw_commands.push(5);
+    draw_commands.push(artist_id);
 
     draw_commands
 }

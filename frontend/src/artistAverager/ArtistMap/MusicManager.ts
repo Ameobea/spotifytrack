@@ -31,17 +31,26 @@ export default class MusicManager {
    */
   private pendingPlayingArtistID: number | null = null;
   private mainGain: GainNode;
+  private analyzer: AnalyserNode;
   private curRolloffFactor = MUSIC_DISTANCE_ROLLOFF_FACTOR;
 
   constructor() {
     this.ctx = new AudioContext();
     this.mainGain = this.ctx.createGain();
+    this.analyzer = this.ctx.createAnalyser();
     this.mainGain.gain.value = 0.1;
-    this.mainGain.connect(this.ctx.destination);
+    this.mainGain.connect(this.analyzer);
+    this.analyzer.connect(this.ctx.destination);
   }
 
   public startCtx() {
     this.ctx.resume();
+  }
+
+  public getCurPlayingMusicVolume() {
+    const samples = new Float32Array(this.analyzer.fftSize);
+    this.analyzer.getFloatTimeDomainData(samples);
+    return Math.max(...samples);
   }
 
   public setListenerPosition(
@@ -135,7 +144,7 @@ export default class MusicManager {
     const track = this.ctx.createMediaElementSource(audioElement);
     track.connect(panner);
     audioElement.addEventListener('ended', () => {
-      // onEnded(); // TODO: Uncomment
+      onEnded();
       if (this.curPlaying?.artistID === artistID) {
         this.curPlaying = null;
       }
