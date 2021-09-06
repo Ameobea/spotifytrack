@@ -97,7 +97,7 @@ export default class MusicManager {
     onEnded: () => void
   ) {
     this.pendingPlayingArtistID = artistID;
-    console.log(`start playback; artistID=${artistID}`);
+    // console.log(`start playback; artistID=${artistID}`);
     if (this.curPlaying) {
       console.warn(
         `Tried to start playing while a different artist was already playing; cur_playing=${this.curPlaying.artistID}, requested=${artistID}`
@@ -117,7 +117,7 @@ export default class MusicManager {
 
     const previewURLs = await getPreviewURLsByInternalID(artistID);
     if (!previewURLs || previewURLs.length === 0) {
-      console.log('No preview URLs for artist_id=', artistID);
+      // console.log('No preview URLs for artist_id=', artistID);
       onEnded();
       return;
     } else if (this.pendingPlayingArtistID !== artistID) {

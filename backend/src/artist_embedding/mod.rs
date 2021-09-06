@@ -18,6 +18,7 @@ impl<const DIMS: usize> ArtistPos<DIMS> {
     }
 }
 
+#[derive(Clone)]
 pub struct ArtistEmbeddingContext<const DIMS: usize> {
     pub artist_position_by_id: HashMap<usize, ArtistPos<DIMS>>,
 }

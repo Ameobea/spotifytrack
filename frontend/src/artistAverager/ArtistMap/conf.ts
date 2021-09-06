@@ -1,35 +1,39 @@
-export const BASE_ARTIST_COLOR = 0x11aa99;
+export const BASE_ARTIST_COLOR = 0x0f6e7a;
 export const PLAYING_ARTIST_COLOR = 0xee44ab;
-export const HIGHLIGHTED_ARTIST_COLOR = 0xffa30a;
+export const HIGHLIGHTED_ARTIST_COLOR = 0xad6303;
 export const BASE_CONNECTION_COLOR = 0x2288ee;
 export const ARTIST_GEOMETRY_DETAIL = 3;
+export const AMBIENT_LIGHT_COLOR = 0x727272;
+export const ARTIST_LABEL_TEXT_COLOR = '#f2f2f2';
 
-export const DEFAULT_FOV = 88;
+export const DEFAULT_FOV = 84.4;
+export const CAMERA_PIVOT_COEFFICIENT = 0.96;
+export const CAMERA_OVERRIDE_TARGET_TOLERANCE = 0.02;
 
-export const MOVEMENT_SPEED_UNITS_PER_SECOND = 1490;
-export const SHIFT_SPEED_MULTIPLIER = 2.835;
+export const MOVEMENT_SPEED_UNITS_PER_SECOND = 3220;
+export const SHIFT_SPEED_MULTIPLIER = 2.965;
 export const MAX_ARTIST_PLAY_CLICK_DISTANCE = 30_000;
 
 export const PLAYING_ARTIST_LABEL_FADE_OUT_TIME_MS = 2800;
 
 export const BASE_ARTIST_GEOMETRY_SIZE = 1.7;
-export const ARTIST_GEOMETRY_OPACITY = 0.48;
-export const BLOOMED_CONNECTION_OPACITY = 0.009;
+export const ARTIST_GEOMETRY_OPACITY = 0.42;
+export const BLOOMED_CONNECTION_OPACITY = 0.0099;
 
 export const CROSSHAIR_COLOR = 'rgba(188, 188, 188, 0.38)';
 export const CROSSHAIR_WIDTH_PX = 2;
 
 export const BLOOM_PARAMS = {
-  bloomStrength: 2.2,
+  bloomStrength: 2.45,
   bloomThreshold: 0,
-  bloomRadius: 0.1,
+  bloomRadius: 0.12,
 };
 
 export const SECONDS_BETWEEN_POSITION_UPDATES = 0.15;
 
 export const MUSIC_FADE_IN_TIME_SECS = 0.35;
 export const MUSIC_FADE_OUT_TIME_SECS = 3.6;
-export const MUSIC_DISTANCE_ROLLOFF_FACTOR = 4;
+export const MUSIC_DISTANCE_ROLLOFF_FACTOR = 0.84;
 export const SPEED_BOOST_MUSIC_DISTANCE_ROLLOFF_FACTOR = 0.6;
 export const MIN_MUSIC_PLAY_TIME_SECS = 0.8;
 
@@ -49,9 +53,13 @@ export const getArtistSize = (
   if (isHighlighted) {
     // Avoid really huge popular artists
     if (popularity > 87) {
-      size *= 2.3;
+      size *= 1.3;
+    } else if (popularity > 30) {
+      size *= 2.82;
+    } else if (popularity > 20) {
+      size *= 3.3;
     } else {
-      size *= 1.72;
+      size *= 4;
     }
   }
   return size;

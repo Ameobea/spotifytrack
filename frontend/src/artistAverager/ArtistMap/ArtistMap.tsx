@@ -36,7 +36,7 @@ const ArtistMap: React.FC = () => {
           eventRegistry={eventRegistry}
           width={width}
           height={height}
-          onClick={() => inst?.handlePointerDown()}
+          onPointerDown={(evt) => inst?.handlePointerDown(evt)}
         />
       ) : null}
       <canvas className="artist-map-canvas" width={width} height={height} ref={canvas} />
