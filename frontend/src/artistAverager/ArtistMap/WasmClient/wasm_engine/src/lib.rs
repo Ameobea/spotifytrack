@@ -9,9 +9,14 @@ use std::{collections::VecDeque, sync::Once};
 use bitflags::bitflags;
 use float_ord::FloatOrd;
 use fnv::{FnvHashMap as HashMap, FnvHashSet as HashSet};
+use rand::{Rng, SeedableRng};
 use wasm_bindgen::prelude::*;
 
-// mod partitioning;
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_namespace = Math, js_name = random)]
+    fn js_random() -> f64;
+}
 
 bitflags! {
     pub struct ArtistRenderState: u8 {
@@ -58,12 +63,11 @@ pub struct ArtistMapCtx {
     pub rendered_connections: HashSet<(usize, usize)>,
 }
 
-const DISTANCE_MULTIPLIER: [f32; 3] = [24000., 24000., 32430.];
-const LABEL_RENDER_DISTANCE: f32 = 12320.;
-const MAX_MUSIC_PLAY_DISTANCE: f32 = 4000.;
-const MAX_RECENTLY_PLAYED_ARTISTS_TO_TRACK: usize = 32;
+const DISTANCE_MULTIPLIER: [f32; 3] = [47500., 47400., 49130.];
+const LABEL_RENDER_DISTANCE: f32 = 16320.;
+const MAX_MUSIC_PLAY_DISTANCE: f32 = 13740.;
+const MAX_RECENTLY_PLAYED_ARTISTS_TO_TRACK: usize = 12;
 const MAX_RELATED_ARTIST_COUNT: usize = 20;
-const MAX_RENDERED_CONNECTION_LENGTH: f32 = 4740.;
 
 impl Default for ArtistMapCtx {
     fn default() -> Self {
@@ -162,7 +166,7 @@ impl ArtistMapCtx {
         // Just render everything for now
         for artist_id in new_artist_ids {
             let src_artist_ix = *self.artists_indices_by_id.get(artist_id).unwrap();
-            let src_pos = self.all_artists[src_artist_ix].1.position;
+            let src = &self.all_artists[src_artist_ix].1;
             let relationship_state = &mut self.all_artist_relationships[src_artist_ix];
 
             if relationship_state.related_artist_indices[0]
@@ -180,10 +184,10 @@ impl ArtistMapCtx {
                 &mut relationship_state.related_artist_indices[..relationship_state.count]
             {
                 let related_artist_ix = relationship.related_artist_index;
-                let dst_pos = self.all_artists[related_artist_ix].1.position;
+                let dst = &self.all_artists[related_artist_ix].1;
 
-                // Skip rendering very long connections for now
-                if distance(&src_pos, &dst_pos) > MAX_RENDERED_CONNECTION_LENGTH {
+                let should_render = should_render_connection(&src, &dst);
+                if !should_render {
                     continue;
                 }
 
@@ -196,7 +200,7 @@ impl ArtistMapCtx {
                     continue;
                 }
 
-                self.connections_buffer.push([src_pos, dst_pos]);
+                self.connections_buffer.push([src.position, dst.position]);
                 relationship.connections_buffer_index = Some(self.connections_buffer.len() - 1);
             }
         }
@@ -211,7 +215,13 @@ fn maybe_init() {
             console_error_panic_hook::set_once();
             wasm_logger::init(wasm_logger::Config::default());
         }
+
+        let seed: u64 = unsafe { std::mem::transmute(js_random()) };
+        unsafe {
+            RNG = Box::into_raw(box pcg::Pcg::from_seed(seed.into()));
+        }
     })
+
 }
 
 pub fn should_render_label(
@@ -219,7 +229,7 @@ pub fn should_render_label(
     artist_state: &ArtistState,
     distance: f32,
 ) -> bool {
-    if distance < 3000. {
+    if distance < 6800. {
         return true;
     }
 
@@ -235,7 +245,7 @@ pub fn should_render_label(
         .render_state
         .contains(ArtistRenderState::IS_HIGHLIGHTED)
     {
-        score *= 0.42;
+        score *= 0.3338
     }
 
     score <= LABEL_RENDER_DISTANCE
@@ -392,7 +402,7 @@ fn should_render_artist(distance: f32, popularity: u8, render_state: &ArtistRend
         return true;
     }
 
-    if distance < 2000. {
+    if distance < 9000. {
         return true;
     }
 
@@ -403,7 +413,50 @@ fn should_render_artist(distance: f32, popularity: u8, render_state: &ArtistRend
     let mut score = distance;
     score -= (popularity as f32).powi(3) * 0.1;
 
-    score < 10_800.
+    score < 36_800.
+}
+
+static mut RNG: *mut pcg::Pcg = std::ptr::null_mut();
+
+fn rng() -> &'static mut pcg::Pcg {
+    unsafe { &mut *RNG }
+}
+
+fn should_render_connection(src: &ArtistState, dst: &ArtistState) -> bool {
+    // if src.popularity < 25 || dst.popularity < 25 {
+    //     return false;
+    // }
+
+    let distance_to_origin = distance(&src.position, &[0., 0., 0.]);
+    // if distance_to_origin > 200_000. {
+    //     return true;
+    // }
+
+    let val = rng().gen_range(0.0f64, 1.0f64);
+    let dist = distance(&src.position, &dst.position);
+
+    // if dst > 20_000. {
+    //     return val > 0.993;
+    // } else if dst > 14_000. {
+    //     return val > 0.992;
+    // } else if dst > 10_000. {
+    //     return val > 0.989;
+    // } else if dst > 8000. {
+    //     return val > 0.985;
+    if dist > 10000. {
+        // return val > 0.99;
+        return false;
+    } else if dist > 9000. {
+        return val > 0.95;
+        // return false;
+    } else if dist > 8000. {
+        return val > 0.6;
+        // return false;
+    } else if dist > 7000. {
+        return val > 0.2;
+    } else {
+        return val > 0.1;
+    }
 }
 
 /// Returns a vector of draw commands

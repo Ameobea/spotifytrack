@@ -21,6 +21,9 @@ import {
   MAX_ARTIST_PLAY_CLICK_DISTANCE,
   ARTIST_GEOMETRY_DETAIL,
   PLAYING_ARTIST_COLOR,
+  CAMERA_PIVOT_COEFFICIENT,
+  CAMERA_OVERRIDE_TARGET_TOLERANCE,
+  AMBIENT_LIGHT_COLOR,
 } from './conf';
 import DataFetchClient, { ArtistMapDataWithId, ArtistRelationshipData } from './DataFetchClient';
 import { MovementInputHandler } from './MovementInputHandler';
@@ -122,6 +125,14 @@ enum DrawCommand {
   StopPlayingMusic = 6,
 }
 
+interface AutoFlyState {
+  path: THREE.Path;
+}
+
+interface LookAtState {
+  target: THREE.Vector3;
+}
+
 export class ArtistMapInst {
   public THREE: typeof import('three');
   public THREE_EXTRA: ThreeExtra;
@@ -158,6 +169,13 @@ export class ArtistMapInst {
   private highlightedArtistIDs: Set<number> = new Set();
   private raycaster: THREE.Raycaster;
   private enableRaycasting = false;
+  private cameraOverrides: {
+    movement: AutoFlyState | null;
+    direction: LookAtState | null;
+  } = {
+    movement: null,
+    direction: null,
+  };
 
   private musicManager: MusicManager;
 
@@ -229,11 +247,16 @@ export class ArtistMapInst {
     this.forceLabelsUpdate = true;
   }
 
-  public handlePointerDown() {
+  public handlePointerDown(evt: MouseEvent) {
     this.musicManager.startCtx();
+    const wasLocked = this.isPointerLocked;
     this.isPointerLocked = true;
     this.controls.lock();
     this.scene.add(this.controls.getObject());
+
+    if (!wasLocked) {
+      return;
+    }
 
     if (this.enableRaycasting) {
       this.raycaster.setFromCamera(new this.THREE.Vector2(0, 0), this.camera);
@@ -255,6 +278,22 @@ export class ArtistMapInst {
       wasmClient
         .handleArtistManualPlay(artistID)
         .then((drawCommands) => this.pendingDrawCommands.push(drawCommands));
+    }
+
+    if (evt.button === 0) {
+      if (this.musicManager.curPlaying) {
+        const curPosition = this.controls.getObject().position;
+        wasmClient
+          .onMusicFinishedPlaying(this.musicManager.curPlaying.artistID, [
+            curPosition.x,
+            curPosition.y,
+            curPosition.z,
+          ])
+          .then((drawCommands) => this.pendingDrawCommands.push(drawCommands));
+        this.musicManager.stopPlaying(this.musicManager.curPlaying.artistID);
+      }
+    } else if (evt.button === 2) {
+      // TODO: Play last song
     }
   }
 
@@ -315,7 +354,10 @@ export class ArtistMapInst {
       this.connectionColorScale = this.chroma.scale(['red', 'green', 'blue']).domain([0, 1]);
     });
 
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    this.renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: true,
+    });
     this.renderer.setPixelRatio(window.devicePixelRatio);
     // this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // TODO: Remove
     this.renderer.toneMapping = THREE.ReinhardToneMapping;
@@ -325,14 +367,14 @@ export class ArtistMapInst {
       DEFAULT_FOV,
       canvas.width / canvas.height,
       0.1,
-      200_000
+      1200_000
     );
-    // this.camera.position.set(
-    //   (Math.random() - 0.5) * 80_000,
-    //   (Math.random() - 0.5) * 80_000,
-    //   (Math.random() - 0.5) * 80_000
-    // );
-    this.camera.position.set(-55323.035, -7979.134, -33066.244);
+    this.camera.position.set(
+      (Math.random() - 0.5) * 80_000,
+      (Math.random() - 0.5) * 80_000,
+      (Math.random() - 0.5) * 80_000
+    );
+    // this.camera.position.set(-55323.035, -7979.134, -33066.244);
     this.camera.lookAt(0, 0, 0);
 
     this.raycaster = new THREE.Raycaster();
@@ -342,13 +384,13 @@ export class ArtistMapInst {
     );
 
     this.scene = new THREE.Scene();
-    this.scene.fog = new this.THREE.Fog(0x000000, 1, 472_000);
+    this.scene.fog = new this.THREE.Fog(0x000000, 1, 9_472_000);
 
-    const light = new THREE.AmbientLight(0x404040); // soft white light
+    const light = new THREE.AmbientLight(AMBIENT_LIGHT_COLOR);
     this.scene.add(light);
 
-    canvas.addEventListener('mousedown', () => {
-      this.handlePointerDown();
+    canvas.addEventListener('mousedown', (evt) => {
+      this.handlePointerDown(evt);
     });
 
     window.addEventListener('resize', () => {
@@ -377,7 +419,10 @@ export class ArtistMapInst {
       transparent: true,
       depthWrite: false,
       opacity: BLOOMED_CONNECTION_OPACITY,
-      blending: this.THREE.AdditiveBlending,
+      // blending: this.THREE.CustomBlending,
+      // blendEquation: this.THREE.AddEquation,
+      // blendSrc: this.THREE.SrcAlphaFactor,
+      // blendDst: this.THREE.DstAlphaFactor,
     });
     this.bloomedConnectionsMesh = new this.THREE.Line(
       this.bloomedConnectionsGeometry,
@@ -434,6 +479,16 @@ export class ArtistMapInst {
     );
 
     this.animate();
+
+    // setTimeout(() => this.pivotCameraToLookAt(new this.THREE.Vector3(0, 0, 0)), 1000);
+  }
+
+  private pivotCameraToLookAt(target: THREE.Vector3) {
+    this.controls.disconnect();
+    if (this.cameraOverrides.direction) {
+      console.warn('Existing camera look at direction exists; overriding...');
+    }
+    this.cameraOverrides.direction = { target };
   }
 
   // Adapted from:
@@ -660,7 +715,7 @@ export class ArtistMapInst {
     if (!Number.isFinite(gain)) {
       throw new UnreachableException('Bad gain returned from music manager: ' + gain);
     }
-    const scale = Math.pow(2, gain * 8.4);
+    const scale = Math.pow(2, gain * 12.4);
     // Low-pass filter the scale to avoid it flickering
     this.playingArtistScale = this.playingArtistScale * 0.7 + scale * 0.3;
     const newMatrix = new this.THREE.Matrix4();
@@ -670,23 +725,7 @@ export class ArtistMapInst {
     this.playingArtistGeometry.matrix.copy(newMatrix);
   }
 
-  private render() {
-    const timeDelta = this.clock.getDelta();
-    this.timeElapsed += timeDelta;
-    this.secondSinceLastPositionUpdate += timeDelta;
-
-    const { forward, sideways, up } = this.movementInputHandler.getDirectionVector();
-    this.controls.moveRight(sideways * MOVEMENT_SPEED_UNITS_PER_SECOND * timeDelta);
-    this.controls
-      .getObject()
-      .position.add(
-        this.controls
-          .getDirection(VEC3_IDENTITY)
-          .clone()
-          .multiplyScalar(MOVEMENT_SPEED_UNITS_PER_SECOND * timeDelta * forward)
-      )
-      .add(this.camera.up.clone().multiplyScalar(MOVEMENT_SPEED_UNITS_PER_SECOND * timeDelta * up));
-
+  private render(forward: number) {
     if (
       this.secondSinceLastPositionUpdate > SECONDS_BETWEEN_POSITION_UPDATES &&
       !this.wasmPositionHandlerIsRunning
@@ -703,7 +742,7 @@ export class ArtistMapInst {
           .multiplyScalar(
             MOVEMENT_SPEED_UNITS_PER_SECOND *
               0.15 *
-              (this.movementInputHandler.isSpeedBoosted() ? SHIFT_SPEED_MULTIPLIER * 1.4 : 1) *
+              (this.movementInputHandler.isSpeedBoosted() ? SHIFT_SPEED_MULTIPLIER : 1) *
               forward
           )
       );
@@ -744,7 +783,8 @@ export class ArtistMapInst {
 
   private removePlayingArtistGeometry(artistID: number) {
     if (!this.playingArtistGeometry) {
-      console.warn('Tried to remove playing artist geometry, but none exists');
+      // Trigger the old geometry to come back to normal size
+      this.renderArtists([artistID]);
       return;
     }
 
@@ -766,10 +806,11 @@ export class ArtistMapInst {
       throw new UnreachableException(`Missing data for artist id=${artistID}`);
     }
     const size = getArtistSize(artistData.popularity, true, false) * 1.3;
-    const geometry = new this.THREE.IcosahedronGeometry(size, ARTIST_GEOMETRY_DETAIL);
+    const geometry = new this.THREE.IcosahedronGeometry(size, ARTIST_GEOMETRY_DETAIL + 2);
     const material = new this.THREE.MeshPhongMaterial({
       color: new this.THREE.Color(PLAYING_ARTIST_COLOR),
-      opacity: 1,
+      opacity: 0.7,
+      transparent: true,
     });
     this.playingArtistGeometry = new this.THREE.Mesh(geometry, material);
     this.playingArtistGeometry.position.copy(artistData.pos);
@@ -894,7 +935,51 @@ export class ArtistMapInst {
     this.pendingDrawCommands.forEach((commands) => this.processDrawCommands(commands));
     this.pendingDrawCommands = [];
 
+    if (this.cameraOverrides.direction) {
+      const cameraDirection = this.camera.getWorldDirection(new this.THREE.Vector3());
+      const targetDirection = this.cameraOverrides.direction.target
+        .clone()
+        .sub(this.camera.position.clone())
+        .normalize();
+      const newLookDirection = new this.THREE.Vector3(
+        cameraDirection.x * CAMERA_PIVOT_COEFFICIENT +
+          targetDirection.x * (1 - CAMERA_PIVOT_COEFFICIENT),
+        cameraDirection.y * CAMERA_PIVOT_COEFFICIENT +
+          targetDirection.y * (1 - CAMERA_PIVOT_COEFFICIENT),
+        cameraDirection.z * CAMERA_PIVOT_COEFFICIENT +
+          targetDirection.z * (1 - CAMERA_PIVOT_COEFFICIENT)
+      );
+      this.camera.lookAt(this.camera.position.clone().add(newLookDirection));
+
+      // If we're close enough to the target, stop overriding the camera
+      const totalDiff = newLookDirection.distanceTo(targetDirection);
+      if (totalDiff < CAMERA_OVERRIDE_TARGET_TOLERANCE) {
+        this.cameraOverrides.direction = null;
+      }
+      this.controls.connect();
+    }
+    if (this.cameraOverrides.movement) {
+      // TODO
+    }
+
+    const timeDelta = this.clock.getDelta();
+    this.timeElapsed += timeDelta;
+    this.secondSinceLastPositionUpdate += timeDelta;
+
+    const { forward, sideways, up } = this.movementInputHandler.getDirectionVector();
+    this.controls.moveRight(sideways * MOVEMENT_SPEED_UNITS_PER_SECOND * timeDelta);
+    this.controls
+      .getObject()
+      .position.add(
+        this.controls
+          .getDirection(VEC3_IDENTITY)
+          .clone()
+          .multiplyScalar(MOVEMENT_SPEED_UNITS_PER_SECOND * timeDelta * forward)
+      )
+      .add(this.camera.up.clone().multiplyScalar(MOVEMENT_SPEED_UNITS_PER_SECOND * timeDelta * up));
+
+    this.render(forward);
+
     requestAnimationFrame(() => this.animate());
-    this.render();
   }
 }

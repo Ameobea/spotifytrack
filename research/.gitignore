@@ -1,3 +1,4 @@
 .ipynb_checkpoints
 *.vocab
 *.w2v
+ids_to_keep.json

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 
 import {
+  ARTIST_LABEL_TEXT_COLOR,
   CROSSHAIR_COLOR,
   CROSSHAIR_WIDTH_PX,
   DEFAULT_FOV,
@@ -79,7 +80,7 @@ interface OverlayUIProps {
   width: number;
   height: number;
   eventRegistry: UIEventRegistry;
-  onClick: () => void;
+  onPointerDown: (evt: MouseEvent) => void;
 }
 
 const initialState: State = {
@@ -204,7 +205,7 @@ const renderCurPlaying = (
   ctx.globalAlpha = 1;
 };
 
-const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onClick }) => {
+const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onPointerDown }) => {
   const state = useRef(initialState);
   const canvasRef = useRef<CanvasRenderingContext2D | null>(null);
 
@@ -296,7 +297,7 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onC
 
         const fontSize = Math.round(12 * scale * 10) / 10;
         ctx.font = `${fontSize}px PT Sans`;
-        ctx.fillStyle = '#e3e3e3';
+        ctx.fillStyle = ARTIST_LABEL_TEXT_COLOR;
         ctx.fillText(label.text, x - (label.width * scale) / 2.3, y);
       }
 
@@ -337,7 +338,7 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onC
 
   return (
     <canvas
-      onClick={onClick}
+      onClick={onPointerDown}
       className="artist-map-overlay-ui"
       width={width}
       height={height}

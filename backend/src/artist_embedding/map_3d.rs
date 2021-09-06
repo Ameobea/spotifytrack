@@ -12,7 +12,8 @@ use crate::{
 
 // const PACKED_3D_ARTIST_COORDS_URL: &str = "https://ameo.dev/artist_map_embedding_3d.w2v";
 // const PACKED_3D_ARTIST_COORDS_URL: &str = "https://ameo.dev/pca.w2v";
-const PACKED_3D_ARTIST_COORDS_URL: &str = "https://ameo.dev/50k_corpus_4_dims_new_settings_pca.w2v";
+const PACKED_3D_ARTIST_COORDS_URL: &str =
+    "https://ameo.dev/100k_pop_filtered_corpus_p_16_q_1_pca.w2v";
 
 async fn build_3d_artist_map_ctx() -> ArtistEmbeddingContext<3> {
     let raw_positions: String = reqwest::get(PACKED_3D_ARTIST_COORDS_URL)
@@ -56,11 +57,16 @@ async fn get_all_artist_popularities_by_id(
     Ok(artist_popularities_by_id)
 }
 
+const MIN_POPULARITY: u8 = 15;
+
 async fn build_packed_3d_artist_coords(
     conn: &DbConn,
     spotify_access_token: &str,
 ) -> Result<Vec<u8>, String> {
-    let map_ctx_3d = MAP_3D_ARTIST_CTX.get_or_init(build_3d_artist_map_ctx).await;
+    let mut map_ctx_3d = MAP_3D_ARTIST_CTX
+        .get_or_init(build_3d_artist_map_ctx)
+        .await
+        .clone();
 
     let all_artist_internal_ids: Vec<i32> = map_ctx_3d
         .artist_position_by_id
@@ -90,6 +96,21 @@ async fn build_packed_3d_artist_coords(
 
         popularities_by_internal_id.insert(internal_id, popularity);
     }
+
+    let orig_count = map_ctx_3d.artist_position_by_id.len();
+    map_ctx_3d.artist_position_by_id.retain(|k, v| {
+        match popularities_by_internal_id.get(&(*k as _)) {
+            Some(pop) if *pop >= MIN_POPULARITY => true,
+            _ => false,
+        }
+    });
+    let new_count = map_ctx_3d.artist_position_by_id.len();
+    info!(
+        "Removed {} artists from embedding due to being under popularity threshold or missing \
+         popularities; new total artist count={}",
+        orig_count - new_count,
+        new_count
+    );
 
     Ok(map_ctx_3d.serialize_to_packed_binary(Some(popularities_by_internal_id)))
 }
