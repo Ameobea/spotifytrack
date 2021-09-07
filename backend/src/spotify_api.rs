@@ -13,6 +13,7 @@ use tokio::{
 
 use crate::{
     conf::CONF,
+    db_util::get_internal_ids_by_spotify_id,
     models::{
         AccessTokenResponse, Artist, ArtistGenrePair, ArtistSearchResult, CreatePlaylistRequest,
         GetRelatedArtistsResponse, NewArtistHistoryEntry, NewTrackHistoryEntry, Playlist,
@@ -852,6 +853,7 @@ pub(crate) async fn fetch_top_tracks_for_artist(
 }
 
 pub(crate) async fn search_artists(
+    conn: &DbConn,
     bearer_token: String,
     query: &str,
 ) -> Result<Vec<ArtistSearchResult>, String> {
@@ -873,11 +875,15 @@ pub(crate) async fn search_artists(
     let res =
         spotify_server_get_request::<SpotifyArtistsSearchResponse>(&bearer_token, &url).await?;
 
+    let all_spotify_ids = res.artists.items.iter().map(|artist| &artist.id);
+    let internal_ids_by_spotify_id = get_internal_ids_by_spotify_id(conn, all_spotify_ids).await?;
+
     Ok(res
         .artists
         .items
         .into_iter()
         .map(|artist| ArtistSearchResult {
+            internal_id: internal_ids_by_spotify_id.get(&artist.id).copied(),
             spotify_id: artist.id,
             name: artist.name,
         })

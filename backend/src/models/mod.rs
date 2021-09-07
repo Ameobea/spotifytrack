@@ -552,6 +552,8 @@ pub(crate) struct NewRelatedArtistEntry {
 pub(crate) struct ArtistSearchResult {
     #[serde(rename = "spotifyID")]
     pub spotify_id: String,
+    #[serde(rename = "internalID")]
+    pub internal_id: Option<i32>,
     pub name: String,
 }
 

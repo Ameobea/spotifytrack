@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 import {
   ARTIST_LABEL_TEXT_COLOR,
@@ -7,7 +7,9 @@ import {
   DEFAULT_FOV,
   getArtistLabelScaleFactor,
   PLAYING_ARTIST_LABEL_FADE_OUT_TIME_MS,
-} from './conf';
+} from '../conf';
+import ArtistSearch from './ArtistSearch';
+import OnboardingSidebar from './OnboardingSidebar';
 import './OverlayUI.scss';
 
 interface State {
@@ -33,19 +35,32 @@ export class UIEventRegistry {
   public getArtistName: (artistID: number) => string;
   public getShouldRenderCrosshair: () => boolean;
   public curPlaying: number | null = null;
+  public getIfArtistIDsAreInEmbedding: (artistIDs: number[]) => boolean[];
+  public lookAtArtistID: (artistID: number) => void;
 
-  constructor(
+  constructor({
+    getLabelPosition,
+    getShouldUpdate,
+    getArtistName,
+    getShouldRenderCrosshair,
+    getIfArtistIDsAreInEmbedding,
+    lookAtArtistID,
+  }: {
     getLabelPosition: (
       artistID: number | string
-    ) => { x: number; y: number; isInFrontOfCamera: boolean; distance: number; popularity: number },
-    getShouldUpdate: () => boolean,
-    getArtistName: (artistID: number) => string,
-    getShouldRenderCrosshair: () => boolean
-  ) {
+    ) => { x: number; y: number; isInFrontOfCamera: boolean; distance: number; popularity: number };
+    getShouldUpdate: () => boolean;
+    getArtistName: (artistID: number) => string;
+    getShouldRenderCrosshair: () => boolean;
+    getIfArtistIDsAreInEmbedding: (artistIDs: number[]) => boolean[];
+    lookAtArtistID: (artistID: number) => void;
+  }) {
     this.getLabelPosition = getLabelPosition;
     this.getShouldUpdate = getShouldUpdate;
     this.getArtistName = getArtistName;
     this.getShouldRenderCrosshair = getShouldRenderCrosshair;
+    this.getIfArtistIDsAreInEmbedding = getIfArtistIDsAreInEmbedding;
+    this.lookAtArtistID = lookAtArtistID;
   }
 
   public createLabel(id: number | string, text: string) {
@@ -80,7 +95,7 @@ interface OverlayUIProps {
   width: number;
   height: number;
   eventRegistry: UIEventRegistry;
-  onPointerDown: (evt: MouseEvent) => void;
+  onPointerDown: (evt: React.MouseEvent<HTMLCanvasElement, MouseEvent>) => void;
 }
 
 const initialState: State = {
@@ -208,6 +223,8 @@ const renderCurPlaying = (
 const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onPointerDown }) => {
   const state = useRef(initialState);
   const canvasRef = useRef<CanvasRenderingContext2D | null>(null);
+  const [onboardingSidebarOpen, setOnboardingSidebarOpen] = useState(true);
+  const [uiExpanded, setUIExpanded] = useState(true);
 
   useEffect(() => {
     const handleActions = (actions: Action[]) => {
@@ -337,19 +354,34 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onP
   }, [eventRegistry, height, width]);
 
   return (
-    <canvas
-      onClick={onPointerDown}
-      className="artist-map-overlay-ui"
-      width={width}
-      height={height}
-      style={{ width, height }}
-      ref={(node) => {
-        if (!node) {
-          return;
-        }
-        canvasRef.current = node?.getContext('2d');
-      }}
-    />
+    <>
+      {onboardingSidebarOpen ? (
+        <OnboardingSidebar setOnboardingSidebarOpen={setOnboardingSidebarOpen} />
+      ) : null}
+      {uiExpanded ? (
+        <>
+          <ArtistSearch
+            onSubmit={({ internalID }) => eventRegistry.lookAtArtistID(internalID)}
+            getIfArtistIDsAreInEmbedding={(artistIDs) =>
+              eventRegistry.getIfArtistIDsAreInEmbedding(artistIDs)
+            }
+          />
+        </>
+      ) : null}
+      <canvas
+        onClick={onPointerDown}
+        className="artist-map-overlay-ui"
+        width={width}
+        height={height}
+        style={{ width, height }}
+        ref={(node) => {
+          if (!node) {
+            return;
+          }
+          canvasRef.current = node?.getContext('2d');
+        }}
+      />
+    </>
   );
 };
 

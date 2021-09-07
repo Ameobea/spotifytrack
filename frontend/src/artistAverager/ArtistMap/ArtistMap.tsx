@@ -2,7 +2,7 @@ import { UnreachableException, useWindowSize } from 'ameo-utils';
 import React, { useEffect, useRef, useState } from 'react';
 
 import { ArtistMapInst, initArtistMapInst } from './ArtistMapInst';
-import OverlayUI, { UIEventRegistry } from './OverlayUI';
+import OverlayUI, { UIEventRegistry } from './OverlayUI/OverlayUI';
 
 const ArtistMap: React.FC = () => {
   const [inst, setInst] = useState<ArtistMapInst | null>(null);

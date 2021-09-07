@@ -3,6 +3,7 @@ import React from 'react';
 export interface AutocompleteSuggestion {
   name: string;
   spotifyID: string;
+  internalID?: number;
 }
 
 interface AutocompleteSuggestionProps {
@@ -35,7 +36,7 @@ const AutocompleteDropdownItem: React.FC<AutocompleteSuggestionProps> = ({
 
 interface AutocompleteDropdownProps {
   items: AutocompleteSuggestion[];
-  onSelect: (spotifyID: string) => void;
+  onSelect: (item: { spotifyID: string; internalID?: number | null }) => void;
   selectedIx: number | null;
   setSelectedIx: (newSelectedIx: number) => void;
 }
@@ -48,11 +49,11 @@ const AutocompleteDropdown: React.FC<AutocompleteDropdownProps> = ({
 }) => {
   return (
     <div className="autocomplete-dropdown">
-      {items.map(({ name, spotifyID }, i) => (
+      {items.map(({ name, spotifyID, internalID }, i) => (
         <AutocompleteDropdownItem
           key={spotifyID}
           name={name}
-          onSelect={() => onSelect(spotifyID)}
+          onSelect={() => onSelect({ spotifyID, internalID })}
           isSelected={i === selectedIx}
           onHover={() => setSelectedIx(i)}
         />

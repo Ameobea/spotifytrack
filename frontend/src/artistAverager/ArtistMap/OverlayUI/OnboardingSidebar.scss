@@ -1,0 +1,38 @@
+.onboarding-sidebar {
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  background-color: rgba(24, 24, 24, 0.9);
+  position: absolute;
+  top: 4;
+  left: 4;
+  width: calc(max(20vw, 300px));
+  z-index: 3;
+  font-size: 17px;
+
+  h2 {
+    text-align: center;
+    font-size: 32px;
+    margin-bottom: 8px;
+    margin-top: 0;
+  }
+
+  .onboarding-sidebar-action-button {
+    width: calc(max(20vw, 300px) - 60px);
+    height: 90px;
+    font-size: 20px;
+    color: #ddd;
+    background-color: #0b0b0b;
+    border: 2px solid #444;
+    outline: none;
+    border-radius: 10px;
+    cursor: pointer;
+    margin-left: auto;
+    margin-right: auto;
+    margin-bottom: 16px;
+  }
+
+  .onboarding-sidebar-action-button:first-of-type {
+    margin-top: 8px;
+  }
+}

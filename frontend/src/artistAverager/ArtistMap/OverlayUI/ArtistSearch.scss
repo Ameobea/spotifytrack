@@ -1,0 +1,64 @@
+.artist-search {
+  display: flex;
+  flex-direction: row;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 3;
+  width: calc(max(500px, 30vw));
+  height: 100%;
+  overflow-y: visible;
+  overflow-x: hidden;
+
+  input {
+    background-color: #333;
+    border: 1px solid rgba(155, 155, 155, 0.6);
+    outline: none;
+    color: #eee;
+    font-size: 18px;
+    height: 26px;
+  }
+
+  .artist-input-wrapper {
+    margin-top: 0 !important;
+  }
+
+  .artist-search-submit-button {
+    margin-left: 8px;
+    height: 30px;
+    width: 66px;
+    cursor: pointer;
+    background-color: rgba(155, 155, 155, 0.9);
+    color: #eee;
+    box-shadow: none;
+    border: 1px solid rgba(244, 244, 244, 0.4);
+    font-size: 16px;
+  }
+
+  .artist-search-submit-button:disabled {
+    cursor: default;
+    background-color: rgba(155, 155, 155, 0.75);
+    color: #999;
+    border: 1px solid rgba(244, 244, 244, 0.2);
+  }
+
+  .autocomplete-dropdown {
+    width: calc(min(530px, 60vw));
+    border-radius: 3px;
+    max-height: calc(min(400px, 60vh));
+    overflow-y: auto;
+    overflow-x: hidden;
+    position: absolute;
+    top: 30px;
+  }
+
+  .autocomplete-suggestion {
+    background-color: #555;
+    cursor: pointer;
+    padding: 6px 12px;
+  }
+
+  .autocomplete-suggestion[data-selected='true'] {
+    background-color: #888;
+  }
+}

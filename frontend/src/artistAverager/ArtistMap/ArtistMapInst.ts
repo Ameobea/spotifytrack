@@ -28,7 +28,7 @@ import {
 import DataFetchClient, { ArtistMapDataWithId, ArtistRelationshipData } from './DataFetchClient';
 import { MovementInputHandler } from './MovementInputHandler';
 import type { WasmClient } from './WasmClient/WasmClient.worker';
-import { UIEventRegistry } from './OverlayUI';
+import { UIEventRegistry } from './OverlayUI/OverlayUI';
 import MusicManager from './MusicManager';
 
 interface ThreeExtra {
@@ -209,9 +209,9 @@ export class ArtistMapInst {
     };
   }
 
-  public eventRegistry: UIEventRegistry = new UIEventRegistry(
-    (labelID: string | number) => this.getLabelPosition(labelID),
-    () => {
+  public eventRegistry: UIEventRegistry = new UIEventRegistry({
+    getLabelPosition: (labelID: string | number) => this.getLabelPosition(labelID),
+    getShouldUpdate: () => {
       const curCameraDirection = this.camera.getWorldDirection(VEC3_IDENTITY).clone();
       const curPosition = this.controls.getObject().position.clone();
 
@@ -229,15 +229,27 @@ export class ArtistMapInst {
       this.forceLabelsUpdate = false;
       return shouldUpdate;
     },
-    (artistID: number) => {
+    getArtistName: (artistID: number) => {
       const data = dataFetchClient.fetchedArtistDataByID.get(artistID);
       if (!data || data === 'FETCHING') {
         return '';
       }
       return data.name;
     },
-    () => this.enableRaycasting
-  );
+    getShouldRenderCrosshair: () => this.enableRaycasting,
+    getIfArtistIDsAreInEmbedding: (artistIDs: number[]) =>
+      artistIDs.map((id) => this.artistDataByID.has(id)),
+    lookAtArtistID: (artistID: number) => {
+      const pos = this.artistDataByID.get(artistID)?.pos;
+      if (!pos) {
+        throw new UnreachableException();
+      }
+
+      this.cameraOverrides.direction = {
+        target: pos,
+      };
+    },
+  });
 
   public handleScroll(deltaY: number) {
     const newFOV = Math.max(10, Math.min(120, this.camera.fov + deltaY * 0.08));
@@ -247,7 +259,7 @@ export class ArtistMapInst {
     this.forceLabelsUpdate = true;
   }
 
-  public handlePointerDown(evt: MouseEvent) {
+  public handlePointerDown(evt: React.MouseEvent<HTMLCanvasElement, MouseEvent>) {
     this.musicManager.startCtx();
     const wasLocked = this.isPointerLocked;
     this.isPointerLocked = true;
@@ -388,10 +400,6 @@ export class ArtistMapInst {
 
     const light = new THREE.AmbientLight(AMBIENT_LIGHT_COLOR);
     this.scene.add(light);
-
-    canvas.addEventListener('mousedown', (evt) => {
-      this.handlePointerDown(evt);
-    });
 
     window.addEventListener('resize', () => {
       this.camera.aspect = window.innerWidth / window.innerHeight;

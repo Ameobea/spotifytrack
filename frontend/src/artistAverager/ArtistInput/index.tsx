@@ -7,12 +7,24 @@ import './ArtistInput.scss';
 import { getProxiedImageURL } from 'src/util/index';
 
 interface ArtistInputProps {
-  onSelect: (spotifyID: { spotifyID: string; name: string } | null) => void;
+  onSelect: (
+    spotifyID: { spotifyID: string; name: string; internalID?: number | null } | null
+  ) => void;
   onClear: () => void;
   selectedArtist: { spotifyID: string; name: string } | null;
+  showImage?: boolean;
+  filterAutocompleteResults?: (
+    suggestions: AutocompleteSuggestion[]
+  ) => Promise<AutocompleteSuggestion[]> | AutocompleteSuggestion[];
 }
 
-const ArtistInput: React.FC<ArtistInputProps> = ({ onSelect, onClear, selectedArtist }) => {
+const ArtistInput: React.FC<ArtistInputProps> = ({
+  onSelect,
+  onClear,
+  selectedArtist,
+  showImage = true,
+  filterAutocompleteResults = (suggestions: AutocompleteSuggestion[]) => suggestions,
+}) => {
   const [text, setText] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [selectedSuggestionIx, setSelectedSuggestionIx] = useState(0);
@@ -20,7 +32,7 @@ const ArtistInput: React.FC<ArtistInputProps> = ({ onSelect, onClear, selectedAr
 
   const lastSuggestions = useRef<AutocompleteSuggestion[]>([]);
   const { data: suggestions } = useQuery(['artistAutocomplete', text], ({ queryKey: [, text] }) =>
-    text ? getArtistAutocompleteSuggestions(text) : []
+    text ? getArtistAutocompleteSuggestions(text, filterAutocompleteResults) : []
   );
   useEffect(() => {
     if (suggestions) {
@@ -76,20 +88,22 @@ const ArtistInput: React.FC<ArtistInputProps> = ({ onSelect, onClear, selectedAr
       {isFocused ? (
         <AutocompleteDropdown
           items={suggestions ?? lastSuggestions.current}
-          onSelect={(spotifyID) => {
+          onSelect={({ spotifyID, internalID }) => {
             const match = (suggestions ?? lastSuggestions.current).find(
               (sugg) => sugg.spotifyID === spotifyID
             )!;
             setText(match.name);
-            onSelect({ spotifyID, name: match.name });
+            onSelect({ spotifyID, internalID, name: match.name });
           }}
           selectedIx={selectedSuggestionIx}
           setSelectedIx={setSelectedSuggestionIx}
         />
       ) : null}
-      <div className="artist-picker-portrait">
-        {artistURL ? <img src={getProxiedImageURL(280, artistURL)} /> : null}
-      </div>
+      {showImage ? (
+        <div className="artist-picker-portrait">
+          {artistURL ? <img src={getProxiedImageURL(280, artistURL)} /> : null}
+        </div>
+      ) : null}
     </div>
   );
 };

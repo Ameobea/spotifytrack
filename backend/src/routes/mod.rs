@@ -1155,6 +1155,7 @@ pub(crate) async fn crawl_related_artists(
 
 #[get("/search_artist?<q>")]
 pub(crate) async fn search_artist(
+    conn: DbConn,
     token_data: &State<Mutex<SpotifyTokenData>>,
     q: String,
 ) -> Result<Json<Vec<ArtistSearchResult>>, String> {
@@ -1180,7 +1181,7 @@ pub(crate) async fn search_artist(
     }
 
     // Hit the Spotify API and store in the cache
-    let search_results = search_artists(spotify_access_token, &q).await?;
+    let search_results = search_artists(&conn, spotify_access_token, &q).await?;
     set_hash_items::<Vec<ArtistSearchResult>>("artistSearch", &[(&q, search_results.clone())])
         .map_err(|err| {
             error!("Error storing artist search in cache: {}", err);
