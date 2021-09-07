@@ -89,7 +89,6 @@ impl ArtistMapCtx {
     pub fn get_next_artist_to_play(&self, cur_x: f32, cur_y: f32, cur_z: f32) -> Option<u32> {
         let cur_position = [cur_x, cur_y, cur_z];
 
-        // TODO: Make this better
         self.all_artists
             .iter()
             .filter_map(|(id, state)| {

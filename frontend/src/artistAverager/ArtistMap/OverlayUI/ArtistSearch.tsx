@@ -28,6 +28,7 @@ const ArtistSearch: React.FC<ArtistSearchProps> = ({ onSubmit, getIfArtistIDsAre
           const hasInEmbeddingFlags = getIfArtistIDsAreInEmbedding(internalIDs);
           return autocompleteResults.filter((_res, i) => hasInEmbeddingFlags[i]);
         }}
+        placeholder="Search for an artist"
       />
       <button
         className="artist-search-submit-button"
@@ -53,5 +54,9 @@ const ArtistSearch: React.FC<ArtistSearchProps> = ({ onSubmit, getIfArtistIDsAre
     </div>
   );
 };
+
+export const CollapsedArtistSearch: React.FC = () => (
+  <div className="collapsed-artist-search">Press Escape to search for an artist</div>
+);
 
 export default ArtistSearch;

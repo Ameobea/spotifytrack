@@ -1,12 +1,12 @@
 .onboarding-sidebar {
   display: flex;
   flex-direction: column;
-  padding: 6px;
+  padding: 12px;
   background-color: rgba(24, 24, 24, 0.9);
   position: absolute;
   top: 4;
   left: 4;
-  width: calc(max(20vw, 300px));
+  width: 330px;
   z-index: 3;
   font-size: 17px;
 

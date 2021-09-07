@@ -1,0 +1,55 @@
+.cheat-sheet {
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 3;
+  background-color: #141414dd;
+  pointer-events: none;
+  padding: 10px;
+  width: 342px;
+
+  ul {
+    margin-block-start: 0;
+    margin-inline-start: 0;
+    padding-inline-start: 0;
+    list-style: none;
+    margin: 0;
+
+    > div {
+      display: flex;
+      flex-direction: row;
+      padding-bottom: 4px;
+      padding-top: 4px;
+      border-bottom: 1px solid #cccccc56;
+
+      .name {
+        flex: 1;
+        font-size: 15px;
+        color: #eeeeee9b;
+      }
+
+      .keybind {
+        flex: 0.45;
+        font-family: 'Input Mono', 'Oxygen Mono', 'Hack', 'IBM Plex Mono', monospace;
+        font-size: 15px;
+      }
+    }
+
+    > div:last-child {
+      border-bottom: none;
+    }
+  }
+}
+
+.collapsed-cheat-sheet {
+  .cheat-sheet {
+    width: 218px;
+    padding: 0px 10px 4px 18px;
+
+    ul > div {
+      padding-bottom: 0;
+    }
+  }
+}

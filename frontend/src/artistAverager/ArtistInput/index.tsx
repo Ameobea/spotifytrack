@@ -16,6 +16,7 @@ interface ArtistInputProps {
   filterAutocompleteResults?: (
     suggestions: AutocompleteSuggestion[]
   ) => Promise<AutocompleteSuggestion[]> | AutocompleteSuggestion[];
+  placeholder?: string;
 }
 
 const ArtistInput: React.FC<ArtistInputProps> = ({
@@ -24,6 +25,7 @@ const ArtistInput: React.FC<ArtistInputProps> = ({
   selectedArtist,
   showImage = true,
   filterAutocompleteResults = (suggestions: AutocompleteSuggestion[]) => suggestions,
+  placeholder,
 }) => {
   const [text, setText] = useState('');
   const [isFocused, setIsFocused] = useState(false);
@@ -67,6 +69,7 @@ const ArtistInput: React.FC<ArtistInputProps> = ({
           onClear();
           setText(evt.target.value);
         }}
+        placeholder={placeholder}
         onKeyDown={(evt) => {
           if (evt.key === 'ArrowDown') {
             setSelectedSuggestionIx(

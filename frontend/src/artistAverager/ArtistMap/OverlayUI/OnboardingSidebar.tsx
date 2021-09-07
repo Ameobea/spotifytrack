@@ -1,6 +1,7 @@
 import React from 'react';
 
 import './OnboardingSidebar.scss';
+import { OverlayAction } from './OverlayUI';
 
 interface ActionButtonProps {
   onClick: () => void;
@@ -13,10 +14,14 @@ const ActionButton: React.FC<ActionButtonProps> = ({ onClick, children }) => (
 );
 
 interface OnboardingSidebarProps {
-  setOnboardingSidebarOpen: (open: boolean) => void;
+  dispatchOverlayAction: (overlayAction: OverlayAction) => void;
+  lockPointer: () => void;
 }
 
-const OnboardingSidebar: React.FC<OnboardingSidebarProps> = ({ setOnboardingSidebarOpen }) => {
+const OnboardingSidebar: React.FC<OnboardingSidebarProps> = ({
+  dispatchOverlayAction,
+  lockPointer,
+}) => {
   return (
     <div className="onboarding-sidebar">
       <h2>Music Galaxy</h2>
@@ -27,18 +32,20 @@ const OnboardingSidebar: React.FC<OnboardingSidebarProps> = ({ setOnboardingSide
 
       <ActionButton
         onClick={() => {
-          setOnboardingSidebarOpen(false);
+          dispatchOverlayAction({ type: 'CLOSE_ONBOARDING' });
+          dispatchOverlayAction({ type: 'CLOSE_ARTIST_SEARCH' });
           // TODO
         }}
       >
         Personalize with Your Spotify Data
         <br />
-        <i>(Highly Recommended)</i>
+        <i style={{ fontSize: 13 }}>(Highly Recommended)</i>
       </ActionButton>
       <ActionButton
         onClick={() => {
-          setOnboardingSidebarOpen(false);
-          // TODO
+          dispatchOverlayAction({ type: 'CLOSE_ONBOARDING' });
+          dispatchOverlayAction({ type: 'CLOSE_ARTIST_SEARCH' });
+          lockPointer();
         }}
       >
         Explore Without Connecting

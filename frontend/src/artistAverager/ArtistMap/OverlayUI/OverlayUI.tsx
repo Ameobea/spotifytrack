@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useReducer, useRef } from 'react';
 
 import {
   ARTIST_LABEL_TEXT_COLOR,
@@ -8,7 +8,8 @@ import {
   getArtistLabelScaleFactor,
   PLAYING_ARTIST_LABEL_FADE_OUT_TIME_MS,
 } from '../conf';
-import ArtistSearch from './ArtistSearch';
+import ArtistSearch, { CollapsedArtistSearch } from './ArtistSearch';
+import CheatSheet, { CollapsedCheatSheet } from './CheatSheet';
 import OnboardingSidebar from './OnboardingSidebar';
 import './OverlayUI.scss';
 
@@ -21,7 +22,9 @@ interface State {
 
 type Action =
   | { type: 'createLabel'; id: number | string; text: string }
-  | { type: 'deleteLabel'; id: number | string };
+  | { type: 'deleteLabel'; id: number | string }
+  | { type: 'pointerLocked' }
+  | { type: 'pointerUnlocked' };
 
 export class UIEventRegistry {
   private callback: ((actions: Action[]) => void) | null = null;
@@ -37,6 +40,7 @@ export class UIEventRegistry {
   public curPlaying: number | null = null;
   public getIfArtistIDsAreInEmbedding: (artistIDs: number[]) => boolean[];
   public lookAtArtistID: (artistID: number) => void;
+  public lockPointer: () => void;
 
   constructor({
     getLabelPosition,
@@ -45,6 +49,7 @@ export class UIEventRegistry {
     getShouldRenderCrosshair,
     getIfArtistIDsAreInEmbedding,
     lookAtArtistID,
+    lockPointer,
   }: {
     getLabelPosition: (
       artistID: number | string
@@ -54,6 +59,7 @@ export class UIEventRegistry {
     getShouldRenderCrosshair: () => boolean;
     getIfArtistIDsAreInEmbedding: (artistIDs: number[]) => boolean[];
     lookAtArtistID: (artistID: number) => void;
+    lockPointer: () => void;
   }) {
     this.getLabelPosition = getLabelPosition;
     this.getShouldUpdate = getShouldUpdate;
@@ -61,6 +67,7 @@ export class UIEventRegistry {
     this.getShouldRenderCrosshair = getShouldRenderCrosshair;
     this.getIfArtistIDsAreInEmbedding = getIfArtistIDsAreInEmbedding;
     this.lookAtArtistID = lookAtArtistID;
+    this.lockPointer = lockPointer;
   }
 
   public createLabel(id: number | string, text: string) {
@@ -69,6 +76,14 @@ export class UIEventRegistry {
 
   public deleteLabel(id: number | string) {
     this.pendingActions.push({ type: 'deleteLabel', id });
+  }
+
+  public onPointerLocked() {
+    this.callback?.([{ type: 'pointerLocked' }]);
+  }
+
+  public onPointerUnlocked() {
+    this.callback?.([{ type: 'pointerUnlocked' }]);
   }
 
   public flush() {
@@ -220,26 +235,68 @@ const renderCurPlaying = (
   ctx.globalAlpha = 1;
 };
 
+export interface OverlayState {
+  onboardingOpen: boolean;
+  artistSearchOpen: boolean;
+}
+
+const buildDefaultOverlayState = (): OverlayState => ({
+  // TODO: Need to track user spotify ID somehow and store in a cookie or localstorage or elsewhere
+  onboardingOpen: true,
+  artistSearchOpen: true,
+});
+
+export type OverlayAction =
+  | { type: 'CLOSE_ONBOARDING' }
+  | { type: 'OPEN_ARTIST_SEARCH' }
+  | { type: 'CLOSE_ARTIST_SEARCH' };
+
+const overlayStateReducer = (state: OverlayState, action: OverlayAction): OverlayState => {
+  switch (action.type) {
+    case 'CLOSE_ONBOARDING':
+      return { ...state, onboardingOpen: false };
+    case 'OPEN_ARTIST_SEARCH':
+      return { ...state, artistSearchOpen: true };
+    case 'CLOSE_ARTIST_SEARCH':
+      return { ...state, artistSearchOpen: false };
+    default:
+      console.warn('Unhandled action:', action);
+      return state;
+  }
+};
+
 const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onPointerDown }) => {
-  const state = useRef(initialState);
+  const labelState = useRef(initialState);
   const canvasRef = useRef<CanvasRenderingContext2D | null>(null);
-  const [onboardingSidebarOpen, setOnboardingSidebarOpen] = useState(true);
-  const [uiExpanded, setUIExpanded] = useState(true);
+  const [overlayState, dispatchOverlayAction] = useReducer(
+    overlayStateReducer,
+    buildDefaultOverlayState()
+  );
 
   useEffect(() => {
     const handleActions = (actions: Action[]) => {
       actions.forEach((action) => {
         switch (action.type) {
           case 'createLabel':
-            state.current.labels.set(action.id, {
+            labelState.current.labels.set(action.id, {
               id: action.id,
               text: action.text,
               width: measureText(action.text),
             });
             break;
           case 'deleteLabel':
-            state.current.labels.delete(action.id);
+            labelState.current.labels.delete(action.id);
             break;
+          case 'pointerLocked':
+            dispatchOverlayAction({ type: 'CLOSE_ONBOARDING' });
+            dispatchOverlayAction({ type: 'CLOSE_ARTIST_SEARCH' });
+            break;
+          case 'pointerUnlocked':
+            dispatchOverlayAction({ type: 'CLOSE_ONBOARDING' });
+            dispatchOverlayAction({ type: 'OPEN_ARTIST_SEARCH' });
+            break;
+          default:
+            console.warn('Unhandled action:', action);
         }
       });
     };
@@ -262,8 +319,8 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onP
       const shouldUpdate = eventRegistry.getShouldUpdate();
       if (
         !shouldUpdate &&
-        state.current.fadingOutPlayingArtistLabels.length === 0 &&
-        state.current.lastPlayingArtistID === eventRegistry.curPlaying
+        labelState.current.fadingOutPlayingArtistLabels.length === 0 &&
+        labelState.current.lastPlayingArtistID === eventRegistry.curPlaying
       ) {
         return;
       }
@@ -274,20 +331,20 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onP
       ctx.fillStyle = 'rgba(0, 0, 0, 0)';
       ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 
-      if (eventRegistry.curPlaying !== state.current.lastPlayingArtistID) {
-        if (state.current.lastPlayingArtistID !== null) {
-          state.current.fadingOutPlayingArtistLabels.push({
-            artistID: state.current.lastPlayingArtistID,
+      if (eventRegistry.curPlaying !== labelState.current.lastPlayingArtistID) {
+        if (labelState.current.lastPlayingArtistID !== null) {
+          labelState.current.fadingOutPlayingArtistLabels.push({
+            artistID: labelState.current.lastPlayingArtistID,
             fadeOutStartTime: Date.now(),
           });
         }
-        state.current.lastPlayingArtistID = eventRegistry.curPlaying;
+        labelState.current.lastPlayingArtistID = eventRegistry.curPlaying;
       }
 
-      for (const [artistID, label] of state.current.labels.entries()) {
+      for (const [artistID, label] of labelState.current.labels.entries()) {
         if (
           artistID === eventRegistry.curPlaying ||
-          state.current.fadingOutPlayingArtistLabels.some((f) => f.artistID === artistID)
+          labelState.current.fadingOutPlayingArtistLabels.some((f) => f.artistID === artistID)
         ) {
           continue;
         }
@@ -319,11 +376,12 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onP
       }
 
       const now = Date.now();
-      state.current.fadingOutPlayingArtistLabels = state.current.fadingOutPlayingArtistLabels.filter(
+      labelState.current.fadingOutPlayingArtistLabels = labelState.current.fadingOutPlayingArtistLabels.filter(
         (datum) => now - datum.fadeOutStartTime < PLAYING_ARTIST_LABEL_FADE_OUT_TIME_MS
       );
 
-      for (const { artistID, fadeOutStartTime } of state.current.fadingOutPlayingArtistLabels) {
+      for (const { artistID, fadeOutStartTime } of labelState.current
+        .fadingOutPlayingArtistLabels) {
         const pos = eventRegistry.getLabelPosition(artistID);
         // Linearly fade out over the fade duration
         const opacity = 1 - (now - fadeOutStartTime) / PLAYING_ARTIST_LABEL_FADE_OUT_TIME_MS;
@@ -355,10 +413,17 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onP
 
   return (
     <>
-      {onboardingSidebarOpen ? (
-        <OnboardingSidebar setOnboardingSidebarOpen={setOnboardingSidebarOpen} />
-      ) : null}
-      {uiExpanded ? (
+      {overlayState.onboardingOpen ? (
+        <OnboardingSidebar
+          dispatchOverlayAction={dispatchOverlayAction}
+          lockPointer={() => eventRegistry.lockPointer()}
+        />
+      ) : overlayState.artistSearchOpen ? (
+        <CheatSheet />
+      ) : (
+        <CollapsedCheatSheet />
+      )}
+      {overlayState.artistSearchOpen ? (
         <>
           <ArtistSearch
             onSubmit={({ internalID }) => eventRegistry.lookAtArtistID(internalID)}
@@ -367,7 +432,9 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onP
             }
           />
         </>
-      ) : null}
+      ) : (
+        <CollapsedArtistSearch />
+      )}
       <canvas
         onClick={onPointerDown}
         className="artist-map-overlay-ui"

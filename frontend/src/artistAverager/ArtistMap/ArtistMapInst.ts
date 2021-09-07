@@ -249,6 +249,10 @@ export class ArtistMapInst {
         target: pos,
       };
     },
+    lockPointer: () => {
+      this.controls.lock();
+      this.isPointerLocked = true;
+    },
   });
 
   public handleScroll(deltaY: number) {
@@ -416,6 +420,11 @@ export class ArtistMapInst {
         this.isPointerLocked = false;
         this.scene.remove(this.controls.getObject());
       }
+
+      this.eventRegistry.onPointerUnlocked();
+    });
+    this.controls.addEventListener('lock', () => {
+      this.eventRegistry.onPointerLocked();
     });
 
     this.artistMeshes = this.buildInstancedArtistMeshes();

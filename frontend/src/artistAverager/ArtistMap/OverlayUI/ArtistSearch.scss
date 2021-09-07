@@ -5,7 +5,7 @@
   top: 8px;
   right: 8px;
   z-index: 3;
-  width: calc(max(500px, 30vw));
+  width: 420px;
   height: 100%;
   overflow-y: visible;
   overflow-x: hidden;
@@ -38,7 +38,7 @@
   .artist-search-submit-button:disabled {
     cursor: default;
     background-color: rgba(155, 155, 155, 0.75);
-    color: #999;
+    color: rgb(179, 179, 179);
     border: 1px solid rgba(244, 244, 244, 0.2);
   }
 
@@ -61,4 +61,19 @@
   .autocomplete-suggestion[data-selected='true'] {
     background-color: #888;
   }
+}
+
+.collapsed-artist-search {
+  background-color: rgba(244, 244, 244, 0.2);
+  border-radius: 3px;
+  border-color: rgba(155, 155, 155, 0.9);
+  color: #eeeeeeaa;
+  font-size: 18px;
+  padding: 2px 7px;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 3;
+  font-size: 16px;
+  font-style: italic;
 }
