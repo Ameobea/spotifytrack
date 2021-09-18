@@ -1,4 +1,5 @@
-import { UnreachableException, useWindowSize } from 'ameo-utils';
+import { UnreachableException } from 'ameo-utils';
+import { useWindowSize } from 'ameo-utils/util/react';
 import React, { useEffect, useRef, useState } from 'react';
 
 import { ArtistMapInst, initArtistMapInst } from './ArtistMapInst';

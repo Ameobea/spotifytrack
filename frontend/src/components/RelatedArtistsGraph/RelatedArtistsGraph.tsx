@@ -1,10 +1,5 @@
-import {
-  AsyncOnce,
-  filterNils,
-  PromiseResolveType,
-  UnreachableException,
-  useWindowSize,
-} from 'ameo-utils';
+import { AsyncOnce, filterNils, PromiseResolveType, UnreachableException } from 'ameo-utils';
+import { useWindowSize } from 'ameo-utils/util/react';
 import React, { useMemo } from 'react';
 import { useEffect } from 'react';
 import { useRef } from 'react';
@@ -427,21 +422,22 @@ export const RelatedArtistsGraph = withMobileProp({ maxDeviceWidth: 800 })(
   RelatedArtistsGraphInner
 );
 
-export const mkFetchAndStoreRelatedArtistsForUser =
-  (username: string | null | undefined) => async () => {
-    if (!username) {
-      return null;
-    }
+export const mkFetchAndStoreRelatedArtistsForUser = (
+  username: string | null | undefined
+) => async () => {
+  if (!username) {
+    return null;
+  }
 
-    const res = await fetchRelatedArtistsForUser(username);
-    if (!res) {
-      return null;
-    }
+  const res = await fetchRelatedArtistsForUser(username);
+  if (!res) {
+    return null;
+  }
 
-    const { extraArtists, relatedArtists } = res;
-    dispatch(actionCreators.entityStore.ADD_ARTISTS(extraArtists));
-    return relatedArtists;
-  };
+  const { extraArtists, relatedArtists } = res;
+  dispatch(actionCreators.entityStore.ADD_ARTISTS(extraArtists));
+  return relatedArtists;
+};
 
 interface RelatedArtistsGraphForUserProps {
   style?: React.CSSProperties;
