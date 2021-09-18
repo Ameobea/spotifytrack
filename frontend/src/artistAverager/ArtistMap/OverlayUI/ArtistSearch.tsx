@@ -5,7 +5,10 @@ import ArtistInput from 'src/artistAverager/ArtistInput';
 import './ArtistSearch.scss';
 
 interface ArtistSearchProps {
-  onSubmit: (artist: { spotifyID: string; name: string; internalID: number }) => void;
+  onSubmit: (
+    artist: { spotifyID: string; name: string; internalID: number },
+    command: 'look-at' | 'fly-to'
+  ) => void;
   getIfArtistIDsAreInEmbedding: (artistIDs: number[]) => boolean[];
 }
 
@@ -31,7 +34,7 @@ const ArtistSearch: React.FC<ArtistSearchProps> = ({ onSubmit, getIfArtistIDsAre
         placeholder="Search for an artist"
       />
       <button
-        className="artist-search-submit-button"
+        className="artist-search-look-at-button"
         disabled={!selectedArtist}
         onClick={() => {
           if (
@@ -42,14 +45,41 @@ const ArtistSearch: React.FC<ArtistSearchProps> = ({ onSubmit, getIfArtistIDsAre
             throw new UnreachableException();
           }
 
-          onSubmit({
-            internalID: selectedArtist.internalID,
-            spotifyID: selectedArtist.spotifyID,
-            name: selectedArtist.name,
-          });
+          onSubmit(
+            {
+              internalID: selectedArtist.internalID,
+              spotifyID: selectedArtist.spotifyID,
+              name: selectedArtist.name,
+            },
+            'look-at'
+          );
         }}
       >
-        Submit
+        Look At
+      </button>
+      <button
+        className="artist-search-fly-to-button"
+        disabled={!selectedArtist}
+        onClick={() => {
+          if (
+            !selectedArtist ||
+            selectedArtist.internalID === null ||
+            selectedArtist.internalID === undefined
+          ) {
+            throw new UnreachableException();
+          }
+
+          onSubmit(
+            {
+              internalID: selectedArtist.internalID,
+              spotifyID: selectedArtist.spotifyID,
+              name: selectedArtist.name,
+            },
+            'fly-to'
+          );
+        }}
+      >
+        Fly To
       </button>
     </div>
   );

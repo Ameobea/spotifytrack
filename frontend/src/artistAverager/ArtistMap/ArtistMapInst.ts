@@ -24,6 +24,7 @@ import {
   CAMERA_PIVOT_COEFFICIENT,
   CAMERA_OVERRIDE_TARGET_TOLERANCE,
   AMBIENT_LIGHT_COLOR,
+  getArtistFlyToDurationMs,
 } from './conf';
 import DataFetchClient, { ArtistMapDataWithId, ArtistRelationshipData } from './DataFetchClient';
 import { MovementInputHandler } from './MovementInputHandler';
@@ -126,11 +127,14 @@ enum DrawCommand {
 }
 
 interface AutoFlyState {
-  path: THREE.Path;
+  path: THREE.Curve<THREE.Vector3>;
+  startTime: number;
+  flightDurationMs: number;
 }
 
 interface LookAtState {
   target: THREE.Vector3;
+  pivotCoefficient: number;
 }
 
 export class ArtistMapInst {
@@ -245,9 +249,40 @@ export class ArtistMapInst {
         throw new UnreachableException();
       }
 
-      this.cameraOverrides.direction = {
-        target: pos,
+      this.cameraOverrides.direction = { target: pos, pivotCoefficient: CAMERA_PIVOT_COEFFICIENT };
+    },
+    flyToArtistID: (artistID: number) => {
+      const srcPos = this.controls.getObject().position.clone();
+      const dstPos = this.artistDataByID.get(artistID)?.pos;
+      if (!dstPos) {
+        throw new UnreachableException();
+      }
+
+      // See written notes for this
+      const midpoint = dstPos.clone().add(srcPos).multiplyScalar(0.5);
+      const controlPoint1 = midpoint.clone().add(
+        midpoint
+          .clone()
+          .normalize()
+          .multiplyScalar(srcPos.distanceTo(dstPos) * 0.4 + 300_000)
+      );
+      const controlPoint2 = dstPos.clone().add(
+        dstPos
+          .clone()
+          .sub(srcPos.clone())
+          .normalize()
+          .multiplyScalar(srcPos.distanceTo(dstPos) * 0.05 + 50_000)
+      );
+
+      const path = new this.THREE.CubicBezierCurve3(srcPos, controlPoint1, controlPoint2, dstPos);
+
+      this.cameraOverrides.direction = { target: dstPos, pivotCoefficient: 0.937 };
+      this.cameraOverrides.movement = {
+        path,
+        startTime: new Date().getTime(),
+        flightDurationMs: getArtistFlyToDurationMs(dstPos.distanceTo(srcPos)),
       };
+      console.log(`Flying to ${artistID}`, this.cameraOverrides.movement);
     },
     lockPointer: () => {
       this.controls.lock();
@@ -496,16 +531,6 @@ export class ArtistMapInst {
     );
 
     this.animate();
-
-    // setTimeout(() => this.pivotCameraToLookAt(new this.THREE.Vector3(0, 0, 0)), 1000);
-  }
-
-  private pivotCameraToLookAt(target: THREE.Vector3) {
-    this.controls.disconnect();
-    if (this.cameraOverrides.direction) {
-      console.warn('Existing camera look at direction exists; overriding...');
-    }
-    this.cameraOverrides.direction = { target };
   }
 
   // Adapted from:
@@ -958,25 +983,38 @@ export class ArtistMapInst {
         .clone()
         .sub(this.camera.position.clone())
         .normalize();
+      const pivotCoefficient = this.cameraOverrides.direction.pivotCoefficient;
       const newLookDirection = new this.THREE.Vector3(
-        cameraDirection.x * CAMERA_PIVOT_COEFFICIENT +
-          targetDirection.x * (1 - CAMERA_PIVOT_COEFFICIENT),
-        cameraDirection.y * CAMERA_PIVOT_COEFFICIENT +
-          targetDirection.y * (1 - CAMERA_PIVOT_COEFFICIENT),
-        cameraDirection.z * CAMERA_PIVOT_COEFFICIENT +
-          targetDirection.z * (1 - CAMERA_PIVOT_COEFFICIENT)
+        cameraDirection.x * pivotCoefficient + targetDirection.x * (1 - pivotCoefficient),
+        cameraDirection.y * pivotCoefficient + targetDirection.y * (1 - pivotCoefficient),
+        cameraDirection.z * pivotCoefficient + targetDirection.z * (1 - pivotCoefficient)
       );
       this.camera.lookAt(this.camera.position.clone().add(newLookDirection));
 
-      // If we're close enough to the target, stop overriding the camera
-      const totalDiff = newLookDirection.distanceTo(targetDirection);
-      if (totalDiff < CAMERA_OVERRIDE_TARGET_TOLERANCE) {
-        this.cameraOverrides.direction = null;
+      // If we're close enough to the target and not currently flying, stop overriding the camera
+      if (!this.cameraOverrides.movement) {
+        const totalDiff = newLookDirection.distanceTo(targetDirection);
+        if (totalDiff < CAMERA_OVERRIDE_TARGET_TOLERANCE) {
+          this.cameraOverrides.direction = null;
+        }
       }
-      this.controls.connect();
     }
     if (this.cameraOverrides.movement) {
-      // TODO
+      const curTime = new Date().getTime();
+      const progress =
+        (curTime - this.cameraOverrides.movement.startTime) /
+        this.cameraOverrides.movement.flightDurationMs;
+      if (progress >= 1) {
+        console.log('Camera movement finished');
+        this.cameraOverrides.movement = null;
+        // this.cameraOverrides.direction = null;
+      } else {
+        const newPos = this.cameraOverrides.movement.path.getPoint(progress);
+        const endPoint = this.cameraOverrides.movement.path.getPoint(1);
+        if (newPos.distanceTo(endPoint) > 960) {
+          this.camera.position.set(newPos.x, newPos.y, newPos.z);
+        }
+      }
     }
 
     const timeDelta = this.clock.getDelta();

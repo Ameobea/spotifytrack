@@ -90,3 +90,7 @@ export const getArtistColor = (isHighlighted: boolean, isPlaying: boolean): numb
 
   return BASE_ARTIST_COLOR;
 };
+
+export const getArtistFlyToDurationMs = (distance: number): number => {
+  return 5000 + 1000 * (distance / 23_500);
+};

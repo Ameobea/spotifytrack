@@ -40,6 +40,7 @@ export class UIEventRegistry {
   public curPlaying: number | null = null;
   public getIfArtistIDsAreInEmbedding: (artistIDs: number[]) => boolean[];
   public lookAtArtistID: (artistID: number) => void;
+  public flyToArtistID: (artistID: number) => void;
   public lockPointer: () => void;
 
   constructor({
@@ -50,6 +51,7 @@ export class UIEventRegistry {
     getIfArtistIDsAreInEmbedding,
     lookAtArtistID,
     lockPointer,
+    flyToArtistID,
   }: {
     getLabelPosition: (
       artistID: number | string
@@ -60,6 +62,7 @@ export class UIEventRegistry {
     getIfArtistIDsAreInEmbedding: (artistIDs: number[]) => boolean[];
     lookAtArtistID: (artistID: number) => void;
     lockPointer: () => void;
+    flyToArtistID: (artistID: number) => void;
   }) {
     this.getLabelPosition = getLabelPosition;
     this.getShouldUpdate = getShouldUpdate;
@@ -67,6 +70,7 @@ export class UIEventRegistry {
     this.getShouldRenderCrosshair = getShouldRenderCrosshair;
     this.getIfArtistIDsAreInEmbedding = getIfArtistIDsAreInEmbedding;
     this.lookAtArtistID = lookAtArtistID;
+    this.flyToArtistID = flyToArtistID;
     this.lockPointer = lockPointer;
   }
 
@@ -426,7 +430,18 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onP
       {overlayState.artistSearchOpen ? (
         <>
           <ArtistSearch
-            onSubmit={({ internalID }) => eventRegistry.lookAtArtistID(internalID)}
+            onSubmit={({ internalID }, command) => {
+              switch (command) {
+                case 'look-at':
+                  eventRegistry.lookAtArtistID(internalID);
+                  break;
+                case 'fly-to':
+                  eventRegistry.flyToArtistID(internalID);
+                  break;
+                default:
+                  console.warn('Unhandled artist search command:', command);
+              }
+            }}
             getIfArtistIDsAreInEmbedding={(artistIDs) =>
               eventRegistry.getIfArtistIDsAreInEmbedding(artistIDs)
             }
