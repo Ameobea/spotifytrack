@@ -2,7 +2,7 @@
  * Keeps track of which artist's music is currently playing and handles fading in/out when changing which artist is playing.
  */
 
-import { getPreviewURLsByInternalID } from '../api';
+import { getPreviewURLsByInternalID } from './api';
 import {
   MIN_MUSIC_PLAY_TIME_SECS,
   MUSIC_DISTANCE_ROLLOFF_FACTOR,

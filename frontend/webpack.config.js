@@ -20,6 +20,7 @@ const buildConfig = () => ({
     index: './src/index.tsx',
     graph: './src/graphStandalone.tsx',
     artistAverager: './src/artistAverager/index.tsx',
+    musicGalaxy: './src/musicGalaxy/index.tsx',
   },
   output: {
     path: path.resolve(__dirname, 'dist'),
@@ -118,6 +119,15 @@ const buildConfig = () => ({
       filename: 'artist-averager.html',
       inject: true,
       chunks: ['artistAverager'],
+    }),
+    new HtmlWebpackPlugin({
+      alwaysWriteToDisk: true,
+      title: 'Music Galaxy',
+      minify: true,
+      template: 'music-galaxy.hbs',
+      filename: 'music-galaxy.html',
+      inject: true,
+      chunks: ['musicGalaxy'],
     }),
     new webpack.EnvironmentPlugin(['REACT_APP_API_BASE_URL', 'REACT_APP_SITE_URL']),
     // new BundleAnalyzerPlugin(),

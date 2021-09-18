@@ -1,5 +1,5 @@
 build-wasm-client:
-  cd src/artistAverager/ArtistMap/WasmClient/wasm_engine && just build
+  cd src/musicGalaxy/WasmClient/wasm_engine && just build
 
 run:
   just build-wasm-client

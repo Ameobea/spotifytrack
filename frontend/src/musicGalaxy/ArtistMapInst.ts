@@ -5,7 +5,7 @@ import { UnimplementedError, UnreachableException } from 'ameo-utils';
 import type { Scale } from 'chroma-js';
 import type { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass';
 
-import { fetchPackedArtistPositions, getAllTopArtistInternalIDsForUser } from '../api';
+import { fetchPackedArtistPositions, getAllTopArtistInternalIDsForUser } from './api';
 import {
   BASE_ARTIST_GEOMETRY_SIZE,
   BASE_CONNECTION_COLOR,

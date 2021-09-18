@@ -6,7 +6,7 @@
 import * as R from 'ramda';
 import { filterNils, UnreachableException } from 'ameo-utils';
 
-import { getArtistDataByInternalIDs, getArtistRelationshipsByInternalIDs } from '../api';
+import { getArtistDataByInternalIDs, getArtistRelationshipsByInternalIDs } from './api';
 
 interface ArtistMapData {
   name: string;
