@@ -6,7 +6,7 @@ import './ShareIcons.scss';
 const ShareIcons: React.FC = () => (
   <div className="share-icons">
     <IconButton
-      icon="/twitter.png"
+      icon="https://spotifytrack.b-cdn.net/twitter.png"
       style={{ height: 28, width: 20, marginLeft: 8, backgroundSize: 34, marginTop: 2 }}
       tag="a"
       target="_blank"
@@ -16,7 +16,7 @@ const ShareIcons: React.FC = () => (
       )}`}
     />
     <IconButton
-      icon="/facebook.png"
+      icon="https://spotifytrack.b-cdn.net/facebook.png"
       style={{ height: 28, width: 20, marginLeft: 8, marginRight: 8, marginTop: 2 }}
       tag="a"
       target="popup"

@@ -37,19 +37,19 @@ const Home: React.FC<ReactRouterRouteProps> = () => (
     <Carousel className="example-carousel" showThumbs={false} autoPlay infiniteLoop interval={5338}>
       <div className="example-image">
         <img
-          src="/images/artist_stats.png"
+          src="https://spotifytrack.b-cdn.net/images/artist_stats.png"
           alt="A screenshot of the artist stats view for a user's Spotifytrack page"
         ></img>
       </div>
       <div className="example-image">
         <img
-          src="/images/genre_stats.png"
+          src="https://spotifytrack.b-cdn.net/images/genre_stats.png"
           alt="A screenshot of the genre stats view for a user's Spotifytrack page"
         ></img>
       </div>
       <div className="example-image">
         <img
-          src="/images/user_home.png"
+          src="https://spotifytrack.b-cdn.net/images/user_home.png"
           alt="A screenshot of the home page of a user's Spotifytrack page showing their top tracks"
         ></img>
       </div>

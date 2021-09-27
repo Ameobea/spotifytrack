@@ -9,7 +9,7 @@
   "private": false,
   "scripts": {
     "start": "webpack serve",
-    "build": "rm -rf dist/* && REACT_APP_API_BASE_URL=https://spotifytrack.net/api REACT_APP_SITE_URL=https://spotifytrack.net webpack --config webpack.prod.js && cp -r ./public/* ./dist"
+    "build": "rm -rf dist/* && REACT_APP_API_BASE_URL=https://spotifytrack.net/api REACT_APP_SITE_URL=https://spotifytrack.net NODE_ENV=production webpack --config webpack.prod.js && cp -r ./public/* ./dist"
   },
   "devDependencies": {
     "@babel/core": "^7.15.5",

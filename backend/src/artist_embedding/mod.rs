@@ -21,9 +21,19 @@ impl<const DIMS: usize> ArtistPos<DIMS> {
 #[derive(Clone)]
 pub struct ArtistEmbeddingContext<const DIMS: usize> {
     pub artist_position_by_id: HashMap<usize, ArtistPos<DIMS>>,
+    pub sorted_artist_ids: Vec<usize>,
 }
 
 impl<const DIMS: usize> ArtistEmbeddingContext<DIMS> {
+    pub fn new(artist_position_by_id: HashMap<usize, ArtistPos<DIMS>>) -> Self {
+        let mut sorted_artist_ids = artist_position_by_id.keys().cloned().collect::<Vec<_>>();
+        sorted_artist_ids.sort_unstable();
+        ArtistEmbeddingContext {
+            artist_position_by_id,
+            sorted_artist_ids,
+        }
+    }
+
     pub fn get_positions<'a>(
         &'a self,
         id_1: usize,
@@ -309,9 +319,8 @@ pub async fn init_artist_embedding_ctx(positions_url: &str) {
     println!("Successfully fetched artist embedding positions.  Parsing...");
     let artist_position_by_id = parse_positions(&raw_positions);
     println!("Successfully parsed artist embedding positions.  Setting into global context.");
-    let ctx = box ArtistEmbeddingContext {
-        artist_position_by_id,
-    };
+
+    let ctx = box ArtistEmbeddingContext::new(artist_position_by_id);
     unsafe { ARTIST_EMBEDDING_CTX = Box::into_raw(ctx) };
 }
 

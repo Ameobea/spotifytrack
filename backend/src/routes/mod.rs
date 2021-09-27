@@ -19,7 +19,8 @@ use tokio::{
 
 use crate::{
     artist_embedding::{
-        get_artist_embedding_ctx, get_average_artists, map_3d::get_packed_3d_artist_coords,
+        get_artist_embedding_ctx, get_average_artists,
+        map_3d::{get_map_3d_artist_ctx, get_packed_3d_artist_coords},
         ArtistEmbeddingError,
     },
     benchmarking::{mark, start},
@@ -1556,22 +1557,44 @@ pub(crate) async fn get_artists_by_internal_ids(
     ))
 }
 
-#[post(
-    "/map_artist_relationships_by_internal_ids",
-    data = "<artist_internal_ids>"
-)]
-pub(crate) async fn get_artist_relationships_by_internal_ids(
-    conn: DbConn,
-    token_data: &State<Mutex<SpotifyTokenData>>,
-    artist_internal_ids: Json<Vec<i32>>,
-) -> Result<Vec<u8>, String> {
-    let first_tok = start();
-    let spotify_access_token = {
-        let token_data = &mut *(&*token_data).lock().await;
-        token_data.get().await
-    }?;
+fn pack_artist_relationships(artist_relationships: Vec<Vec<i32>>) -> Vec<u8> {
+    // Encoding:
+    // artist count * u8: related artist count
+    // 0-3 bytes of padding to make total byte count divisible by 4
+    // The rest: u32s, in order, for each artist.
+    let mut packed: Vec<u8> = Vec::new();
+    for related_artists in &artist_relationships {
+        let artist_count = related_artists.len();
+        assert!(artist_count <= 255);
+        packed.push(artist_count as u8);
+    }
 
-    let artist_internal_ids: Vec<i32> = artist_internal_ids.0;
+    // padding
+    let padding_byte_count = 4 - (packed.len() % 4);
+    for _ in 0..padding_byte_count {
+        packed.push(0);
+    }
+    assert_eq!(packed.len() % 4, 0);
+
+    for mut related_artists in artist_relationships {
+        // Might help with compression ratio, who knows
+        related_artists.sort_unstable();
+        for id in related_artists {
+            let bytes: [u8; 4] = unsafe { std::mem::transmute(id as u32) };
+            for byte in bytes {
+                packed.push(byte);
+            }
+        }
+    }
+    assert_eq!(packed.len() % 4, 0);
+    packed
+}
+
+async fn get_packed_artist_relationships_by_internal_ids_inner(
+    conn: &DbConn,
+    spotify_access_token: String,
+    artist_internal_ids: Vec<i32>,
+) -> Result<Vec<u8>, String> {
     let tok = start();
     let artist_spotify_ids_by_internal_id =
         get_artist_spotify_ids_by_internal_id(&conn, artist_internal_ids.clone())
@@ -1583,6 +1606,7 @@ pub(crate) async fn get_artist_relationships_by_internal_ids(
                 );
                 String::from("Internal DB error")
             })?;
+
     mark(tok, "Converted to spotify IDs");
     let artist_spotify_ids = artist_internal_ids
         .iter()
@@ -1622,38 +1646,63 @@ pub(crate) async fn get_artist_relationships_by_internal_ids(
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
-    mark(first_tok, "FINISHED");
 
-    // Encoding:
-    // artist count * u8: related artist count
-    // 0-3 bytes of padding to make total byte count divisible by 4
-    // The rest: u32s, in order, for each artist.
-    let mut packed: Vec<u8> = Vec::new();
-    for related_artists in &res {
-        let artist_count = related_artists.len();
-        assert!(artist_count <= 255);
-        packed.push(artist_count as u8);
-    }
+    Ok(pack_artist_relationships(res))
+}
 
-    // padding
-    let padding_byte_count = 4 - (packed.len() % 4);
-    for _ in 0..padding_byte_count {
-        packed.push(0);
-    }
-    assert_eq!(packed.len() % 4, 0);
+#[post(
+    "/map_artist_relationships_by_internal_ids",
+    data = "<artist_internal_ids>"
+)]
+pub(crate) async fn get_packed_artist_relationships_by_internal_ids(
+    conn: DbConn,
+    token_data: &State<Mutex<SpotifyTokenData>>,
+    artist_internal_ids: Json<Vec<i32>>,
+) -> Result<Vec<u8>, String> {
+    let spotify_access_token = {
+        let token_data = &mut *(&*token_data).lock().await;
+        token_data.get().await
+    }?;
 
-    for mut related_artists in res {
-        related_artists.sort_unstable();
-        for id in related_artists {
-            let bytes: [u8; 4] = unsafe { std::mem::transmute(id as u32) };
-            for byte in bytes {
-                packed.push(byte);
-            }
-        }
-    }
-    assert_eq!(packed.len() % 4, 0);
+    let artist_internal_ids: Vec<i32> = artist_internal_ids.0;
+    get_packed_artist_relationships_by_internal_ids_inner(
+        &conn,
+        spotify_access_token,
+        artist_internal_ids,
+    )
+    .await
+}
 
-    Ok(packed)
+#[get("/map_artist_relationships_chunk?<chunk_size>&<chunk_ix>")]
+pub(crate) async fn get_artist_relationships_chunk(
+    conn: DbConn,
+    token_data: &State<Mutex<SpotifyTokenData>>,
+    chunk_size: u32,
+    chunk_ix: u32,
+) -> Result<Vec<u8>, String> {
+    let spotify_access_token = {
+        let token_data = &mut *(&*token_data).lock().await;
+        token_data.get().await
+    }?;
+
+    let artist_internal_ids = get_map_3d_artist_ctx()
+        .await
+        .sorted_artist_ids
+        .chunks(chunk_size as usize)
+        .skip(chunk_ix as usize)
+        .next()
+        .unwrap_or_default()
+        .iter()
+        .copied()
+        .map(|id| id as i32)
+        .collect();
+
+    get_packed_artist_relationships_by_internal_ids_inner(
+        &conn,
+        spotify_access_token,
+        artist_internal_ids,
+    )
+    .await
 }
 
 #[get("/get_preview_urls_by_internal_id/<artist_internal_id>")]
@@ -1717,7 +1766,7 @@ pub(crate) async fn get_top_artists_internal_ids_for_user(
     Ok(Some(Json(
         top_artists
             .into_iter()
-            .map(|(internal_id, spotify_id)| internal_id)
+            .map(|(internal_id, _spotify_id)| internal_id)
             .collect(),
     )))
 }

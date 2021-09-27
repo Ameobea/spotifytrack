@@ -859,6 +859,7 @@ pub(crate) async fn search_artists(
 ) -> Result<Vec<ArtistSearchResult>, String> {
     #[derive(Clone, Debug, Deserialize)]
     struct SpotifyArtistsSearchResponseInner {
+        #[allow(dead_code)]
         pub href: String,
         pub items: Vec<Artist>,
     }

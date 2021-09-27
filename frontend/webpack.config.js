@@ -5,7 +5,7 @@ const webpack = require('webpack');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const sass = require('node-sass');
 const sassUtils = require('node-sass-utils')(sass);
-const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin;
+// const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin;
 const { RetryChunkLoadPlugin } = require('webpack-retry-chunk-load-plugin');
 
 const styles = require('./src/_style');
@@ -152,6 +152,7 @@ const buildConfig = () => ({
   devServer: {
     historyApiFallback: true,
     port: 9000,
+    allowedHosts: 'all',
   },
 });
 

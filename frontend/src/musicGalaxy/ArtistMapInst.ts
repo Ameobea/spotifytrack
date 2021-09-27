@@ -97,11 +97,11 @@ export const initArtistMapInst = async (canvas: HTMLCanvasElement): Promise<Arti
   const initialArtistIDsToRender = await initialArtistIDsToRenderPromise.then((ids) => {
     // Optimization to allow us to start fetching artist data as soon as we have the IDs regardless of whether we've
     // finished fetching the wasm client, three, packed artist positions, etc.
-    dataFetchClient.getOrFetchArtistData(ids);
-    dataFetchClient.fetchArtistRelationships(ids);
+    dataFetchClient.getOrFetchArtistData(ids); // TODO: Is this actually necessary?
 
     return ids;
   });
+  dataFetchClient.fetchArtistRelationships(0);
 
   // Set highlighted artists.
   // TODO: Should be user-specific with OAuth flow etc.
@@ -298,13 +298,14 @@ export class ArtistMapInst {
     this.forceLabelsUpdate = true;
   }
 
-  public handlePointerDown(evt: React.MouseEvent<HTMLCanvasElement, MouseEvent>) {
+  public handlePointerDown(evt: { button: number }) {
     this.musicManager.startCtx();
     const wasLocked = this.isPointerLocked;
     this.isPointerLocked = true;
     this.controls.lock();
     this.scene.add(this.controls.getObject());
 
+    console.log('pointerdown');
     if (!wasLocked) {
       return;
     }
@@ -400,10 +401,10 @@ export class ArtistMapInst {
     VEC3_IDENTITY = new THREE.Vector3();
     this.lastCameraDirection = VEC3_IDENTITY.clone();
 
-    import('chroma-js').then((chroma) => {
-      this.chroma = chroma.default;
-      this.connectionColorScale = this.chroma.scale(['red', 'green', 'blue']).domain([0, 1]);
-    });
+    // import('chroma-js').then((chroma) => {
+    //   this.chroma = chroma.default;
+    //   this.connectionColorScale = this.chroma.scale(['red', 'green', 'blue']).domain([0, 1]);
+    // });
 
     this.renderer = new THREE.WebGLRenderer({
       canvas,
@@ -461,6 +462,9 @@ export class ArtistMapInst {
     this.controls.addEventListener('lock', () => {
       this.eventRegistry.onPointerLocked();
     });
+    this.renderer.domElement.addEventListener('mousedown', (evt) => {
+      this.handlePointerDown(evt);
+    });
 
     this.artistMeshes = this.buildInstancedArtistMeshes();
     this.scene.add(this.artistMeshes);
@@ -476,7 +480,7 @@ export class ArtistMapInst {
       // blendSrc: this.THREE.SrcAlphaFactor,
       // blendDst: this.THREE.DstAlphaFactor,
     });
-    this.bloomedConnectionsMesh = new this.THREE.Line(
+    this.bloomedConnectionsMesh = new this.THREE.LineSegments(
       this.bloomedConnectionsGeometry,
       bloomedLineMaterial
     );
@@ -607,20 +611,18 @@ export class ArtistMapInst {
   }
 
   private async handleArtistRelationships(relationshipData: ArtistRelationshipData) {
-    const artistIDs = new Uint32Array(relationshipData.artistIDs);
-    const packedRelationshipData = new Uint8Array(relationshipData.res);
+    // Empty chunk
+    if (relationshipData.res.byteLength === 4) {
+      return;
+    }
 
-    const bytesToSkip = artistIDs.length + (artistIDs.length % 4);
-    const u32Offset = bytesToSkip / 4;
-    const allArtistIDs = new Uint32Array(packedRelationshipData.buffer).subarray(u32Offset);
-    const artistIDsToRecursivelyRequest = [...new Set(allArtistIDs)].filter((id) =>
-      this.artistDataByID.has(id)
-    );
+    const packedRelationshipData = new Uint8Array(relationshipData.res);
 
     wasmClient
       .handleArtistRelationshipData(
-        Comlink.transfer(artistIDs, [artistIDs.buffer]),
-        Comlink.transfer(packedRelationshipData, [packedRelationshipData.buffer])
+        Comlink.transfer(packedRelationshipData, [packedRelationshipData.buffer]),
+        relationshipData.chunkSize,
+        relationshipData.chunkIx
       )
       .then((connectionsDataBuffer) => {
         this.bloomedConnectionsGeometry.setAttribute(
@@ -633,10 +635,8 @@ export class ArtistMapInst {
         );
       });
 
-    // Recursively fetch artist IDs to grow the graph
-    if (artistIDsToRecursivelyRequest.length > 0) {
-      dataFetchClient.fetchArtistRelationships(artistIDsToRecursivelyRequest);
-    }
+    // Fetch the next chunk
+    dataFetchClient.fetchArtistRelationships(relationshipData.chunkIx + 1);
   }
 
   public renderArtists(artistsToRender: number[]) {
@@ -730,11 +730,11 @@ export class ArtistMapInst {
   }
 
   private restoreNonBloomed() {
-    (this.nonBloomedConnectionsMesh
-      .material as THREE.LineBasicMaterial).color = new this.THREE.Color(0xa1fc03);
+    (this.nonBloomedConnectionsMesh.material as THREE.LineBasicMaterial).color =
+      new this.THREE.Color(0xa1fc03);
     (this.nonBloomedConnectionsMesh.material as THREE.LineBasicMaterial).needsUpdate = true;
-    (this.bloomedConnectionsMesh
-      .material as THREE.LineBasicMaterial).color = this.getConnectionColor();
+    (this.bloomedConnectionsMesh.material as THREE.LineBasicMaterial).color =
+      this.getConnectionColor();
     (this.bloomedConnectionsMesh.material as THREE.LineBasicMaterial).needsUpdate = true;
   }
 
@@ -743,9 +743,9 @@ export class ArtistMapInst {
     return new this.THREE.Color(BASE_CONNECTION_COLOR);
     // }
 
-    const partial = this.timeElapsed / 20;
-    const [r, g, b] = this.connectionColorScale(partial - Math.floor(partial)).gl();
-    return new this.THREE.Color(r, g, b);
+    // const partial = this.timeElapsed / 20;
+    // const [r, g, b] = this.connectionColorScale(partial - Math.floor(partial)).gl();
+    // return new this.THREE.Color(r, g, b);
   }
 
   private maybeAnimatePlayingArtist() {

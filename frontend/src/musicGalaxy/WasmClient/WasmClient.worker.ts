@@ -87,13 +87,15 @@ export class WasmClient {
    * Returns the new connection data buffer to be rendered
    */
   public handleArtistRelationshipData(
-    artistIDs: Uint32Array,
-    relationshipData: Uint8Array
+    relationshipData: Uint8Array,
+    chunkSize: number,
+    chunkIx: number
   ): Float32Array {
     const connectionsBufferLength = this.engine.handle_artist_relationship_data(
       this.ctxPtr,
-      artistIDs,
-      relationshipData
+      relationshipData,
+      chunkSize,
+      chunkIx
     );
     const connectionsBufferPtr = this.engine.get_connections_buffer_ptr(this.ctxPtr);
     const memory: WebAssembly.Memory = this.engine.get_memory();

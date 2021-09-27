@@ -55,6 +55,7 @@ pub struct ArtistMapCtx {
     pub last_position: [f32; 3],
     pub artists_indices_by_id: HashMap<u32, usize>,
     pub all_artists: Vec<(u32, ArtistState)>,
+    pub sorted_artist_ids: Vec<u32>,
     pub all_artist_relationships: Vec<ArtistRelationships>,
     pub total_rendered_label_count: usize,
     pub playing_music_artist_id: Option<u32>,
@@ -75,6 +76,7 @@ impl Default for ArtistMapCtx {
             last_position: [f32::INFINITY, f32::INFINITY, f32::INFINITY],
             artists_indices_by_id: HashMap::default(),
             all_artists: Vec::new(),
+            sorted_artist_ids: Vec::new(),
             all_artist_relationships: Vec::new(),
             total_rendered_label_count: 0,
             playing_music_artist_id: None,
@@ -161,8 +163,14 @@ impl ArtistMapCtx {
         self.maybe_start_playing_new_music(draw_commands, cur_x, cur_y, cur_z);
     }
 
-    pub fn update_connections_buffer(&mut self, new_artist_ids: &[u32]) {
-        // Just render everything for now
+    pub fn update_connections_buffer(&mut self, chunk_size: u32, chunk_ix: u32) {
+        let new_artist_ids = self
+            .sorted_artist_ids
+            .chunks(chunk_size as usize)
+            .skip(chunk_ix as usize)
+            .next()
+            .unwrap_or_default();
+
         for artist_id in new_artist_ids {
             let src_artist_ix = *self.artists_indices_by_id.get(artist_id).unwrap();
             let src = &self.all_artists[src_artist_ix].1;
@@ -220,7 +228,6 @@ fn maybe_init() {
             RNG = Box::into_raw(box pcg::Pcg::from_seed(seed.into()));
         }
     })
-
 }
 
 pub fn should_render_label(
@@ -298,11 +305,14 @@ pub fn decode_and_record_packed_artist_positions(ctx: *mut ArtistMapCtx, packed:
             };
             ctx.all_artists.push((id, state));
             ctx.all_artist_relationships.push(Default::default());
+            ctx.sorted_artist_ids.push(id);
 
             ctx.artists_indices_by_id
                 .insert(id, ctx.all_artists.len() - 1);
         }
     }
+
+    ctx.sorted_artist_ids.sort_unstable();
 
     info!("Successfully parsed + stored {} artist positions", count);
     count
@@ -417,9 +427,7 @@ fn should_render_artist(distance: f32, popularity: u8, render_state: &ArtistRend
 
 static mut RNG: *mut pcg::Pcg = std::ptr::null_mut();
 
-fn rng() -> &'static mut pcg::Pcg {
-    unsafe { &mut *RNG }
-}
+fn rng() -> &'static mut pcg::Pcg { unsafe { &mut *RNG } }
 
 fn should_render_connection(src: &ArtistState, dst: &ArtistState) -> bool {
     // if src.popularity < 25 || dst.popularity < 25 {
@@ -442,19 +450,19 @@ fn should_render_connection(src: &ArtistState, dst: &ArtistState) -> bool {
     //     return val > 0.989;
     // } else if dst > 8000. {
     //     return val > 0.985;
-    if dist > 10000. {
-        // return val > 0.99;
+    if dist > 70000. {
+        // return val > 0.995;
         return false;
-    } else if dist > 9000. {
-        return val > 0.95;
+    } else if dist > 25000. {
+        return val > 0.96;
+        // return false;
+    } else if dist > 17000. {
+        return val > 0.73;
         // return false;
     } else if dist > 8000. {
-        return val > 0.6;
-        // return false;
-    } else if dist > 7000. {
-        return val > 0.2;
+        return val > 0.45;
     } else {
-        return val > 0.1;
+        return val > 0.34;
     }
 }
 
@@ -613,11 +621,18 @@ pub fn on_music_finished_playing(
 #[wasm_bindgen]
 pub fn handle_artist_relationship_data(
     ctx: *mut ArtistMapCtx,
-    artist_ids: Vec<u32>,
     packed_relationship_data: Vec<u8>,
+    chunk_size: u32,
+    chunk_ix: u32,
 ) -> usize {
     let ctx = unsafe { &mut *ctx };
 
+    let artist_ids = ctx
+        .sorted_artist_ids
+        .chunks(chunk_size as usize)
+        .skip(chunk_ix as usize)
+        .next()
+        .unwrap_or_default();
     let artist_ids_byte_offset = artist_ids.len() + 4 - (artist_ids.len() % 4);
 
     assert_eq!(packed_relationship_data.len() % 4, 0);
@@ -661,7 +676,7 @@ pub fn handle_artist_relationship_data(
         artist_ids_byte_offset + offset * 4,
         packed_relationship_data.len()
     );
-    ctx.update_connections_buffer(&artist_ids);
+    ctx.update_connections_buffer(chunk_size, chunk_ix);
 
     ctx.connections_buffer.len() * 6
 }

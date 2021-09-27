@@ -27,9 +27,7 @@ async fn build_3d_artist_map_ctx() -> ArtistEmbeddingContext<3> {
     println!(
         "Successfully parsed 3d artist map embedding positions.  Setting into global context."
     );
-    ArtistEmbeddingContext {
-        artist_position_by_id,
-    }
+    ArtistEmbeddingContext::new(artist_position_by_id)
 }
 
 static MAP_3D_ARTIST_CTX: OnceCell<ArtistEmbeddingContext<3>> = OnceCell::const_new();
@@ -59,14 +57,15 @@ async fn get_all_artist_popularities_by_id(
 
 const MIN_POPULARITY: u8 = 15;
 
+pub(crate) async fn get_map_3d_artist_ctx() -> &'static ArtistEmbeddingContext<3> {
+    MAP_3D_ARTIST_CTX.get_or_init(build_3d_artist_map_ctx).await
+}
+
 async fn build_packed_3d_artist_coords(
     conn: &DbConn,
     spotify_access_token: &str,
 ) -> Result<Vec<u8>, String> {
-    let mut map_ctx_3d = MAP_3D_ARTIST_CTX
-        .get_or_init(build_3d_artist_map_ctx)
-        .await
-        .clone();
+    let mut map_ctx_3d = get_map_3d_artist_ctx().await.clone();
 
     let all_artist_internal_ids: Vec<i32> = map_ctx_3d
         .artist_position_by_id
@@ -98,7 +97,7 @@ async fn build_packed_3d_artist_coords(
     }
 
     let orig_count = map_ctx_3d.artist_position_by_id.len();
-    map_ctx_3d.artist_position_by_id.retain(|k, v| {
+    map_ctx_3d.artist_position_by_id.retain(|k, _v| {
         match popularities_by_internal_id.get(&(*k as _)) {
             Some(pop) if *pop >= MIN_POPULARITY => true,
             _ => false,

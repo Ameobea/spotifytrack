@@ -393,8 +393,13 @@ export default class RelatedArtistsGraphCanvasRenderer {
       }
 
       if (this.dirtyNodes) {
-        this.reRenderEdges();
-        this.dirtyNodes = false;
+        const link = this.links[0];
+        if (!link || !link.source.pos || !link.target.pos) {
+          // We wait for things to initialize before trying to draw
+        } else {
+          this.reRenderEdges();
+          this.dirtyNodes = false;
+        }
       }
     });
   }

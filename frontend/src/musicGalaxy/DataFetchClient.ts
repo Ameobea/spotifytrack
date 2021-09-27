@@ -6,7 +6,7 @@
 import * as R from 'ramda';
 import { filterNils, UnreachableException } from 'ameo-utils';
 
-import { getArtistDataByInternalIDs, getArtistRelationshipsByInternalIDs } from './api';
+import { getArtistDataByInternalIDs, getArtistRelationshipsChunk } from './api';
 
 interface ArtistMapData {
   name: string;
@@ -17,16 +17,17 @@ export interface ArtistMapDataWithId extends ArtistMapData {
 }
 
 export interface ArtistRelationshipData {
-  artistIDs: number[];
+  chunkSize: number;
+  chunkIx: number;
   res: ArrayBuffer;
 }
 
 const MAX_CONCURRENT_REQUESTS = { data: 4, relationship: 2 };
 const CHUNK_SIZE = 450;
+const ARTIST_RELATIONSHIPS_CHUNK_SIZE = 5553;
 
 export default class DataFetchClient {
   public fetchedArtistDataByID: Map<number, ArtistMapData | null | 'FETCHING'> = new Map();
-  private fetchedArtistRelationships: Set<number> = new Set();
 
   private artistDataCallback: ((data: ArtistMapData[]) => void) | null;
   private artistRelationshipsCallback: ((data: ArtistRelationshipData) => void) | null;
@@ -47,9 +48,6 @@ export default class DataFetchClient {
   private getRequestPermit(type: 'data' | 'relationship'): Promise<void> {
     if (this.curActiveRequestCount[type] < MAX_CONCURRENT_REQUESTS[type]) {
       this.curActiveRequestCount[type] += 1;
-      // console.log(
-      //   `Got permit immediately, active requests: ${this.curActiveRequestCount},type: ${type}`
-      // );
       return Promise.resolve();
     }
 
@@ -67,7 +65,6 @@ export default class DataFetchClient {
 
   private releaseRequestPermit(type: 'data' | 'relationship') {
     this.curActiveRequestCount[type] -= 1;
-    // console.log(`Released permit, active requests: ${this.curActiveRequestCount}`);
     if (this.curActiveRequestCount[type] < 0) {
       throw new UnreachableException();
     }
@@ -118,30 +115,6 @@ export default class DataFetchClient {
     }
   }
 
-  private async fetchArtistRelationshipsInner(allIDs: number[]) {
-    await this.getRequestPermit('relationship');
-
-    const ids = allIDs.filter((id) => !this.fetchedArtistRelationships.has(id));
-    ids.forEach((id) => this.fetchedArtistRelationships.add(id));
-    if (ids.length === 0) {
-      this.releaseRequestPermit('relationship');
-      return;
-    }
-
-    try {
-      const res = await getArtistRelationshipsByInternalIDs(ids);
-      const toEmit: ArtistRelationshipData = { artistIDs: ids, res };
-
-      if (this.artistRelationshipsCallback) {
-        this.artistRelationshipsCallback(toEmit);
-      } else {
-        this.pendingArtistRelationships.push(toEmit);
-      }
-    } finally {
-      this.releaseRequestPermit('relationship');
-    }
-  }
-
   public getOrFetchArtistData(ids: number[]): (ArtistMapData | null)[] {
     const idsNeedingFetch: number[] = [];
     const res = ids.map((id) => {
@@ -167,14 +140,20 @@ export default class DataFetchClient {
   }
 
   // TODO: Coalesce small requests
-  public fetchArtistRelationships(ids: number[]) {
-    const idsNeedingFetch: number[] = ids.filter((id) => !this.fetchedArtistRelationships.has(id));
+  public async fetchArtistRelationships(chunkIx: number) {
+    await this.getRequestPermit('relationship');
 
-    // Kick off request to fetch the missing data in the background
-    if (idsNeedingFetch.length > 0) {
-      R.splitEvery(CHUNK_SIZE, idsNeedingFetch).forEach((ids) => {
-        this.fetchArtistRelationshipsInner(ids);
-      });
+    try {
+      const res = await getArtistRelationshipsChunk(chunkIx, ARTIST_RELATIONSHIPS_CHUNK_SIZE);
+      const toEmit = { chunkIx, chunkSize: ARTIST_RELATIONSHIPS_CHUNK_SIZE, res };
+
+      if (this.artistRelationshipsCallback) {
+        this.artistRelationshipsCallback(toEmit);
+      } else {
+        this.pendingArtistRelationships.push(toEmit);
+      }
+    } finally {
+      this.releaseRequestPermit('relationship');
     }
   }
 }
