@@ -7,7 +7,7 @@ use futures::{stream::FuturesUnordered, TryFutureExt, TryStreamExt};
 use redis::Commands;
 use rocket::{
     data::ToByteUnit,
-    http::{RawStr, Status},
+    http::{ContentType, RawStr, Status},
     response::{status, Redirect},
     serde::json::Json,
     State,
@@ -1497,17 +1497,28 @@ pub(crate) async fn refetch_cached_artists_missing_popularity(
     ))
 }
 
+/// Needed so that the MIME type on packed binary stuff that still should be compressed is picked up
+/// by the CDN as being compressable.
+#[derive(Responder)]
+#[response(status = 200, content_type = "application/json")]
+pub(crate) struct JSONMimeTypeSetterResponder {
+    inner: Vec<u8>,
+}
+
 #[get("/packed_3d_artist_coords")]
 pub(crate) async fn get_packed_3d_artist_coords_route(
     conn: DbConn,
     token_data: &State<Mutex<SpotifyTokenData>>,
-) -> Result<&'static [u8], String> {
+) -> Result<JSONMimeTypeSetterResponder, String> {
     let spotify_access_token = {
         let token_data = &mut *(&*token_data).lock().await;
         token_data.get().await
     }?;
 
-    get_packed_3d_artist_coords(&conn, &spotify_access_token).await
+    let packed = get_packed_3d_artist_coords(&conn, &spotify_access_token).await?;
+    Ok(JSONMimeTypeSetterResponder {
+        inner: packed.to_vec(),
+    })
 }
 
 #[post("/map_artist_data_by_internal_ids", data = "<artist_internal_ids>")]
@@ -1658,19 +1669,20 @@ pub(crate) async fn get_packed_artist_relationships_by_internal_ids(
     conn: DbConn,
     token_data: &State<Mutex<SpotifyTokenData>>,
     artist_internal_ids: Json<Vec<i32>>,
-) -> Result<Vec<u8>, String> {
+) -> Result<JSONMimeTypeSetterResponder, String> {
     let spotify_access_token = {
         let token_data = &mut *(&*token_data).lock().await;
         token_data.get().await
     }?;
 
     let artist_internal_ids: Vec<i32> = artist_internal_ids.0;
-    get_packed_artist_relationships_by_internal_ids_inner(
+    let packed = get_packed_artist_relationships_by_internal_ids_inner(
         &conn,
         spotify_access_token,
         artist_internal_ids,
     )
-    .await
+    .await?;
+    Ok(JSONMimeTypeSetterResponder { inner: packed })
 }
 
 #[get("/map_artist_relationships_chunk?<chunk_size>&<chunk_ix>")]
@@ -1679,7 +1691,7 @@ pub(crate) async fn get_artist_relationships_chunk(
     token_data: &State<Mutex<SpotifyTokenData>>,
     chunk_size: u32,
     chunk_ix: u32,
-) -> Result<Vec<u8>, String> {
+) -> Result<JSONMimeTypeSetterResponder, String> {
     let spotify_access_token = {
         let token_data = &mut *(&*token_data).lock().await;
         token_data.get().await
@@ -1697,12 +1709,13 @@ pub(crate) async fn get_artist_relationships_chunk(
         .map(|id| id as i32)
         .collect();
 
-    get_packed_artist_relationships_by_internal_ids_inner(
+    let packed = get_packed_artist_relationships_by_internal_ids_inner(
         &conn,
         spotify_access_token,
         artist_internal_ids,
     )
-    .await
+    .await?;
+    Ok(JSONMimeTypeSetterResponder { inner: packed })
 }
 
 #[get("/get_preview_urls_by_internal_id/<artist_internal_id>")]

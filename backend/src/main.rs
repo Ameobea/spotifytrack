@@ -82,15 +82,15 @@ pub async fn main() {
     //     get_packed_3d_artist_coords().await;
     // });
 
-    rocket::build()
+    let mut builder = rocket::build()
         .mount("/", all_routes.clone())
         .mount("/api/", all_routes)
         .manage(Mutex::new(SpotifyTokenData::new().await))
         .attach(DbConn::fairing())
-        .attach(cors::CorsFairing)
-        .attach(Compression::fairing())
-        .launch()
-        .await
-        .expect("Error launching Rocket");
+        .attach(cors::CorsFairing);
+    if !cfg!(debug_assertions) {
+        builder = builder.attach(Compression::fairing());
+    }
+    builder.launch().await.expect("Error launching Rocket");
     info!("Rocket exited cleanly");
 }
