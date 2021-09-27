@@ -31,6 +31,7 @@ import { MovementInputHandler } from './MovementInputHandler';
 import type { WasmClient } from './WasmClient/WasmClient.worker';
 import { UIEventRegistry } from './OverlayUI/OverlayUI';
 import MusicManager from './MusicManager';
+import { delay } from 'src/util2';
 
 interface ThreeExtra {
   PointerLockControls: typeof import('three/examples/jsm/controls/PointerLockControls')['PointerLockControls'];
@@ -51,8 +52,6 @@ const getInitialArtistIDsToRender = async (): Promise<number[]> => {
 const wasmClient = Comlink.wrap<WasmClient>(
   new Worker(new URL('./WasmClient/WasmClient.worker', import.meta.url))
 );
-
-const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 const waitForWasmClientInitialization = async () => {
   while (true) {

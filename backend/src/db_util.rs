@@ -553,14 +553,17 @@ pub(crate) async fn get_internal_ids_by_spotify_id<
 
     // Try to create new entries for all included spotify IDs, ignoring failures due to unique
     // constraint violations
-    let query = diesel::insert_or_ignore_into(spotify_items).values(spotify_id_items);
-    conn.run(move |conn| {
-        query.execute(conn).map_err(|err| -> String {
-            error!("Error inserting spotify ids into mapping table: {:?}", err);
-            "Error inserting spotify ids into mapping table".into()
+    for chunk in spotify_id_items.chunks(600) {
+        let chunk: Vec<_> = chunk.to_vec();
+        let query = diesel::insert_or_ignore_into(spotify_items).values(chunk);
+        conn.run(move |conn| {
+            query.execute(conn).map_err(|err| -> String {
+                error!("Error inserting spotify ids into mapping table: {:?}", err);
+                "Error inserting spotify ids into mapping table".into()
+            })
         })
-    })
-    .await?;
+        .await?;
+    }
 
     // Retrieve the mapped spotify ids, including any inserted ones
     let query = spotify_items.filter(spotify_id.eq_any(missing_ids));

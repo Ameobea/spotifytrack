@@ -62,7 +62,7 @@ pub(crate) struct SpotifyIdMapping {
     pub spotify_id: String,
 }
 
-#[derive(Serialize, Insertable)]
+#[derive(Clone, Serialize, Insertable)]
 #[table_name = "spotify_items"]
 pub struct NewSpotifyIdMapping {
     pub spotify_id: String,
