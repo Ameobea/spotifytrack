@@ -566,15 +566,20 @@ pub(crate) async fn get_internal_ids_by_spotify_id<
     }
 
     // Retrieve the mapped spotify ids, including any inserted ones
-    let query = spotify_items.filter(spotify_id.eq_any(missing_ids));
-    let mapped_ids: Vec<SpotifyIdMapping> = conn
-        .run(move |conn| {
-            query.load(conn).map_err(|err| -> String {
-                error!("Error retrieving mapped spotify ids: {:?}", err);
-                "Error retrieving mapped spotify ids".into()
+    let mut mapped_ids: Vec<SpotifyIdMapping> = Vec::new();
+    for missing_ids_chunk in missing_ids.chunks(50_000) {
+        let missing_ids_chunk: Vec<String> = missing_ids_chunk.to_vec();
+        let query = spotify_items.filter(spotify_id.eq_any(missing_ids_chunk));
+        let mapped_ids_for_chunk: Vec<SpotifyIdMapping> = conn
+            .run(move |conn| {
+                query.load(conn).map_err(|err| -> String {
+                    error!("Error retrieving mapped spotify ids: {:?}", err);
+                    "Error retrieving mapped spotify ids".into()
+                })
             })
-        })
-        .await?;
+            .await?;
+        mapped_ids.extend(mapped_ids_for_chunk);
+    }
 
     cache_id_entries(
         mapped_ids
