@@ -575,6 +575,13 @@ pub(crate) async fn oauth_cb(
 
     match state {
         Some(s) if !s.is_empty() => {
+            if s == "galaxy" {
+                return Ok(Redirect::to(format!(
+                    "{}/music-galaxy.html?spotifyID={}",
+                    CONF.website_url, user_spotify_id
+                )));
+            }
+
             let s = RawStr::new(s);
             let percent_decoded =
                 s.percent_decode()

@@ -31,9 +31,13 @@ export class UIEventRegistry {
   private pendingActions: Action[] = [];
 
   public currentFOV = DEFAULT_FOV;
-  public getLabelPosition: (
-    id: number | string
-  ) => { x: number; y: number; isInFrontOfCamera: boolean; distance: number; popularity: number };
+  public getLabelPosition: (id: number | string) => {
+    x: number;
+    y: number;
+    isInFrontOfCamera: boolean;
+    distance: number;
+    popularity: number;
+  };
   public getShouldUpdate: () => boolean;
   public getArtistName: (artistID: number) => string;
   public getShouldRenderCrosshair: () => boolean;
@@ -53,9 +57,13 @@ export class UIEventRegistry {
     lockPointer,
     flyToArtistID,
   }: {
-    getLabelPosition: (
-      artistID: number | string
-    ) => { x: number; y: number; isInFrontOfCamera: boolean; distance: number; popularity: number };
+    getLabelPosition: (artistID: number | string) => {
+      x: number;
+      y: number;
+      isInFrontOfCamera: boolean;
+      distance: number;
+      popularity: number;
+    };
     getShouldUpdate: () => boolean;
     getArtistName: (artistID: number) => string;
     getShouldRenderCrosshair: () => boolean;
@@ -245,8 +253,7 @@ export interface OverlayState {
 }
 
 const buildDefaultOverlayState = (): OverlayState => ({
-  // TODO: Need to track user spotify ID somehow and store in a cookie or localstorage or elsewhere
-  onboardingOpen: true,
+  onboardingOpen: !new URLSearchParams(window.location.search).get('spotifyID'),
   artistSearchOpen: true,
 });
 
@@ -380,9 +387,10 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onP
       }
 
       const now = Date.now();
-      labelState.current.fadingOutPlayingArtistLabels = labelState.current.fadingOutPlayingArtistLabels.filter(
-        (datum) => now - datum.fadeOutStartTime < PLAYING_ARTIST_LABEL_FADE_OUT_TIME_MS
-      );
+      labelState.current.fadingOutPlayingArtistLabels =
+        labelState.current.fadingOutPlayingArtistLabels.filter(
+          (datum) => now - datum.fadeOutStartTime < PLAYING_ARTIST_LABEL_FADE_OUT_TIME_MS
+        );
 
       for (const { artistID, fadeOutStartTime } of labelState.current
         .fadingOutPlayingArtistLabels) {

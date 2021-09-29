@@ -1,4 +1,5 @@
 import React from 'react';
+import { API_BASE_URL } from 'src/conf';
 
 import './OnboardingSidebar.scss';
 import { OverlayAction } from './OverlayUI';
@@ -32,14 +33,12 @@ const OnboardingSidebar: React.FC<OnboardingSidebarProps> = ({
 
       <ActionButton
         onClick={() => {
-          dispatchOverlayAction({ type: 'CLOSE_ONBOARDING' });
-          dispatchOverlayAction({ type: 'CLOSE_ARTIST_SEARCH' });
-          // TODO
+          window.location.href = `${API_BASE_URL}/authorize?playlist_perms=false&state=galaxy`;
         }}
       >
         Personalize with Your Spotify Data
         <br />
-        <i style={{ fontSize: 13 }}>(Highly Recommended)</i>
+        <i style={{ fontSize: 13 }}>(Recommended)</i>
       </ActionButton>
       <ActionButton
         onClick={() => {

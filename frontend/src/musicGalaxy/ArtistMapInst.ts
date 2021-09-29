@@ -103,11 +103,12 @@ export const initArtistMapInst = async (canvas: HTMLCanvasElement): Promise<Arti
   dataFetchClient.fetchArtistRelationships(0);
 
   // Set highlighted artists.
-  // TODO: Should be user-specific with OAuth flow etc.
-  // getAllTopArtistInternalIDsForUser('tt65cl3nc7wxnzgyzlm447571').then((artistIDs) =>
-  getAllTopArtistInternalIDsForUser('ameobea').then((artistIDs) =>
-    inst.setHighlightedArtistIDs(artistIDs)
-  );
+  const userSpotifyID = new URLSearchParams(window.location.search).get('spotifyID');
+  if (userSpotifyID) {
+    getAllTopArtistInternalIDsForUser(userSpotifyID).then((artistIDs) =>
+      inst.setHighlightedArtistIDs(artistIDs)
+    );
+  }
 
   await inst.renderArtists(initialArtistIDsToRender);
   return inst;
