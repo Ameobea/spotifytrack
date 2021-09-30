@@ -23,6 +23,7 @@ interface State {
 type Action =
   | { type: 'createLabel'; id: number | string; text: string }
   | { type: 'deleteLabel'; id: number | string }
+  | { type: 'deleteAllLabels' }
   | { type: 'pointerLocked' }
   | { type: 'pointerUnlocked' };
 
@@ -31,6 +32,7 @@ export class UIEventRegistry {
   private pendingActions: Action[] = [];
 
   public currentFOV = DEFAULT_FOV;
+  public controlMode: 'orbit' | 'pointerlock' = 'orbit';
   public getLabelPosition: (id: number | string) => {
     x: number;
     y: number;
@@ -88,6 +90,10 @@ export class UIEventRegistry {
 
   public deleteLabel(id: number | string) {
     this.pendingActions.push({ type: 'deleteLabel', id });
+  }
+
+  public deleteAllLabels() {
+    this.pendingActions.push({ type: 'deleteAllLabels' });
   }
 
   public onPointerLocked() {
@@ -276,6 +282,20 @@ const overlayStateReducer = (state: OverlayState, action: OverlayAction): Overla
   }
 };
 
+const renderOrbitModeLabel = (
+  ctx: CanvasRenderingContext2D,
+  label: { id: string | number; text: string; width: number },
+  { x, y }: { x: number; y: number }
+) => {
+  const fontSize = 12;
+  ctx.font = `${fontSize}px PT Sans`;
+  ctx.fillStyle = '#141414b9';
+  ctx.fillRect(x - label.width / 2.3 - 3, y - 12, label.width + 6, 18);
+
+  ctx.fillStyle = ARTIST_LABEL_TEXT_COLOR;
+  ctx.fillText(label.text, x - label.width / 2.3, y);
+};
+
 const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onPointerDown }) => {
   const labelState = useRef(initialState);
   const canvasRef = useRef<CanvasRenderingContext2D | null>(null);
@@ -297,6 +317,9 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onP
             break;
           case 'deleteLabel':
             labelState.current.labels.delete(action.id);
+            break;
+          case 'deleteAllLabels':
+            labelState.current.labels.clear();
             break;
           case 'pointerLocked':
             dispatchOverlayAction({ type: 'CLOSE_ONBOARDING' });
@@ -352,7 +375,17 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onP
         labelState.current.lastPlayingArtistID = eventRegistry.curPlaying;
       }
 
-      for (const [artistID, label] of labelState.current.labels.entries()) {
+      // If we're rendering orbit mode labels, we need to sort them by distance, furthest to closest
+      const labelsToRender =
+        eventRegistry.controlMode === 'orbit'
+          ? [...labelState.current.labels.entries()].sort((a, b) => {
+              const aDistance = eventRegistry.getLabelPosition(a[0]).distance;
+              const bDistance = eventRegistry.getLabelPosition(b[0]).distance;
+              return bDistance - aDistance;
+            })
+          : labelState.current.labels.entries();
+
+      for (const [artistID, label] of labelsToRender) {
         if (
           artistID === eventRegistry.curPlaying ||
           labelState.current.fadingOutPlayingArtistLabels.some((f) => f.artistID === artistID)
@@ -371,6 +404,11 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onP
           y < -300 ||
           y > ctx.canvas.height + 300
         ) {
+          continue;
+        }
+
+        if (eventRegistry.controlMode === 'orbit') {
+          renderOrbitModeLabel(ctx, label, { x, y });
           continue;
         }
 
@@ -430,9 +468,7 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onP
           dispatchOverlayAction={dispatchOverlayAction}
           lockPointer={() => eventRegistry.lockPointer()}
         />
-      ) : overlayState.artistSearchOpen ? (
-        <CheatSheet />
-      ) : (
+      ) : overlayState.artistSearchOpen ? null : ( // <CheatSheet />
         <CollapsedCheatSheet />
       )}
       {overlayState.artistSearchOpen ? (

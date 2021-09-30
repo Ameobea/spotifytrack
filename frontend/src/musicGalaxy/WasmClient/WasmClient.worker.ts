@@ -36,7 +36,8 @@ export class WasmClient {
     z: number,
     projectedNextX: number,
     projectedNextY: number,
-    projectedNextZ: number
+    projectedNextZ: number,
+    isFlyMode: boolean
   ) {
     const drawCommands = this.engine.handle_new_position(
       this.ctxPtr,
@@ -45,7 +46,8 @@ export class WasmClient {
       z,
       projectedNextX,
       projectedNextY,
-      projectedNextZ
+      projectedNextZ,
+      isFlyMode
     );
     return Comlink.transfer(drawCommands, [drawCommands.buffer]);
   }
@@ -57,14 +59,16 @@ export class WasmClient {
     artistIDs: Uint32Array,
     curX: number,
     curY: number,
-    curZ: number
+    curZ: number,
+    isFlyMode: boolean
   ) {
     const drawCommands = this.engine.handle_received_artist_names(
       this.ctxPtr,
       artistIDs,
       curX,
       curY,
-      curZ
+      curZ,
+      isFlyMode
     );
     return Comlink.transfer(drawCommands, [drawCommands.buffer]);
   }
@@ -132,6 +136,15 @@ export class WasmClient {
       intra: Comlink.transfer(intra, [intra.buffer]),
       inter: Comlink.transfer(inter, [inter.buffer]),
     };
+  }
+
+  /**
+   * Clears all existing labels and renders the special orbit-mode labels
+   *
+   * Returns set of draw commands to execute
+   */
+  public transitionToOrbitMode(): Uint32Array {
+    return this.engine.transition_to_orbit_mode(this.ctxPtr);
   }
 }
 

@@ -27,6 +27,7 @@ import {
   getArtistFlyToDurationMs,
   HIGHLIGHTED_ARTIST_COLOR,
   getHighlightedArtistsIntraOpacity,
+  INITIAL_ORBIT_DISTANCE,
 } from './conf';
 import DataFetchClient, { ArtistMapDataWithId, ArtistRelationshipData } from './DataFetchClient';
 import { MovementInputHandler } from './MovementInputHandler';
@@ -456,7 +457,11 @@ export class ArtistMapInst {
       0.1,
       1200_000
     );
-    this.camera.position.set(170_000, 170_000, 170_000);
+    this.camera.position.set(
+      INITIAL_ORBIT_DISTANCE,
+      INITIAL_ORBIT_DISTANCE,
+      INITIAL_ORBIT_DISTANCE
+    );
     this.camera.lookAt(0, 0, 0);
 
     this.raycaster = new THREE.Raycaster();
@@ -554,6 +559,17 @@ export class ArtistMapInst {
   }
 
   private initControls(controlMode: 'pointerlock' | 'orbit') {
+    if (
+      (this.eventRegistry.controlMode === 'pointerlock' && controlMode === 'pointerlock') ||
+      !this.controls
+    ) {
+      this.eventRegistry.deleteAllLabels();
+      wasmClient
+        .transitionToOrbitMode()
+        .then((drawCommands) => this.pendingDrawCommands.push(drawCommands));
+    }
+    this.eventRegistry.controlMode = controlMode;
+
     if (this.controls) {
       this.controls.controls.dispose();
     }
@@ -585,6 +601,8 @@ export class ArtistMapInst {
       }
       case 'orbit': {
         const controls = new this.THREE_EXTRA.OrbitControls(this.camera, this.renderer.domElement);
+        controls.autoRotate = true;
+        controls.autoRotateSpeed = 0.048;
         controls.enableDamping = true;
         controls.dampingFactor = 0.1;
         controls.enableKeys = false;
@@ -656,7 +674,8 @@ export class ArtistMapInst {
         new Uint32Array(artistData.map(({ id }) => id)),
         curPos.x,
         curPos.y,
-        curPos.z
+        curPos.z,
+        this.controls.type === 'pointerlock'
       )
       .then((drawCommands) => {
         if (drawCommands.length === 0) {
@@ -879,7 +898,8 @@ export class ArtistMapInst {
           curPos.z,
           projectedNextPos.x,
           projectedNextPos.y,
-          projectedNextPos.z
+          projectedNextPos.z,
+          this.controls.type === 'pointerlock'
         )
         .then((commands) => {
           this.wasmPositionHandlerIsRunning = false;
@@ -985,7 +1005,6 @@ export class ArtistMapInst {
         }
         case DrawCommand.RemoveLabel: {
           this.eventRegistry.deleteLabel(artistID);
-
           break;
         }
         case DrawCommand.AddArtistGeometry: {

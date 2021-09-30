@@ -69,6 +69,30 @@ const LABEL_RENDER_DISTANCE: f32 = 16320.;
 const MAX_MUSIC_PLAY_DISTANCE: f32 = 13740.;
 const MAX_RECENTLY_PLAYED_ARTISTS_TO_TRACK: usize = 12;
 const MAX_RELATED_ARTIST_COUNT: usize = 20;
+const ORBIT_LABEL_ARTIST_IDS: &[u32] = &[
+    14710,    // The Beatles
+    109666,   // The Living Tombstone
+    486,      // Taylor Swift
+    108584,   // Flux Pavilion
+    779,      // BTS
+    4394417,  // Florida Georgia Line
+    5538103,  // Kidz Bop Kids
+    1415410,  // Bad Bunny
+    54,       // Joji
+    635,      // 21 Savage
+    6822165,  // Sfera Ebbasta
+    1121203,  // Livetune
+    35177268, // Joe Rogan
+    88531684, // LO-FI BEATS
+    895,      // 100 Gecs
+    112965,   // London Symphony Orchestra
+    358,      // Metallica
+    583,      // Slayer
+    929988,   // Bob Marley & The Wailers
+    88522605, // FrivolousFox ASMR
+    470,      // $uicideboy$
+    8,        // Flume
+];
 
 impl Default for ArtistMapCtx {
     fn default() -> Self {
@@ -355,6 +379,7 @@ pub fn handle_received_artist_names(
     cur_x: f32,
     cur_y: f32,
     cur_z: f32,
+    is_fly_mode: bool,
 ) -> Vec<u32> {
     let ctx = unsafe { &mut *ctx };
 
@@ -391,7 +416,8 @@ pub fn handle_received_artist_names(
         if artist_state
             .render_state
             .contains(ArtistRenderState::RENDER_LABEL)
-            && should_render_label(ctx.total_rendered_label_count, artist_state, distance)
+            && (!is_fly_mode
+                || should_render_label(ctx.total_rendered_label_count, artist_state, distance))
         {
             ctx.total_rendered_label_count += 1;
             draw_commands.push(0);
@@ -456,6 +482,7 @@ pub fn handle_new_position(
     projected_next_x: f32,
     projected_next_y: f32,
     projected_next_z: f32,
+    is_fly_mode: bool,
 ) -> Vec<u32> {
     let ctx = unsafe { &mut *ctx };
 
@@ -485,6 +512,7 @@ pub fn handle_new_position(
             != artist_state
                 .render_state
                 .contains(ArtistRenderState::RENDER_LABEL)
+            && is_fly_mode
         {
             artist_state
                 .render_state
@@ -537,6 +565,11 @@ pub fn handle_new_position(
                 .render_state
                 .toggle(ArtistRenderState::RENDER_GEOMETRY);
         }
+    }
+
+    // If in fly mode, don't play any music
+    if !is_fly_mode {
+        return render_commands;
     }
 
     let projected_next_pos = [projected_next_x, projected_next_y, projected_next_z];
@@ -812,4 +845,35 @@ pub fn get_connections_for_artists(
     }
 
     points
+}
+
+#[wasm_bindgen]
+pub fn transition_to_orbit_mode(ctx: *mut ArtistMapCtx) -> Vec<u32> {
+    let ctx = unsafe { &mut *ctx };
+
+    let mut draw_commands = Vec::new();
+
+    for (id, state) in ctx.all_artists.iter_mut() {
+        if state.render_state.contains(ArtistRenderState::RENDER_LABEL) {
+            state.render_state.remove(ArtistRenderState::RENDER_LABEL);
+            draw_commands.push(1);
+            draw_commands.push(*id);
+        }
+    }
+
+    // Render the special orbit-mode labels
+    for artist_id in ORBIT_LABEL_ARTIST_IDS {
+        let artist_index = match ctx.artists_indices_by_id.get(artist_id) {
+            Some(&id) => id,
+            None => continue,
+        };
+        let (_, state) = &mut ctx.all_artists[artist_index];
+        state
+            .render_state
+            .set(ArtistRenderState::RENDER_LABEL, true);
+        draw_commands.push(4);
+        draw_commands.push(*artist_id);
+    }
+
+    draw_commands
 }
