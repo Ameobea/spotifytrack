@@ -1,8 +1,8 @@
 import type { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls';
+import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import type { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer';
 import * as Comlink from 'comlink';
 import { UnimplementedError, UnreachableException } from 'ameo-utils';
-import type { Scale } from 'chroma-js';
 import type { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass';
 
 import { fetchPackedArtistPositions, getAllTopArtistInternalIDsForUser } from './api';
@@ -25,6 +25,8 @@ import {
   CAMERA_OVERRIDE_TARGET_TOLERANCE,
   AMBIENT_LIGHT_COLOR,
   getArtistFlyToDurationMs,
+  HIGHLIGHTED_ARTIST_COLOR,
+  getHighlightedArtistsIntraOpacity,
 } from './conf';
 import DataFetchClient, { ArtistMapDataWithId, ArtistRelationshipData } from './DataFetchClient';
 import { MovementInputHandler } from './MovementInputHandler';
@@ -32,9 +34,11 @@ import type { WasmClient } from './WasmClient/WasmClient.worker';
 import { UIEventRegistry } from './OverlayUI/OverlayUI';
 import MusicManager from './MusicManager';
 import { delay } from 'src/util2';
+import { LineBasicMaterial } from 'three';
 
 interface ThreeExtra {
   PointerLockControls: typeof import('three/examples/jsm/controls/PointerLockControls')['PointerLockControls'];
+  OrbitControls: typeof import('three/examples/jsm/controls/OrbitControls')['OrbitControls'];
   RenderPass: typeof import('three/examples/jsm/postprocessing/RenderPass')['RenderPass'];
   ShaderPass: typeof import('three/examples/jsm/postprocessing/ShaderPass')['ShaderPass'];
   UnrealBloomPass: typeof import('three/examples/jsm/postprocessing/UnrealBloomPass')['UnrealBloomPass'];
@@ -43,20 +47,14 @@ interface ThreeExtra {
 
 const dataFetchClient = new DataFetchClient();
 
-const getInitialArtistIDsToRender = async (): Promise<number[]> => {
-  // This will eventually be fetched from the API or something, probably.
-  // prettier-ignore
-  return [912, 65, 643, 7801598, 57179651, 9318669, 248, 1339641, 515, 3723925, 486, 3323512, 3140393, 31, 725, 11, 170, 64, 14710, 634, 2, 132, 331787, 86, 93, 9241776, 68, 10176774, 331777, 108578, 110569, 110030, 817, 9301916, 137, 67, 85966964];
-};
-
 const wasmClient = Comlink.wrap<WasmClient>(
   new Worker(new URL('./WasmClient/WasmClient.worker', import.meta.url))
 );
 
 const waitForWasmClientInitialization = async () => {
   while (true) {
-    const success = await Promise.race([wasmClient.ping(), delay(50)] as const);
-    if (success) {
+    const isReady = await Promise.race([wasmClient.isReady(), delay(50)] as const);
+    if (isReady) {
       return;
     }
   }
@@ -65,7 +63,15 @@ const waitForWasmClientInitialization = async () => {
 export const initArtistMapInst = async (canvas: HTMLCanvasElement): Promise<ArtistMapInst> => {
   const [
     ,
-    { THREE, PointerLockControls, RenderPass, ShaderPass, UnrealBloomPass, EffectComposer },
+    {
+      THREE,
+      PointerLockControls,
+      OrbitControls,
+      RenderPass,
+      ShaderPass,
+      UnrealBloomPass,
+      EffectComposer,
+    },
   ] = await Promise.all([
     fetchPackedArtistPositions().then(async (packedArtistPositions) => {
       // The wasm client web worker needs to do some async initialization.  Wait for it to do that so we
@@ -80,9 +86,9 @@ export const initArtistMapInst = async (canvas: HTMLCanvasElement): Promise<Arti
     }),
     import('./lazyThree').then((mod) => mod.default),
   ] as const);
-  const initialArtistIDsToRenderPromise = getInitialArtistIDsToRender();
   const THREE_EXTRA: ThreeExtra = {
     PointerLockControls,
+    OrbitControls,
     RenderPass,
     ShaderPass,
     UnrealBloomPass,
@@ -92,14 +98,6 @@ export const initArtistMapInst = async (canvas: HTMLCanvasElement): Promise<Arti
   const allArtistData = await wasmClient.getAllArtistData();
 
   const inst = new ArtistMapInst(THREE, THREE_EXTRA, canvas, allArtistData);
-  // Render initial artists
-  const initialArtistIDsToRender = await initialArtistIDsToRenderPromise.then((ids) => {
-    // Optimization to allow us to start fetching artist data as soon as we have the IDs regardless of whether we've
-    // finished fetching the wasm client, three, packed artist positions, etc.
-    dataFetchClient.getOrFetchArtistData(ids); // TODO: Is this actually necessary?
-
-    return ids;
-  });
   dataFetchClient.fetchArtistRelationships(0);
 
   // Set highlighted artists.
@@ -110,7 +108,6 @@ export const initArtistMapInst = async (canvas: HTMLCanvasElement): Promise<Arti
     );
   }
 
-  await inst.renderArtists(initialArtistIDsToRender);
   return inst;
 };
 
@@ -143,23 +140,23 @@ export class ArtistMapInst {
   private renderer: THREE.WebGLRenderer;
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
-  private controls: PointerLockControls;
+  private controls:
+    | { type: 'pointerlock'; controls: PointerLockControls }
+    | { type: 'orbit'; controls: OrbitControls };
   private isPointerLocked = false;
   private bloomPass: UnrealBloomPass;
   private bloomComposer: EffectComposer;
   private finalComposer: EffectComposer;
   private clock: THREE.Clock;
-  private timeElapsed = 0;
   private secondSinceLastPositionUpdate = 0;
-  private chroma: typeof import('chroma-js');
-  private connectionColorScale: Scale;
 
   private renderedArtistBufferIndicesByArtistID: Map<number, number> = new Map();
   private artistIDByRenderedArtistBufferIndex: Map<number, number> = new Map();
   private bloomedConnectionsGeometry: THREE.BufferGeometry;
   private bloomedConnectionsMesh: THREE.Line;
-  private nonBloomedConnectionsGeometry: THREE.BufferGeometry;
-  private nonBloomedConnectionsMesh: THREE.Line;
+  // private nonBloomedConnectionsGeometry: THREE.BufferGeometry;
+  // private nonBloomedConnectionsMesh: THREE.Line;
+  private highlightedArtistsIntraLines: THREE.LineSegments | null = null;
   private artistDataByID: Map<number, { pos: THREE.Vector3; popularity: number }> = new Map();
   private pendingDrawCommands: Uint32Array[] = [];
   private artistMeshes: THREE.InstancedMesh;
@@ -217,7 +214,7 @@ export class ArtistMapInst {
     getLabelPosition: (labelID: string | number) => this.getLabelPosition(labelID),
     getShouldUpdate: () => {
       const curCameraDirection = this.camera.getWorldDirection(VEC3_IDENTITY).clone();
-      const curPosition = this.controls.getObject().position.clone();
+      const curPosition = this.camera.position.clone();
 
       const shouldUpdate =
         this.forceLabelsUpdate ||
@@ -252,7 +249,16 @@ export class ArtistMapInst {
       this.cameraOverrides.direction = { target: pos, pivotCoefficient: CAMERA_PIVOT_COEFFICIENT };
     },
     flyToArtistID: (artistID: number) => {
-      const srcPos = this.controls.getObject().position.clone();
+      if (this.controls.type !== 'pointerlock') {
+        this.initControls('pointerlock');
+        // TODO: Animate zoom
+        this.camera.zoom = 1;
+        this.camera.fov = DEFAULT_FOV;
+        this.eventRegistry.currentFOV = DEFAULT_FOV;
+        this.camera.updateProjectionMatrix();
+      }
+
+      const srcPos = this.camera.position.clone();
       const dstPos = this.artistDataByID.get(artistID)?.pos;
       if (!dstPos) {
         throw new UnreachableException();
@@ -285,7 +291,10 @@ export class ArtistMapInst {
       console.log(`Flying to ${artistID}`, this.cameraOverrides.movement);
     },
     lockPointer: () => {
-      this.controls.lock();
+      if (this.controls.type !== 'pointerlock') {
+        return;
+      }
+      this.controls.controls.lock();
       this.isPointerLocked = true;
     },
   });
@@ -300,14 +309,16 @@ export class ArtistMapInst {
 
   public handlePointerDown(evt: { button: number }) {
     this.musicManager.startCtx();
-    const wasLocked = this.isPointerLocked;
-    this.isPointerLocked = true;
-    this.controls.lock();
-    this.scene.add(this.controls.getObject());
 
-    console.log('pointerdown');
-    if (!wasLocked) {
-      return;
+    if (this.controls.type === 'pointerlock') {
+      const wasLocked = this.isPointerLocked;
+      this.isPointerLocked = true;
+      this.controls.controls.lock();
+      this.scene.add(this.controls.controls.getObject());
+
+      if (!wasLocked) {
+        return;
+      }
     }
 
     if (this.enableRaycasting) {
@@ -334,7 +345,7 @@ export class ArtistMapInst {
 
     if (evt.button === 0) {
       if (this.musicManager.curPlaying) {
-        const curPosition = this.controls.getObject().position;
+        const curPosition = this.camera.position.clone();
         wasmClient
           .onMusicFinishedPlaying(this.musicManager.curPlaying.artistID, [
             curPosition.x,
@@ -352,7 +363,7 @@ export class ArtistMapInst {
   public setHighlightedArtistIDs(artistIDs: number[]) {
     // Wasm client is the source of truth for what artists are rendered.  We indicate to it that highlighted artists have changed
     // and let it deal with dispatching draw commands to re-render them and possibly de-render the old ones.
-    const curPosition = this.controls.getObject().position;
+    const curPosition = this.camera.position.clone();
     wasmClient
       .setHighlightedArtists(
         new Uint32Array(artistIDs),
@@ -381,7 +392,7 @@ export class ArtistMapInst {
       transparent: true,
       opacity: ARTIST_GEOMETRY_OPACITY,
       depthWrite: true,
-      blending: this.THREE.AdditiveBlending,
+      // blending: this.THREE.AdditiveBlending,
     });
     const meshes = new this.THREE.InstancedMesh(geometry, material, 100000);
     meshes.instanceColor = instanceColor;
@@ -401,19 +412,43 @@ export class ArtistMapInst {
     VEC3_IDENTITY = new THREE.Vector3();
     this.lastCameraDirection = VEC3_IDENTITY.clone();
 
-    // import('chroma-js').then((chroma) => {
-    //   this.chroma = chroma.default;
-    //   this.connectionColorScale = this.chroma.scale(['red', 'green', 'blue']).domain([0, 1]);
-    // });
-
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       antialias: true,
     });
     this.renderer.setPixelRatio(window.devicePixelRatio);
-    // this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // TODO: Remove
-    this.renderer.toneMapping = THREE.ReinhardToneMapping;
+    this.renderer.toneMapping = THREE.CineonToneMapping;
+    this.renderer.toneMappingExposure = 1;
     this.clock = new THREE.Clock();
+
+    window.addEventListener('keydown', (evt) => {
+      switch (evt.key) {
+        case 'ArrowUp':
+          this.renderer.toneMappingExposure += 0.1;
+          break;
+        case 'ArrowDown':
+          this.renderer.toneMappingExposure -= 0.1;
+          if (this.renderer.toneMappingExposure < 0) {
+            this.renderer.toneMappingExposure = 0;
+          }
+          break;
+        case '1':
+          this.renderer.toneMapping = THREE.LinearToneMapping;
+          break;
+        case '2':
+          this.renderer.toneMapping = THREE.ReinhardToneMapping;
+          break;
+        case '3':
+          this.renderer.toneMapping = THREE.CineonToneMapping;
+          break;
+        case '4':
+          this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+          break;
+        case '5':
+          this.renderer.toneMapping = THREE.NoToneMapping;
+          break;
+      }
+    });
 
     this.camera = new THREE.PerspectiveCamera(
       DEFAULT_FOV,
@@ -421,12 +456,7 @@ export class ArtistMapInst {
       0.1,
       1200_000
     );
-    this.camera.position.set(
-      (Math.random() - 0.5) * 80_000,
-      (Math.random() - 0.5) * 80_000,
-      (Math.random() - 0.5) * 80_000
-    );
-    // this.camera.position.set(-55323.035, -7979.134, -33066.244);
+    this.camera.position.set(170_000, 170_000, 170_000);
     this.camera.lookAt(0, 0, 0);
 
     this.raycaster = new THREE.Raycaster();
@@ -450,18 +480,7 @@ export class ArtistMapInst {
       this.forceLabelsUpdate = true;
     });
 
-    this.controls = new THREE_EXTRA.PointerLockControls(this.camera, canvas);
-    this.controls.addEventListener('unlock', () => {
-      if (this.isPointerLocked) {
-        this.isPointerLocked = false;
-        this.scene.remove(this.controls.getObject());
-      }
-
-      this.eventRegistry.onPointerUnlocked();
-    });
-    this.controls.addEventListener('lock', () => {
-      this.eventRegistry.onPointerLocked();
-    });
+    this.initControls('orbit');
     this.renderer.domElement.addEventListener('mousedown', (evt) => {
       this.handlePointerDown(evt);
     });
@@ -475,10 +494,7 @@ export class ArtistMapInst {
       transparent: true,
       depthWrite: false,
       opacity: BLOOMED_CONNECTION_OPACITY,
-      // blending: this.THREE.CustomBlending,
-      // blendEquation: this.THREE.AddEquation,
-      // blendSrc: this.THREE.SrcAlphaFactor,
-      // blendDst: this.THREE.DstAlphaFactor,
+      blending: this.THREE.NormalBlending,
     });
     this.bloomedConnectionsMesh = new this.THREE.LineSegments(
       this.bloomedConnectionsGeometry,
@@ -486,17 +502,17 @@ export class ArtistMapInst {
     );
     this.scene.add(this.bloomedConnectionsMesh);
 
-    this.nonBloomedConnectionsGeometry = new this.THREE.BufferGeometry();
-    const nonBloomedLineMaterial = new this.THREE.LineBasicMaterial({
-      color: 0xa1fc03,
-      transparent: true,
-      opacity: 0.0,
-    });
-    this.nonBloomedConnectionsMesh = new this.THREE.Line(
-      this.nonBloomedConnectionsGeometry,
-      nonBloomedLineMaterial
-    );
-    this.scene.add(this.nonBloomedConnectionsMesh);
+    // this.nonBloomedConnectionsGeometry = new this.THREE.BufferGeometry();
+    // const nonBloomedLineMaterial = new this.THREE.LineBasicMaterial({
+    //   color: 0xa1fc03,
+    //   transparent: true,
+    //   opacity: 0.0,
+    // });
+    // this.nonBloomedConnectionsMesh = new this.THREE.Line(
+    //   this.nonBloomedConnectionsGeometry,
+    //   nonBloomedLineMaterial
+    // );
+    // this.scene.add(this.nonBloomedConnectionsMesh);
 
     const artistCount = allArtistData.length / 5;
     const artistPointsPositionsAttribute = new this.THREE.BufferAttribute(
@@ -535,6 +551,47 @@ export class ArtistMapInst {
     );
 
     this.animate();
+  }
+
+  private initControls(controlMode: 'pointerlock' | 'orbit') {
+    if (this.controls) {
+      this.controls.controls.dispose();
+    }
+
+    if (this.highlightedArtistsIntraLines) {
+      (this.highlightedArtistsIntraLines.material as LineBasicMaterial).opacity =
+        getHighlightedArtistsIntraOpacity(controlMode);
+    }
+
+    switch (controlMode) {
+      case 'pointerlock': {
+        const controls = new this.THREE_EXTRA.PointerLockControls(
+          this.camera,
+          this.renderer.domElement
+        );
+        this.controls = { type: controlMode, controls };
+        this.controls.controls.addEventListener('unlock', () => {
+          if (this.isPointerLocked) {
+            this.isPointerLocked = false;
+            this.scene.remove(controls.getObject());
+          }
+
+          this.eventRegistry.onPointerUnlocked();
+        });
+        this.controls.controls.addEventListener('lock', () => {
+          this.eventRegistry.onPointerLocked();
+        });
+        break;
+      }
+      case 'orbit': {
+        const controls = new this.THREE_EXTRA.OrbitControls(this.camera, this.renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.1;
+        controls.enableKeys = false;
+        controls.keyPanSpeed = 40;
+        this.controls = { type: controlMode, controls };
+      }
+    }
   }
 
   // Adapted from:
@@ -593,7 +650,7 @@ export class ArtistMapInst {
   }
 
   private async handleArtistData(artistData: ArtistMapDataWithId[]) {
-    const curPos = this.controls.getObject().position;
+    const curPos = this.camera.position;
     wasmClient
       .handleReceivedArtistNames(
         new Uint32Array(artistData.map(({ id }) => id)),
@@ -611,8 +668,38 @@ export class ArtistMapInst {
   }
 
   private async handleArtistRelationships(relationshipData: ArtistRelationshipData) {
-    // Empty chunk
+    // Empty chunk; all chunks are fetched
     if (relationshipData.res.byteLength === 4) {
+      // Render connections between highlighted artists
+      if (this.highlightedArtistIDs.size > 0) {
+        const { intra, inter } = await wasmClient.getHighlightedConnecionsBackbone(
+          new Uint32Array([...this.highlightedArtistIDs])
+        );
+
+        // Build more opaque lines between related highlighted artists and somewhat less opaque lines between
+        // highlighted artists and non-highlighted artists they are connected to
+        const intraBufferGeometry = new this.THREE.BufferGeometry();
+        intraBufferGeometry.setAttribute('position', new this.THREE.BufferAttribute(intra, 3));
+        const intraLines = new this.THREE.LineSegments(intraBufferGeometry);
+        intraLines.material = new this.THREE.LineBasicMaterial({
+          color: HIGHLIGHTED_ARTIST_COLOR,
+          transparent: true,
+          opacity: getHighlightedArtistsIntraOpacity(this.controls.type),
+        });
+        this.scene.add(intraLines);
+        this.highlightedArtistsIntraLines = intraLines;
+
+        const interBufferGeometry = new this.THREE.BufferGeometry();
+        interBufferGeometry.setAttribute('position', new this.THREE.BufferAttribute(inter, 3));
+        const interLines = new this.THREE.LineSegments(interBufferGeometry);
+        interLines.material = new this.THREE.LineBasicMaterial({
+          color: HIGHLIGHTED_ARTIST_COLOR,
+          transparent: true,
+          opacity: 0.01,
+        });
+        this.scene.add(interLines);
+      }
+
       return;
     }
 
@@ -725,27 +812,21 @@ export class ArtistMapInst {
     this.artistMeshes.instanceColor!.needsUpdate = true;
   }
 
-  private darkenNonBloomed() {
-    (this.nonBloomedConnectionsMesh.material as THREE.LineBasicMaterial).color.set(0);
-  }
+  // private darkenNonBloomed() {
+  //   (this.nonBloomedConnectionsMesh.material as THREE.LineBasicMaterial).color.set(0);
+  // }
 
   private restoreNonBloomed() {
-    (this.nonBloomedConnectionsMesh.material as THREE.LineBasicMaterial).color =
-      new this.THREE.Color(0xa1fc03);
-    (this.nonBloomedConnectionsMesh.material as THREE.LineBasicMaterial).needsUpdate = true;
+    // (this.nonBloomedConnectionsMesh.material as THREE.LineBasicMaterial).color =
+    //   new this.THREE.Color(0xa1fc03);
+    // (this.nonBloomedConnectionsMesh.material as THREE.LineBasicMaterial).needsUpdate = true;
     (this.bloomedConnectionsMesh.material as THREE.LineBasicMaterial).color =
       this.getConnectionColor();
     (this.bloomedConnectionsMesh.material as THREE.LineBasicMaterial).needsUpdate = true;
   }
 
   private getConnectionColor(): THREE.Color {
-    // if (!this.chroma || !this.connectionColorScale) {
     return new this.THREE.Color(BASE_CONNECTION_COLOR);
-    // }
-
-    // const partial = this.timeElapsed / 20;
-    // const [r, g, b] = this.connectionColorScale(partial - Math.floor(partial)).gl();
-    // return new this.THREE.Color(r, g, b);
   }
 
   private maybeAnimatePlayingArtist() {
@@ -775,19 +856,21 @@ export class ArtistMapInst {
       this.secondSinceLastPositionUpdate = 0;
       this.wasmPositionHandlerIsRunning = true;
 
-      const curPos = this.controls.getObject().position;
-      const projectedNextPos = this.controls.getObject().position.clone();
-      projectedNextPos.add(
-        this.controls
-          .getDirection(VEC3_IDENTITY)
-          .clone()
-          .multiplyScalar(
-            MOVEMENT_SPEED_UNITS_PER_SECOND *
-              0.15 *
-              (this.movementInputHandler.isSpeedBoosted() ? SHIFT_SPEED_MULTIPLIER : 1) *
-              forward
-          )
-      );
+      const curPos = this.camera.position.clone();
+      const projectedNextPos =
+        this.controls.type === 'pointerlock'
+          ? curPos.clone().add(
+              this.controls.controls
+                .getDirection(VEC3_IDENTITY)
+                .clone()
+                .multiplyScalar(
+                  MOVEMENT_SPEED_UNITS_PER_SECOND *
+                    0.15 *
+                    (this.movementInputHandler.isSpeedBoosted() ? SHIFT_SPEED_MULTIPLIER : 1) *
+                    forward
+                )
+            )
+          : curPos.clone();
 
       wasmClient
         .handleNewPosition(
@@ -809,15 +892,11 @@ export class ArtistMapInst {
 
     const cameraDirection = this.camera.getWorldDirection(new this.THREE.Vector3());
     const cameraUp = this.camera.up;
-    this.musicManager.setListenerPosition(
-      this.controls.getObject().position,
-      cameraDirection,
-      cameraUp
-    );
+    this.musicManager.setListenerPosition(this.camera.position.clone(), cameraDirection, cameraUp);
 
     this.maybeAnimatePlayingArtist();
 
-    this.darkenNonBloomed();
+    // this.darkenNonBloomed();
     this.bloomComposer.render();
     this.restoreNonBloomed();
     this.finalComposer.render();
@@ -1018,22 +1097,29 @@ export class ArtistMapInst {
     }
 
     const timeDelta = this.clock.getDelta();
-    this.timeElapsed += timeDelta;
     this.secondSinceLastPositionUpdate += timeDelta;
 
-    const { forward, sideways, up } = this.movementInputHandler.getDirectionVector();
-    this.controls.moveRight(sideways * MOVEMENT_SPEED_UNITS_PER_SECOND * timeDelta);
-    this.controls
-      .getObject()
-      .position.add(
-        this.controls
-          .getDirection(VEC3_IDENTITY)
-          .clone()
-          .multiplyScalar(MOVEMENT_SPEED_UNITS_PER_SECOND * timeDelta * forward)
-      )
-      .add(this.camera.up.clone().multiplyScalar(MOVEMENT_SPEED_UNITS_PER_SECOND * timeDelta * up));
+    if (this.controls.type === 'pointerlock') {
+      const { forward, sideways, up } = this.movementInputHandler.getDirectionVector();
+      this.controls.controls.moveRight(sideways * MOVEMENT_SPEED_UNITS_PER_SECOND * timeDelta);
+      this.controls.controls
+        .getObject()
+        .position.add(
+          this.controls.controls
+            .getDirection(VEC3_IDENTITY)
+            .clone()
+            .multiplyScalar(MOVEMENT_SPEED_UNITS_PER_SECOND * timeDelta * forward)
+        )
+        .add(
+          this.camera.up.clone().multiplyScalar(MOVEMENT_SPEED_UNITS_PER_SECOND * timeDelta * up)
+        );
 
-    this.render(forward);
+      this.render(forward);
+    } else {
+      this.controls.controls.update();
+
+      this.render(0);
+    }
 
     requestAnimationFrame(() => this.animate());
   }

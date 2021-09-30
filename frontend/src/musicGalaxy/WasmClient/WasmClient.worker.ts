@@ -1,14 +1,14 @@
 import * as Comlink from 'comlink';
 
-const engineModule = import('./engine');
-
 export class WasmClient {
   private engine: typeof import('./engine');
   private ctxPtr: number;
 
-  constructor(engine: typeof import('./engine')) {
-    this.engine = engine;
-    this.ctxPtr = engine.create_artist_map_ctx();
+  constructor() {
+    import('./engine').then((engine) => {
+      this.engine = engine;
+      this.ctxPtr = engine.create_artist_map_ctx();
+    });
   }
 
   /**
@@ -23,8 +23,8 @@ export class WasmClient {
     return Comlink.transfer(allArtistData, [allArtistData.buffer]);
   }
 
-  public ping() {
-    return true;
+  public isReady() {
+    return !!this.engine && !!this.ctxPtr;
   }
 
   /**
@@ -120,11 +120,19 @@ export class WasmClient {
     const drawCommands = this.engine.handle_artist_manual_play(this.ctxPtr, artistID);
     return Comlink.transfer(drawCommands, [drawCommands.buffer]);
   }
+
+  public getHighlightedConnecionsBackbone(highlightedArtistIDs: Uint32Array): {
+    intra: Float32Array;
+    inter: Float32Array;
+  } {
+    const intra = this.engine.get_connections_for_artists(this.ctxPtr, highlightedArtistIDs, true);
+    const inter = this.engine.get_connections_for_artists(this.ctxPtr, highlightedArtistIDs, false);
+
+    return {
+      intra: Comlink.transfer(intra, [intra.buffer]),
+      inter: Comlink.transfer(inter, [inter.buffer]),
+    };
+  }
 }
 
-const init = async () => {
-  const engine = await engineModule;
-  Comlink.expose(new WasmClient(engine));
-};
-
-init();
+Comlink.expose(new WasmClient());

@@ -149,7 +149,11 @@ export default class MusicManager {
         this.curPlaying = null;
       }
     });
-    audioElement.play();
+    try {
+      audioElement.play();
+    } catch (_err) {
+      // pass, the user probably hasn't clicked the page yet in which case there's nothing we can do until they do so
+    }
 
     const gain = this.ctx.createGain();
     gain.gain.setValueAtTime(0, this.ctx.currentTime);

@@ -1,6 +1,6 @@
 export const BASE_ARTIST_COLOR = 0x0f6e7a;
 export const PLAYING_ARTIST_COLOR = 0xee44ab;
-export const HIGHLIGHTED_ARTIST_COLOR = 0xad6303;
+export const HIGHLIGHTED_ARTIST_COLOR = 0xad5303;
 export const BASE_CONNECTION_COLOR = 0x2288ee;
 export const ARTIST_GEOMETRY_DETAIL = 3;
 export const AMBIENT_LIGHT_COLOR = 0x727272;
@@ -17,8 +17,8 @@ export const MAX_ARTIST_PLAY_CLICK_DISTANCE = 30_000;
 export const PLAYING_ARTIST_LABEL_FADE_OUT_TIME_MS = 2800;
 
 export const BASE_ARTIST_GEOMETRY_SIZE = 1.7;
-export const ARTIST_GEOMETRY_OPACITY = 0.42;
-export const BLOOMED_CONNECTION_OPACITY = 0.0099;
+export const ARTIST_GEOMETRY_OPACITY = 0.35;
+export const BLOOMED_CONNECTION_OPACITY = 0.01;
 
 export const CROSSHAIR_COLOR = 'rgba(188, 188, 188, 0.38)';
 export const CROSSHAIR_WIDTH_PX = 2;
@@ -93,4 +93,8 @@ export const getArtistColor = (isHighlighted: boolean, isPlaying: boolean): numb
 
 export const getArtistFlyToDurationMs = (distance: number): number => {
   return 5000 + 1000 * (distance / 23_500);
+};
+
+export const getHighlightedArtistsIntraOpacity = (controlMode: 'orbit' | 'pointerlock') => {
+  return controlMode === 'orbit' ? 0.11 : 0.033;
 };

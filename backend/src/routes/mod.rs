@@ -1,4 +1,4 @@
-use std::cmp::Reverse;
+use std::{cmp::Reverse, sync::Arc};
 
 use chrono::{NaiveDate, NaiveDateTime, Utc};
 use diesel::{self, prelude::*};
@@ -1692,6 +1692,12 @@ pub(crate) async fn get_packed_artist_relationships_by_internal_ids(
     Ok(JSONMimeTypeSetterResponder { inner: packed })
 }
 
+lazy_static::lazy_static! {
+    pub static ref ARTIST_RELATIONSHIPS_BY_INTERNAL_IDS_CACHE:
+        Arc<Mutex<HashMap<(u32, u32), Vec<u8>>>> =
+            Arc::new(Mutex::new(HashMap::default()));
+}
+
 #[get("/map_artist_relationships_chunk?<chunk_size>&<chunk_ix>")]
 pub(crate) async fn get_artist_relationships_chunk(
     conn: DbConn,
@@ -1703,6 +1709,16 @@ pub(crate) async fn get_artist_relationships_chunk(
         let token_data = &mut *(&*token_data).lock().await;
         token_data.get().await
     }?;
+
+    let cache_key = (chunk_size, chunk_ix);
+    {
+        let cache = &mut *ARTIST_RELATIONSHIPS_BY_INTERNAL_IDS_CACHE.lock().await;
+        if let Some(cached_data) = cache.get(&cache_key) {
+            return Ok(JSONMimeTypeSetterResponder {
+                inner: cached_data.clone(),
+            });
+        }
+    }
 
     let artist_internal_ids = get_map_3d_artist_ctx()
         .await
@@ -1722,6 +1738,12 @@ pub(crate) async fn get_artist_relationships_chunk(
         artist_internal_ids,
     )
     .await?;
+
+    {
+        let cache = &mut *ARTIST_RELATIONSHIPS_BY_INTERNAL_IDS_CACHE.lock().await;
+        cache.insert(cache_key, packed.clone());
+    }
+
     Ok(JSONMimeTypeSetterResponder { inner: packed })
 }
 

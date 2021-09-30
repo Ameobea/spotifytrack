@@ -64,7 +64,7 @@ pub struct ArtistMapCtx {
     pub rendered_connections: HashSet<(usize, usize)>,
 }
 
-const DISTANCE_MULTIPLIER: [f32; 3] = [47500., 47400., 49130.];
+const DISTANCE_MULTIPLIER: [f32; 3] = [50500., 50400., 54130.];
 const LABEL_RENDER_DISTANCE: f32 = 16320.;
 const MAX_MUSIC_PLAY_DISTANCE: f32 = 13740.;
 const MAX_RECENTLY_PLAYED_ARTISTS_TO_TRACK: usize = 12;
@@ -430,39 +430,19 @@ static mut RNG: *mut pcg::Pcg = std::ptr::null_mut();
 fn rng() -> &'static mut pcg::Pcg { unsafe { &mut *RNG } }
 
 fn should_render_connection(src: &ArtistState, dst: &ArtistState) -> bool {
-    // if src.popularity < 25 || dst.popularity < 25 {
-    //     return false;
-    // }
-
-    let distance_to_origin = distance(&src.position, &[0., 0., 0.]);
-    // if distance_to_origin > 200_000. {
-    //     return true;
-    // }
-
     let val = rng().gen_range(0.0f64, 1.0f64);
     let dist = distance(&src.position, &dst.position);
 
-    // if dst > 20_000. {
-    //     return val > 0.993;
-    // } else if dst > 14_000. {
-    //     return val > 0.992;
-    // } else if dst > 10_000. {
-    //     return val > 0.989;
-    // } else if dst > 8000. {
-    //     return val > 0.985;
     if dist > 70000. {
-        // return val > 0.995;
         return false;
     } else if dist > 25000. {
         return val > 0.96;
-        // return false;
     } else if dist > 17000. {
         return val > 0.73;
-        // return false;
     } else if dist > 8000. {
         return val > 0.45;
     } else {
-        return val > 0.34;
+        return val > 0.2;
     }
 }
 
@@ -769,4 +749,67 @@ pub fn handle_artist_manual_play(ctx: *mut ArtistMapCtx, artist_id: u32) -> Vec<
     draw_commands.push(artist_id);
 
     draw_commands
+}
+
+#[wasm_bindgen]
+pub fn get_connections_for_artists(
+    ctx: *mut ArtistMapCtx,
+    artist_ids: Vec<u32>,
+    constrain_destinations_to_set: bool,
+) -> Vec<f32> {
+    let ctx = unsafe { &mut *ctx };
+
+    let mut all_connections: HashSet<(u32, u32)> = HashSet::default();
+    let mut points: Vec<f32> = Vec::new();
+
+    fn sort_pair(pair: (u32, u32)) -> (u32, u32) {
+        if pair.0 < pair.1 {
+            pair
+        } else {
+            (pair.1, pair.0)
+        }
+    }
+
+    for &artist_id in &artist_ids {
+        let artist_index = match ctx.artists_indices_by_id.get(&artist_id) {
+            Some(ix) => *ix,
+            None => continue,
+        };
+        let state = &ctx.all_artist_relationships[artist_index];
+        for relationship in &state.related_artist_indices[..state.count] {
+            let related_artist_id = ctx.all_artists[relationship.related_artist_index].0;
+            let related_artist_position = &ctx.all_artists[relationship.related_artist_index]
+                .1
+                .position;
+            if artist_id == related_artist_id {
+                continue;
+            }
+
+            let pair = if constrain_destinations_to_set {
+                if !artist_ids.contains(&related_artist_id) {
+                    continue;
+                }
+
+                (artist_id, related_artist_id)
+            } else {
+                if artist_ids.contains(&related_artist_id) {
+                    continue;
+                }
+
+                (artist_id, related_artist_id)
+            };
+            let pair = sort_pair(pair);
+            if !all_connections.contains(&pair) {
+                all_connections.insert(pair);
+
+                let pos_0 = &ctx.all_artists[artist_index].1.position;
+                let pos_1 = related_artist_position;
+
+                points.extend_from_slice(pos_0);
+                points.extend_from_slice(pos_1);
+            }
+        }
+    }
+
+    points
 }
