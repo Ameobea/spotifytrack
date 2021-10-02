@@ -62,7 +62,8 @@ const waitForWasmClientInitialization = async () => {
 };
 
 export const getUserSpotifyID = (): string | null => {
-  const userSpotifyID = new URLSearchParams(window.location.search).get('spotifyID');
+  const searchParams = new URLSearchParams(window.location.search);
+  const userSpotifyID = searchParams.get('spotifyID') || searchParams.get('spotifyId');
   if (userSpotifyID) {
     localStorage.setItem('userSpotifyID', userSpotifyID);
     return userSpotifyID;
@@ -168,6 +169,7 @@ export class ArtistMapInst {
   public isMobile = getIsMobile();
   private cachedCanvasWidth: number;
   private cachedCanvasHeight: number;
+  private cachedDevicePixelRatio = window.devicePixelRatio ?? 1;
 
   private renderedArtistBufferIndicesByArtistID: Map<number, number> = new Map();
   private artistIDByRenderedArtistBufferIndex: Map<number, number> = new Map();
@@ -219,9 +221,10 @@ export class ArtistMapInst {
     const point = artistData.pos.clone();
     point.project(this.camera);
 
+    const devicePixelRatio = this.cachedDevicePixelRatio;
     return {
-      x: (0.5 + point.x / 2) * (this.cachedCanvasWidth / window.devicePixelRatio),
-      y: (0.5 - point.y / 2) * (this.cachedCanvasHeight / window.devicePixelRatio),
+      x: (0.5 + point.x / 2) * (this.cachedCanvasWidth / devicePixelRatio),
+      y: (0.5 - point.y / 2) * (this.cachedCanvasHeight / devicePixelRatio),
       isInFrontOfCamera,
       distance: this.camera.position.distanceTo(artistData.pos),
       popularity: artistData.popularity,
@@ -389,7 +392,8 @@ export class ArtistMapInst {
         new Uint32Array(artistIDs),
         curPosition.x,
         curPosition.y,
-        curPosition.z
+        curPosition.z,
+        this.controls.type !== 'orbit'
       )
       .then((drawCommands) => this.pendingDrawCommands.push(drawCommands));
 
@@ -437,7 +441,7 @@ export class ArtistMapInst {
       canvas,
       antialias: true,
     });
-    this.renderer.setPixelRatio(window.devicePixelRatio);
+    this.renderer.setPixelRatio(window.devicePixelRatio ?? 1);
     this.renderer.toneMapping = THREE.CineonToneMapping;
     this.renderer.toneMappingExposure = 1;
     this.clock = new THREE.Clock();
@@ -912,7 +916,25 @@ export class ArtistMapInst {
       this.secondSinceLastPositionUpdate = 0;
       this.wasmPositionHandlerIsRunning = true;
 
-      const curPos = this.camera.position.clone();
+      const curPos = (() => {
+        if (this.controls.type === 'pointerlock') {
+          return this.camera.position.clone();
+        }
+
+        // If we are close to the target point, we treat the target as the current position for label and music playing purposes.
+        const distanceToTarget = this.camera.position.distanceTo(this.controls.controls.target);
+        if (distanceToTarget < 30_000) {
+          return this.controls.controls.target.clone();
+        }
+
+        // If we are a medium distance away from the target point, we treat the current position as between the camera and the target
+        if (distanceToTarget < 60_000) {
+          return this.camera.position.clone().lerp(this.controls.controls.target, 0.3);
+        }
+
+        // If we are very far away, we treat the camera position as the current position
+        return this.camera.position.clone();
+      })();
       const projectedNextPos =
         this.controls.type === 'pointerlock'
           ? curPos.clone().add(
@@ -930,7 +952,10 @@ export class ArtistMapInst {
 
       wasmClient
         .handleNewPosition(
-          curPos.x,
+          // Wasm doesn't run new position handler unless position changes.  If we're immobile in orbit camera, we
+          // force it to run occasionally to prevent stuff from getting stuck
+          curPos.x +
+            (this.controls.type !== 'pointerlock' && Math.random() > 0.9 ? Math.random() / 2 : 0),
           curPos.y,
           curPos.z,
           projectedNextPos.x,
@@ -1117,7 +1142,7 @@ export class ArtistMapInst {
       const pivotCoefficient = this.cameraOverrides.direction.pivotCoefficient;
 
       let totalDiff: number;
-      if (this.controls.type === 'trackball') {
+      if (this.controls.type === 'trackball' || this.controls.type === 'orbit') {
         const newOrbitTarget = this.controls.controls.target
           .clone()
           .multiplyScalar(pivotCoefficient)
@@ -1157,12 +1182,18 @@ export class ArtistMapInst {
       if (progress >= 1) {
         console.log('Camera movement finished');
         this.cameraOverrides.movement = null;
-        // this.cameraOverrides.direction = null;
+
+        // Force position update
+        if (this.controls.type !== 'pointerlock') {
+          this.controls.controls.target.x += Math.random() / 2;
+        }
       } else {
         const newPos = this.cameraOverrides.movement.path.getPoint(progress);
         const endPoint = this.cameraOverrides.movement.path.getPoint(1);
-        if (newPos.distanceTo(endPoint) > (this.isMobile ? 12000 : 1560)) {
+        if (newPos.distanceTo(endPoint) > (this.isMobile ? 8700 : 1560)) {
           this.camera.position.set(newPos.x, newPos.y, newPos.z);
+        } else if (this.controls.type !== 'pointerlock') {
+          this.controls.controls.target.x += Math.random() / 2;
         }
       }
     }

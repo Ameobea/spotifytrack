@@ -190,10 +190,11 @@ const renderCurPlaying = (
     isInFrontOfCamera,
   }: { x: number; y: number; text: string; isInFrontOfCamera: boolean },
   ctx: CanvasRenderingContext2D,
+  isMobile: boolean,
   opacity?: number
 ) => {
   const isBehind = !isInFrontOfCamera;
-  const width = measureText(text) * 1.5;
+  const width = measureText(text) * 1.5 * (isMobile ? 0.6 : 1);
 
   let actualX = x;
   let actualY = y;
@@ -243,18 +244,25 @@ const renderCurPlaying = (
     }
   }
 
+  const height = isMobile ? 20 : 32;
   actualX -= width / 2;
-  actualY -= 30;
+  actualY -= height;
 
-  actualX = Math.max(20, Math.min(actualX, ctx.canvas.width - width - 20));
-  actualY = Math.max(20, Math.min(actualY, ctx.canvas.height - 20));
+  const padding = isMobile ? 2 : 10;
+  actualX = Math.max(padding * 2, Math.min(actualX, ctx.canvas.width - width - padding * 2));
+  actualY = Math.max(padding * 2, Math.min(actualY, ctx.canvas.height - padding * 2));
 
   ctx.globalAlpha = opacity ?? 1;
   ctx.fillStyle = '#141414';
-  ctx.fillRect(actualX - 10, actualY - 10, width + 20, 32);
+  ctx.fillRect(
+    actualX - padding + (isMobile ? 2 : 0),
+    actualY - padding,
+    width + padding * 2,
+    height - (isMobile ? 2 : 0)
+  );
   ctx.fill();
   ctx.fillStyle = opacity === undefined ? '#ee44ab' : '#eee';
-  ctx.font = '18px PT Sans';
+  ctx.font = `${isMobile ? 0.6 * 18 : 18}px PT Sans`;
   ctx.fillText(text, actualX, actualY + 13);
   ctx.globalAlpha = 1;
 };
@@ -291,14 +299,28 @@ const overlayStateReducer = (state: OverlayState, action: OverlayAction): Overla
 const renderOrbitModeLabel = (
   ctx: CanvasRenderingContext2D,
   label: { id: string | number; text: string; width: number },
-  { x, y }: { x: number; y: number }
+  { x, y, distance }: { x: number; y: number; distance: number },
+  minDistance: number,
+  maxDistance: number
 ) => {
-  const fontSize = 12;
-  ctx.font = `${fontSize}px PT Sans`;
-  ctx.fillStyle = '#141414b9';
-  ctx.fillRect(x - label.width / 2.3 - 3, y - 12, label.width + 6, 18);
+  const normalizedDistance = (distance - minDistance) / (maxDistance - minDistance);
+  // Scale linearly based on distance
+  const scale = (1 - normalizedDistance) * 0.6 + 0.45;
+  const opacity = Math.min(1, scale * 1.1);
 
-  ctx.fillStyle = ARTIST_LABEL_TEXT_COLOR;
+  const fontSize = Math.round(12 * scale * 100) / 100;
+  ctx.font = `${fontSize}px PT Sans`;
+  ctx.fillStyle = `#141414${Math.floor(Math.min(opacity + 0.1, 0.85) * 0xff).toString(16)}`;
+  ctx.fillRect(
+    x - label.width / 2.3 - 3 * scale,
+    y - 12 * scale,
+    (label.width + 6 * scale) * scale,
+    16 * scale
+  );
+
+  ctx.fillStyle = `${ARTIST_LABEL_TEXT_COLOR}${Math.floor(
+    Math.min(opacity * 1.3 + 0.15, 1) * 0xff
+  ).toString(16)}`;
   ctx.fillText(label.text, x - label.width / 2.3, y);
 };
 
@@ -366,8 +388,6 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onP
       }
 
       const ctx = canvasRef.current!;
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
       ctx.fillStyle = 'rgba(0, 0, 0, 0)';
       ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 
@@ -382,26 +402,47 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onP
       }
 
       // If we're rendering orbit mode labels, we need to sort them by distance, furthest to closest
-      const labelsToRender =
+      const labelsToRender = (
         eventRegistry.controlMode === 'orbit'
           ? [...labelState.current.labels.entries()].sort((a, b) => {
               const aDistance = eventRegistry.getLabelPosition(a[0]).distance;
               const bDistance = eventRegistry.getLabelPosition(b[0]).distance;
               return bDistance - aDistance;
             })
-          : labelState.current.labels.entries();
+          : [...labelState.current.labels.entries()]
+      ).map(([id, label]) => ({
+        id,
+        label,
+        position: eventRegistry.getLabelPosition(label.id),
+      }));
 
-      for (const [artistID, label] of labelsToRender) {
+      const { minDistance, maxDistance } = labelsToRender.reduce(
+        (acc, { position }) => {
+          if (position.distance < acc.minDistance) {
+            acc.minDistance = position.distance;
+          }
+          if (position.distance > acc.maxDistance) {
+            acc.maxDistance = position.distance;
+          }
+          return acc;
+        },
+        {
+          minDistance: Infinity,
+          maxDistance: 0,
+        }
+      );
+
+      for (const {
+        id: artistID,
+        label,
+        position: { x, y, isInFrontOfCamera, distance, popularity },
+      } of labelsToRender) {
         if (
           artistID === eventRegistry.curPlaying ||
           labelState.current.fadingOutPlayingArtistLabels.some((f) => f.artistID === artistID)
         ) {
           continue;
         }
-
-        const { x, y, isInFrontOfCamera, distance, popularity } = eventRegistry.getLabelPosition(
-          label.id
-        );
 
         if (
           !isInFrontOfCamera ||
@@ -414,7 +455,7 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onP
         }
 
         if (eventRegistry.controlMode === 'orbit') {
-          renderOrbitModeLabel(ctx, label, { x, y });
+          renderOrbitModeLabel(ctx, label, { x, y, distance }, minDistance, maxDistance);
           continue;
         }
 
@@ -446,7 +487,12 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onP
         const pos = eventRegistry.getLabelPosition(artistID);
         // Linearly fade out over the fade duration
         const opacity = 1 - (now - fadeOutStartTime) / PLAYING_ARTIST_LABEL_FADE_OUT_TIME_MS;
-        renderCurPlaying({ ...pos, text: eventRegistry.getArtistName(artistID) }, ctx, opacity);
+        renderCurPlaying(
+          { ...pos, text: eventRegistry.getArtistName(artistID) },
+          ctx,
+          eventRegistry.isMobile,
+          opacity
+        );
       }
 
       if (eventRegistry.curPlaying !== null) {
@@ -456,7 +502,8 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onP
             ...pos,
             text: eventRegistry.getArtistName(eventRegistry.curPlaying),
           },
-          ctx
+          ctx,
+          eventRegistry.isMobile
         );
       }
 
@@ -519,7 +566,21 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onP
           if (!node) {
             return;
           }
-          canvasRef.current = node?.getContext('2d');
+          const ctx = node?.getContext('2d');
+          if (!ctx) {
+            return;
+          }
+
+          const dpr = window.devicePixelRatio;
+          const canvas = node;
+          const rect = canvas.getBoundingClientRect();
+          canvas.width = rect.width * dpr;
+          canvas.height = rect.height * dpr;
+          ctx.scale(dpr, dpr);
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+
+          canvasRef.current = ctx;
         }}
       />
     </>

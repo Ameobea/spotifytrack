@@ -9,7 +9,7 @@ use std::{collections::VecDeque, sync::Once};
 use bitflags::bitflags;
 use float_ord::FloatOrd;
 use fnv::{FnvHashMap as HashMap, FnvHashSet as HashSet};
-use rand::{Rng, SeedableRng};
+use rand::{seq::SliceRandom, Rng, SeedableRng};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -62,6 +62,7 @@ pub struct ArtistMapCtx {
     pub most_recently_played_artist_ids: VecDeque<u32>,
     pub connections_buffer: Vec<[[f32; 3]; 2]>,
     pub rendered_connections: HashSet<(usize, usize)>,
+    pub did_set_highlighted_artists: bool,
 }
 
 const DISTANCE_MULTIPLIER: [f32; 3] = [50500., 50400., 54130.];
@@ -69,6 +70,7 @@ const LABEL_RENDER_DISTANCE: f32 = 16320.;
 const MAX_MUSIC_PLAY_DISTANCE: f32 = 13740.;
 const MAX_RECENTLY_PLAYED_ARTISTS_TO_TRACK: usize = 12;
 const MAX_RELATED_ARTIST_COUNT: usize = 20;
+const MAX_EXTRA_RANDOM_HIGHLIGHTED_ARTIST_ORBIT_MODE_LABEL_COUNT: usize = 12;
 /// IDS of artists to be rendered when in orbit control mode.  Represent a wide variety of different
 /// artists from disparate parts of the galaxy.
 const ORBIT_LABEL_ARTIST_IDS: &[u32] = &[
@@ -94,6 +96,10 @@ const ORBIT_LABEL_ARTIST_IDS: &[u32] = &[
     // 88522605, // FrivolousFox ASMR
     470, // $uicideboy$
     8,   // Flume
+    // 171, // Kero Kero Bonito
+    105,    // Avicii
+    10072,  // The Red Hot Chili Peppers
+    110546, // Vektroid
 ];
 
 impl Default for ArtistMapCtx {
@@ -109,6 +115,7 @@ impl Default for ArtistMapCtx {
             most_recently_played_artist_ids: VecDeque::new(),
             connections_buffer: Vec::new(),
             rendered_connections: HashSet::default(),
+            did_set_highlighted_artists: false,
         }
     }
 }
@@ -148,7 +155,7 @@ impl ArtistMapCtx {
         let next_artist_to_play = self.get_next_artist_to_play(cur_x, cur_y, cur_z);
         if let Some(next_artist_to_play) = next_artist_to_play {
             debug!("Starting music for artist id={}", next_artist_to_play);
-            draw_commands.push(5);
+            draw_commands.push(START_PLAYING_MUSIC_CMD);
             draw_commands.push(next_artist_to_play);
             self.playing_music_artist_id = Some(next_artist_to_play);
 
@@ -173,7 +180,7 @@ impl ArtistMapCtx {
         cur_y: f32,
         cur_z: f32,
     ) {
-        draw_commands.push(6);
+        draw_commands.push(STOP_PLAYING_MUSIC_CMD);
         draw_commands.push(artist_id);
         self.most_recently_played_artist_ids.push_front(artist_id);
 
@@ -237,6 +244,121 @@ impl ArtistMapCtx {
                 relationship.connections_buffer_index = Some(self.connections_buffer.len() - 1);
             }
         }
+    }
+
+    pub fn add_highlighted_artist_orbit_labels(&mut self, draw_commands: &mut Vec<u32>) {
+        let mut rendered_label_positions: Vec<[f32; 3]> = ORBIT_LABEL_ARTIST_IDS
+            .iter()
+            .map(|id| {
+                let artist_ix = self.artists_indices_by_id.get(id).unwrap();
+                self.all_artists[*artist_ix].1.position
+            })
+            .collect();
+
+        let all_highlighted_artists: Vec<(u32, [f32; 3])> = self
+            .all_artists
+            .iter()
+            .filter_map(|(id, state)| {
+                if state
+                    .render_state
+                    .contains(ArtistRenderState::IS_HIGHLIGHTED)
+                {
+                    Some((*id, state.position))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        // Find up to 7 of the highlighted artists that have the highest min distance to any of the
+        // always-rendered orbit labels
+        for _ in 0..7 {
+            let highlighted_artist_with_largest_min_distance_to_existing_label: Option<(u32, f32)> =
+                all_highlighted_artists
+                    .iter()
+                    .map(|(id, position)| {
+                        let min_distance = rendered_label_positions
+                            .iter()
+                            .map(|label_position| FloatOrd(distance(position, label_position)))
+                            .min()
+                            .unwrap()
+                            .0;
+                        (*id, min_distance)
+                    })
+                    .max_by_key(|(_id, min_distance)| FloatOrd(*min_distance));
+
+            let (artist_id, min_distance_to_existing_label) =
+                match highlighted_artist_with_largest_min_distance_to_existing_label {
+                    Some(val) => val,
+                    None => return,
+                };
+
+            if min_distance_to_existing_label <= 10_000. {
+                info!(
+                    "Custom label min distance to existing label is too small ({}); not rendering \
+                     any more custom labels",
+                    min_distance_to_existing_label
+                );
+                // If min distance is very small, don't place any more
+                return;
+            }
+
+            let artist_ix = self.artists_indices_by_id.get(&artist_id).unwrap();
+            let artist_state = &mut self.all_artists[*artist_ix].1;
+            artist_state
+                .render_state
+                .set(ArtistRenderState::RENDER_LABEL, true);
+            draw_commands.push(FETCH_ARTIST_DATA_CMD);
+            draw_commands.push(artist_id);
+
+            // Take this label into account when picking others to render as well
+            rendered_label_positions.push(artist_state.position);
+        }
+
+        // Also render up to `MAX_EXTRA_RANDOM_HIGHLIGHTED_ARTIST_ORBIT_MODE_LABEL_COUNT` additional
+        // random artists that are further than the min distance threshold from any of the
+        // always-rendered orbit labels
+        let mut rendered_random_artist_count = 0usize;
+        for _ in 0..100 {
+            if rendered_random_artist_count
+                >= MAX_EXTRA_RANDOM_HIGHLIGHTED_ARTIST_ORBIT_MODE_LABEL_COUNT
+            {
+                info!(
+                    "Rendered {} extra random artists!",
+                    MAX_EXTRA_RANDOM_HIGHLIGHTED_ARTIST_ORBIT_MODE_LABEL_COUNT
+                );
+                return;
+            }
+
+            let (random_artist_id, position) = all_highlighted_artists.choose(rng()).unwrap();
+            let min_distance = rendered_label_positions
+                .iter()
+                .map(|label_position| FloatOrd(distance(position, label_position)))
+                .min()
+                .unwrap()
+                .0;
+
+            if min_distance <= 26_200. {
+                continue;
+            }
+
+            let artist_ix = self.artists_indices_by_id.get(&random_artist_id).unwrap();
+            let artist_state = &mut self.all_artists[*artist_ix].1;
+            artist_state
+                .render_state
+                .set(ArtistRenderState::RENDER_LABEL, true);
+            draw_commands.push(FETCH_ARTIST_DATA_CMD);
+            draw_commands.push(*random_artist_id);
+
+            // Take this label into account when picking others to render as well
+            rendered_label_positions.push(artist_state.position);
+            rendered_random_artist_count += 1;
+        }
+
+        info!(
+            "Ran out of attempts rendering extra random artists, rendered_random_artist_count={}",
+            rendered_random_artist_count
+        );
     }
 }
 
@@ -422,7 +544,7 @@ pub fn handle_received_artist_names(
                 || should_render_label(ctx.total_rendered_label_count, artist_state, distance))
         {
             ctx.total_rendered_label_count += 1;
-            draw_commands.push(0);
+            draw_commands.push(ADD_LABEL_CMD);
             draw_commands.push(artist_id);
         } else {
             artist_state
@@ -473,6 +595,14 @@ fn should_render_connection(src: &ArtistState, dst: &ArtistState) -> bool {
         return val > 0.2;
     }
 }
+
+const ADD_LABEL_CMD: u32 = 0u32;
+const REMOVE_LABEL_CMD: u32 = 1u32;
+const ADD_ARTIST_GEOMETRY_CMD: u32 = 2u32;
+const REMOVE_ARTIST_GEOMETRY_CMD: u32 = 3u32;
+const FETCH_ARTIST_DATA_CMD: u32 = 4u32;
+const START_PLAYING_MUSIC_CMD: u32 = 5u32;
+const STOP_PLAYING_MUSIC_CMD: u32 = 6u32;
 
 /// Returns a vector of draw commands
 #[wasm_bindgen]
@@ -526,11 +656,11 @@ pub fn handle_new_position(
                     .contains(ArtistRenderState::HAS_NAME)
                 {
                     // Render artist label
-                    render_commands.push(0);
+                    render_commands.push(ADD_LABEL_CMD);
                     ctx.total_rendered_label_count += 1;
                 } else {
                     // Fetch artist name
-                    render_commands.push(4);
+                    render_commands.push(FETCH_ARTIST_DATA_CMD);
                 }
             } else {
                 // Remove artist label
@@ -713,6 +843,7 @@ pub fn handle_set_highlighted_artists(
     cur_x: f32,
     cur_y: f32,
     cur_z: f32,
+    is_fly_mode: bool,
 ) -> Vec<u32> {
     let ctx = unsafe { &mut *ctx };
     let cur_pos = [cur_x, cur_y, cur_z];
@@ -734,10 +865,10 @@ pub fn handle_set_highlighted_artists(
         let should_render =
             should_render_artist(distance_to_artist, state.popularity, &state.render_state);
         if should_render {
-            draw_commands.push(2);
+            draw_commands.push(ADD_ARTIST_GEOMETRY_CMD);
             draw_commands.push(*artist_id);
         } else {
-            draw_commands.push(3);
+            draw_commands.push(REMOVE_ARTIST_GEOMETRY_CMD);
             draw_commands.push(*artist_id);
         }
     }
@@ -751,9 +882,15 @@ pub fn handle_set_highlighted_artists(
         state
             .render_state
             .set(ArtistRenderState::IS_HIGHLIGHTED, true);
-        draw_commands.push(2);
+        draw_commands.push(ADD_ARTIST_GEOMETRY_CMD);
         draw_commands.push(highlighted_artist_id);
     }
+
+    if !is_fly_mode {
+        info!("Highlighted artists set and is not fly mode; adding custom labels...");
+        ctx.add_highlighted_artist_orbit_labels(&mut draw_commands);
+    }
+    ctx.did_set_highlighted_artists = true;
 
     draw_commands
 }
@@ -780,7 +917,7 @@ pub fn handle_artist_manual_play(ctx: *mut ArtistMapCtx, artist_id: u32) -> Vec<
     }
 
     ctx.playing_music_artist_id = Some(artist_id);
-    draw_commands.push(5);
+    draw_commands.push(STOP_PLAYING_MUSIC_CMD);
     draw_commands.push(artist_id);
 
     draw_commands
@@ -858,7 +995,7 @@ pub fn transition_to_orbit_mode(ctx: *mut ArtistMapCtx) -> Vec<u32> {
     for (id, state) in ctx.all_artists.iter_mut() {
         if state.render_state.contains(ArtistRenderState::RENDER_LABEL) {
             state.render_state.remove(ArtistRenderState::RENDER_LABEL);
-            draw_commands.push(1);
+            draw_commands.push(REMOVE_LABEL_CMD);
             draw_commands.push(*id);
         }
     }
@@ -873,8 +1010,13 @@ pub fn transition_to_orbit_mode(ctx: *mut ArtistMapCtx) -> Vec<u32> {
         state
             .render_state
             .set(ArtistRenderState::RENDER_LABEL, true);
-        draw_commands.push(4);
+        draw_commands.push(FETCH_ARTIST_DATA_CMD);
         draw_commands.push(*artist_id);
+    }
+
+    if ctx.did_set_highlighted_artists {
+        info!("Transitioned to orbit mode and highlighted artists set; adding in extra labels...");
+        ctx.add_highlighted_artist_orbit_labels(&mut draw_commands);
     }
 
     draw_commands

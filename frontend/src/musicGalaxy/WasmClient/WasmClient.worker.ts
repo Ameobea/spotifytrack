@@ -109,13 +109,20 @@ export class WasmClient {
     return Comlink.transfer(connectionsBuffer, [connectionsBuffer.buffer]);
   }
 
-  public setHighlightedArtists(artistIDs: Uint32Array, curX: number, curY: number, curZ: number) {
+  public setHighlightedArtists(
+    artistIDs: Uint32Array,
+    curX: number,
+    curY: number,
+    curZ: number,
+    isFlyMode: boolean
+  ) {
     const drawCommands = this.engine.handle_set_highlighted_artists(
       this.ctxPtr,
       artistIDs,
       curX,
       curY,
-      curZ
+      curZ,
+      isFlyMode
     );
     return Comlink.transfer(drawCommands, [drawCommands.buffer]);
   }
