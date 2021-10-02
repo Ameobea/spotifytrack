@@ -1,14 +1,27 @@
+@media screen and (min-width: 768px) {
+  .artist-search {
+    top: 8px;
+    right: 8px;
+    width: 420px;
+    height: 100%;
+    overflow-y: visible;
+    overflow-x: hidden;
+  }
+}
+
+@media screen and (max-width: 767px) {
+  .artist-search {
+    input {
+      width: calc(100vw - 154px);
+    }
+  }
+}
+
 .artist-search {
   display: flex;
   flex-direction: row;
   position: absolute;
-  top: 8px;
-  right: 8px;
   z-index: 3;
-  width: 420px;
-  height: 100%;
-  overflow-y: visible;
-  overflow-x: hidden;
 
   input {
     background-color: #333;
@@ -34,6 +47,7 @@
     box-shadow: none;
     border: 1px solid rgba(244, 244, 244, 0.4);
     font-size: 14px;
+    z-index: 3;
   }
 
   .artist-search-look-at-button:disabled,
@@ -52,6 +66,7 @@
     overflow-x: hidden;
     position: absolute;
     top: 30px;
+    z-index: 4;
   }
 
   .autocomplete-suggestion {

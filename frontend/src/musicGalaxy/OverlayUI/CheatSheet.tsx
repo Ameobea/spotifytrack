@@ -34,12 +34,26 @@ const CheatSheet: React.FC = () => (
   </div>
 );
 
+export const MobileCheatSheet: React.FC = () => (
+  <div className="cheat-sheet mobile-cheat-sheet">
+    <ul>TODO</ul>
+  </div>
+);
+
 export const CollapsedCheatSheet: React.FC = () => (
   <div className="collapsed-cheat-sheet">
     <div className="cheat-sheet">
       <ul>
         <CSItem name="Exit Fly Mode" keybind="ESCAPE" />
       </ul>
+    </div>
+  </div>
+);
+
+export const CollapsedMobileCheatSheet: React.FC = () => (
+  <div className="collapsed-cheat-sheet">
+    <div className="cheat-sheet mobile-cheat-sheet">
+      <ul>TODO</ul>
     </div>
   </div>
 );

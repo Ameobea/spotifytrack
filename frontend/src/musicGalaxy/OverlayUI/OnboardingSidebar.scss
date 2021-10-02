@@ -36,3 +36,29 @@
     margin-top: 8px;
   }
 }
+
+@media screen and (max-width: 768px) {
+  .onboarding-sidebar {
+    width: 100vw;
+    max-width: 400px;
+    left: 0;
+    right: 0;
+    margin-left: auto;
+    margin-right: auto;
+    box-sizing: border-box;
+    font-size: 15px;
+    background-color: rgba(14, 14, 14, 0.97);
+
+    h2 {
+      font-size: 26px;
+    }
+
+    .onboarding-sidebar-action-button {
+      width: calc(max(80vw, 200px) - 60px);
+      font-size: 14px;
+      height: 60px;
+      line-height: 1.1em;
+      margin-bottom: 12px;
+    }
+  }
+}

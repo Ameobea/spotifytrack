@@ -61,6 +61,16 @@ const waitForWasmClientInitialization = async () => {
   }
 };
 
+export const getUserSpotifyID = (): string | null => {
+  const userSpotifyID = new URLSearchParams(window.location.search).get('spotifyID');
+  if (userSpotifyID) {
+    localStorage.setItem('userSpotifyID', userSpotifyID);
+    return userSpotifyID;
+  }
+
+  return localStorage.getItem('userSpotifyID');
+};
+
 export const initArtistMapInst = async (canvas: HTMLCanvasElement): Promise<ArtistMapInst> => {
   const [
     ,
@@ -102,7 +112,7 @@ export const initArtistMapInst = async (canvas: HTMLCanvasElement): Promise<Arti
   dataFetchClient.fetchArtistRelationships(0);
 
   // Set highlighted artists.
-  const userSpotifyID = new URLSearchParams(window.location.search).get('spotifyID');
+  const userSpotifyID = getUserSpotifyID();
   if (userSpotifyID) {
     getAllTopArtistInternalIDsForUser(userSpotifyID).then((artistIDs) =>
       inst.setHighlightedArtistIDs(artistIDs)
@@ -135,6 +145,10 @@ interface LookAtState {
   pivotCoefficient: number;
 }
 
+export const getIsMobile = () =>
+  (window.innerWidth > 0 ? window.innerWidth : screen.width) < 768 ||
+  (window.innerHeight > 0 ? window.innerHeight : screen.height) < 768;
+
 export class ArtistMapInst {
   public THREE: typeof import('three');
   public THREE_EXTRA: ThreeExtra;
@@ -143,13 +157,17 @@ export class ArtistMapInst {
   private camera: THREE.PerspectiveCamera;
   private controls:
     | { type: 'pointerlock'; controls: PointerLockControls }
-    | { type: 'orbit'; controls: OrbitControls };
+    | { type: 'orbit'; controls: OrbitControls }
+    | { type: 'trackball'; controls: OrbitControls };
   private isPointerLocked = false;
   private bloomPass: UnrealBloomPass;
   private bloomComposer: EffectComposer;
   private finalComposer: EffectComposer;
   private clock: THREE.Clock;
   private secondSinceLastPositionUpdate = 0;
+  public isMobile = getIsMobile();
+  private cachedCanvasWidth: number;
+  private cachedCanvasHeight: number;
 
   private renderedArtistBufferIndicesByArtistID: Map<number, number> = new Map();
   private artistIDByRenderedArtistBufferIndex: Map<number, number> = new Map();
@@ -201,10 +219,9 @@ export class ArtistMapInst {
     const point = artistData.pos.clone();
     point.project(this.camera);
 
-    const canvas = this.renderer.domElement;
     return {
-      x: (0.5 + point.x / 2) * (canvas.width / window.devicePixelRatio),
-      y: (0.5 - point.y / 2) * (canvas.height / window.devicePixelRatio),
+      x: (0.5 + point.x / 2) * (this.cachedCanvasWidth / window.devicePixelRatio),
+      y: (0.5 - point.y / 2) * (this.cachedCanvasHeight / window.devicePixelRatio),
       isInFrontOfCamera,
       distance: this.camera.position.distanceTo(artistData.pos),
       popularity: artistData.popularity,
@@ -250,8 +267,10 @@ export class ArtistMapInst {
       this.cameraOverrides.direction = { target: pos, pivotCoefficient: CAMERA_PIVOT_COEFFICIENT };
     },
     flyToArtistID: (artistID: number) => {
-      if (this.controls.type !== 'pointerlock') {
-        this.initControls('pointerlock');
+      const flyCameraMode = this.isMobile ? ('trackball' as const) : ('pointerlock' as const);
+
+      if (this.controls.type !== flyCameraMode) {
+        this.initControls(flyCameraMode);
         // TODO: Animate zoom
         this.camera.zoom = 1;
         this.camera.fov = DEFAULT_FOV;
@@ -393,7 +412,6 @@ export class ArtistMapInst {
       transparent: true,
       opacity: ARTIST_GEOMETRY_OPACITY,
       depthWrite: true,
-      // blending: this.THREE.AdditiveBlending,
     });
     const meshes = new this.THREE.InstancedMesh(geometry, material, 100000);
     meshes.instanceColor = instanceColor;
@@ -412,6 +430,8 @@ export class ArtistMapInst {
     this.THREE_EXTRA = THREE_EXTRA;
     VEC3_IDENTITY = new THREE.Vector3();
     this.lastCameraDirection = VEC3_IDENTITY.clone();
+    this.cachedCanvasWidth = canvas.width;
+    this.cachedCanvasHeight = canvas.height;
 
     this.renderer = new THREE.WebGLRenderer({
       canvas,
@@ -476,14 +496,7 @@ export class ArtistMapInst {
     const light = new THREE.AmbientLight(AMBIENT_LIGHT_COLOR);
     this.scene.add(light);
 
-    window.addEventListener('resize', () => {
-      this.camera.aspect = window.innerWidth / window.innerHeight;
-      this.camera.updateProjectionMatrix();
-      this.renderer.setSize(window.innerWidth, window.innerHeight);
-      this.bloomPass.setSize(window.innerWidth, window.innerHeight);
-      this.bloomComposer.setSize(window.innerWidth, window.innerHeight);
-      this.forceLabelsUpdate = true;
-    });
+    window.addEventListener('resize', () => this.handleResize());
 
     this.initControls('orbit');
     this.renderer.domElement.addEventListener('mousedown', (evt) => {
@@ -556,9 +569,23 @@ export class ArtistMapInst {
     );
 
     this.animate();
+    setTimeout(() => this.handleResize(), 50);
   }
 
-  private initControls(controlMode: 'pointerlock' | 'orbit') {
+  private handleResize() {
+    this.camera.aspect = window.innerWidth / window.innerHeight;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.bloomPass.setSize(window.innerWidth, window.innerHeight);
+    this.bloomComposer.setSize(window.innerWidth, window.innerHeight);
+    this.forceLabelsUpdate = true;
+
+    const canvas = this.renderer.domElement;
+    this.cachedCanvasWidth = canvas.width;
+    this.cachedCanvasHeight = canvas.height;
+  }
+
+  private initControls(controlMode: 'pointerlock' | 'orbit' | 'trackball') {
     if (
       (this.eventRegistry.controlMode === 'pointerlock' && controlMode === 'pointerlock') ||
       !this.controls
@@ -608,6 +635,16 @@ export class ArtistMapInst {
         controls.enableKeys = false;
         controls.keyPanSpeed = 40;
         this.controls = { type: controlMode, controls };
+        break;
+      }
+      case 'trackball': {
+        const controls = new this.THREE_EXTRA.OrbitControls(this.camera, this.renderer.domElement);
+        controls.enabled = true;
+        this.controls = { type: controlMode, controls };
+        break;
+      }
+      default: {
+        console.error('Unknown control mode:', controlMode);
       }
     }
   }
@@ -675,7 +712,7 @@ export class ArtistMapInst {
         curPos.x,
         curPos.y,
         curPos.z,
-        this.controls.type === 'pointerlock'
+        this.controls.type !== 'orbit'
       )
       .then((drawCommands) => {
         if (drawCommands.length === 0) {
@@ -899,7 +936,7 @@ export class ArtistMapInst {
           projectedNextPos.x,
           projectedNextPos.y,
           projectedNextPos.z,
-          this.controls.type === 'pointerlock'
+          this.controls.type !== 'orbit'
         )
         .then((commands) => {
           this.wasmPositionHandlerIsRunning = false;
@@ -1077,21 +1114,36 @@ export class ArtistMapInst {
 
     if (this.cameraOverrides.direction) {
       const cameraDirection = this.camera.getWorldDirection(new this.THREE.Vector3());
-      const targetDirection = this.cameraOverrides.direction.target
-        .clone()
-        .sub(this.camera.position.clone())
-        .normalize();
       const pivotCoefficient = this.cameraOverrides.direction.pivotCoefficient;
-      const newLookDirection = new this.THREE.Vector3(
-        cameraDirection.x * pivotCoefficient + targetDirection.x * (1 - pivotCoefficient),
-        cameraDirection.y * pivotCoefficient + targetDirection.y * (1 - pivotCoefficient),
-        cameraDirection.z * pivotCoefficient + targetDirection.z * (1 - pivotCoefficient)
-      );
-      this.camera.lookAt(this.camera.position.clone().add(newLookDirection));
+
+      let totalDiff: number;
+      if (this.controls.type === 'trackball') {
+        const newOrbitTarget = this.controls.controls.target
+          .clone()
+          .multiplyScalar(pivotCoefficient)
+          .add(this.cameraOverrides.direction!.target.clone().multiplyScalar(1 - pivotCoefficient));
+        this.controls.controls.target.copy(newOrbitTarget);
+
+        totalDiff =
+          this.controls.controls.target.distanceTo(this.cameraOverrides.direction.target) / 10_000;
+      } else {
+        const targetDirection = this.cameraOverrides.direction.target
+          .clone()
+          .sub(this.camera.position.clone())
+          .normalize();
+
+        const newLookDirection = new this.THREE.Vector3(
+          cameraDirection.x * pivotCoefficient + targetDirection.x * (1 - pivotCoefficient),
+          cameraDirection.y * pivotCoefficient + targetDirection.y * (1 - pivotCoefficient),
+          cameraDirection.z * pivotCoefficient + targetDirection.z * (1 - pivotCoefficient)
+        );
+        this.camera.lookAt(this.camera.position.clone().add(newLookDirection));
+
+        totalDiff = newLookDirection.distanceTo(targetDirection);
+      }
 
       // If we're close enough to the target and not currently flying, stop overriding the camera
       if (!this.cameraOverrides.movement) {
-        const totalDiff = newLookDirection.distanceTo(targetDirection);
         if (totalDiff < CAMERA_OVERRIDE_TARGET_TOLERANCE) {
           this.cameraOverrides.direction = null;
         }
@@ -1109,7 +1161,7 @@ export class ArtistMapInst {
       } else {
         const newPos = this.cameraOverrides.movement.path.getPoint(progress);
         const endPoint = this.cameraOverrides.movement.path.getPoint(1);
-        if (newPos.distanceTo(endPoint) > 960) {
+        if (newPos.distanceTo(endPoint) > (this.isMobile ? 12000 : 1560)) {
           this.camera.position.set(newPos.x, newPos.y, newPos.z);
         }
       }
@@ -1134,10 +1186,22 @@ export class ArtistMapInst {
         );
 
       this.render(forward);
-    } else {
+    } else if (this.controls.type === 'orbit') {
       this.controls.controls.update();
 
       this.render(0);
+    } else {
+      this.controls.controls.update();
+
+      // Always Forward
+      // this.controls.controls.object.position.add(
+      //   this.camera
+      //     .getWorldDirection(VEC3_IDENTITY)
+      //     .clone()
+      //     .multiplyScalar(MOVEMENT_SPEED_UNITS_PER_SECOND * timeDelta * 1)
+      // );
+
+      this.render(4);
     }
 
     requestAnimationFrame(() => this.animate());

@@ -66,9 +66,14 @@ export const getArtistSize = (
   return size;
 };
 
-export const getArtistLabelScaleFactor = (distance: number, popularity: number, fov: number) => {
+export const getArtistLabelScaleFactor = (
+  distance: number,
+  popularity: number,
+  fov: number,
+  isMobile: boolean
+) => {
   // Scale linearly with distance just like real life
-  let score = (1 / (distance * 0.00025)) * 0.95;
+  let score = (1 / (distance * (isMobile ? 0.00015 : 0.00025))) * 0.95;
 
   // Apply exponential scaling with popularity
   score -= 1;
@@ -93,9 +98,11 @@ export const getArtistColor = (isHighlighted: boolean, isPlaying: boolean): numb
 };
 
 export const getArtistFlyToDurationMs = (distance: number): number => {
-  return 5000 + 1000 * (distance / 23_500);
+  return 2500 + 1000 * (distance / 27_500);
 };
 
-export const getHighlightedArtistsIntraOpacity = (controlMode: 'orbit' | 'pointerlock') => {
+export const getHighlightedArtistsIntraOpacity = (
+  controlMode: 'orbit' | 'pointerlock' | 'trackball'
+) => {
   return controlMode === 'orbit' ? 0.11 : 0.033;
 };

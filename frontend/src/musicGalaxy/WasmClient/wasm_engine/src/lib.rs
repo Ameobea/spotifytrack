@@ -69,6 +69,8 @@ const LABEL_RENDER_DISTANCE: f32 = 16320.;
 const MAX_MUSIC_PLAY_DISTANCE: f32 = 13740.;
 const MAX_RECENTLY_PLAYED_ARTISTS_TO_TRACK: usize = 12;
 const MAX_RELATED_ARTIST_COUNT: usize = 20;
+/// IDS of artists to be rendered when in orbit control mode.  Represent a wide variety of different
+/// artists from disparate parts of the galaxy.
 const ORBIT_LABEL_ARTIST_IDS: &[u32] = &[
     14710,    // The Beatles
     109666,   // The Living Tombstone
@@ -89,9 +91,9 @@ const ORBIT_LABEL_ARTIST_IDS: &[u32] = &[
     358,      // Metallica
     583,      // Slayer
     929988,   // Bob Marley & The Wailers
-    88522605, // FrivolousFox ASMR
-    470,      // $uicideboy$
-    8,        // Flume
+    // 88522605, // FrivolousFox ASMR
+    470, // $uicideboy$
+    8,   // Flume
 ];
 
 impl Default for ArtistMapCtx {

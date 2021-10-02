@@ -1,4 +1,5 @@
 import React, { useEffect, useReducer, useRef } from 'react';
+import { getIsMobile, getUserSpotifyID } from '../ArtistMapInst';
 
 import {
   ARTIST_LABEL_TEXT_COLOR,
@@ -9,7 +10,11 @@ import {
   PLAYING_ARTIST_LABEL_FADE_OUT_TIME_MS,
 } from '../conf';
 import ArtistSearch, { CollapsedArtistSearch } from './ArtistSearch';
-import CheatSheet, { CollapsedCheatSheet } from './CheatSheet';
+import CheatSheet, {
+  CollapsedCheatSheet,
+  CollapsedMobileCheatSheet,
+  MobileCheatSheet,
+} from './CheatSheet';
 import OnboardingSidebar from './OnboardingSidebar';
 import './OverlayUI.scss';
 
@@ -32,7 +37,7 @@ export class UIEventRegistry {
   private pendingActions: Action[] = [];
 
   public currentFOV = DEFAULT_FOV;
-  public controlMode: 'orbit' | 'pointerlock' = 'orbit';
+  public controlMode: 'orbit' | 'pointerlock' | 'trackball' = 'orbit';
   public getLabelPosition: (id: number | string) => {
     x: number;
     y: number;
@@ -48,6 +53,7 @@ export class UIEventRegistry {
   public lookAtArtistID: (artistID: number) => void;
   public flyToArtistID: (artistID: number) => void;
   public lockPointer: () => void;
+  public isMobile = getIsMobile();
 
   constructor({
     getLabelPosition,
@@ -259,7 +265,7 @@ export interface OverlayState {
 }
 
 const buildDefaultOverlayState = (): OverlayState => ({
-  onboardingOpen: !new URLSearchParams(window.location.search).get('spotifyID'),
+  onboardingOpen: !getUserSpotifyID(),
   artistSearchOpen: true,
 });
 
@@ -412,7 +418,12 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onP
           continue;
         }
 
-        const scale = getArtistLabelScaleFactor(distance, popularity, eventRegistry.currentFOV);
+        const scale = getArtistLabelScaleFactor(
+          distance,
+          popularity,
+          eventRegistry.currentFOV,
+          eventRegistry.isMobile
+        );
 
         if (scale === 0) {
           continue;
@@ -468,7 +479,11 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onP
           dispatchOverlayAction={dispatchOverlayAction}
           lockPointer={() => eventRegistry.lockPointer()}
         />
-      ) : overlayState.artistSearchOpen ? null : ( // <CheatSheet />
+      ) : overlayState.artistSearchOpen ? (
+        <>{eventRegistry.isMobile ? <MobileCheatSheet /> : <CheatSheet />}</>
+      ) : eventRegistry.isMobile ? (
+        <CollapsedMobileCheatSheet />
+      ) : (
         <CollapsedCheatSheet />
       )}
       {overlayState.artistSearchOpen ? (
