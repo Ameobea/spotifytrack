@@ -1,20 +1,26 @@
 import React from 'react';
+import * as R from 'ramda';
 
 import './CheatSheet.scss';
 
 interface CSItemProps {
   name: string;
   keybind: string;
+  keybindFlex?: number;
 }
 
-const CSItem: React.FC<CSItemProps> = ({ name, keybind }) => (
+const CSItem: React.FC<CSItemProps> = ({ name, keybind, keybindFlex }) => (
   <div className="cheat-sheet-item">
     <div className="name">{name}</div>
-    <div className="keybind">{keybind}</div>
+    <div className="keybind" style={!R.isNil(keybindFlex) ? { flex: keybindFlex } : undefined}>
+      {keybind}
+    </div>
   </div>
 );
 
-const KEYBINDS: { name: string; keybind: string }[] = [
+type Keybinds = { name: string; keybind: string }[];
+
+const DESKTOP_FLY_KEYBINDS: Keybinds = [
   { name: 'Exit Fly Mode', keybind: 'ESCAPE' },
   { name: 'Move Forward, Back, Left, Right', keybind: 'W,A,S,D' },
   { name: 'Ascend, Descend', keybind: 'SPACE/Q, Z' },
@@ -24,38 +30,78 @@ const KEYBINDS: { name: string; keybind: string }[] = [
   { name: 'Zoom In/Out', keybind: 'MOUSE WHEEL' },
 ];
 
-const CheatSheet: React.FC = () => (
-  <div className="cheat-sheet">
-    <ul>
-      {KEYBINDS.map((item) => (
-        <CSItem key={item.name} name={item.name} keybind={item.keybind} />
-      ))}
-    </ul>
-  </div>
-);
+const DESKTOP_ORBIT_KEYBINDS: Keybinds = [
+  { name: 'Orbit', keybind: 'Drag' },
+  { name: 'Zoom', keybind: 'Scroll Wheel' },
+  { name: 'Move Camera In/Out', keybind: 'Hold + Drag Middle Mouse' },
+  { name: 'Pan', keybind: 'Hold + Drag Right Mouse' },
+];
 
-export const MobileCheatSheet: React.FC = () => (
-  <div className="cheat-sheet mobile-cheat-sheet">
-    <ul>TODO</ul>
-  </div>
-);
+const MOBILE_ORBIT_KEYBINDS: Keybinds = [
+  { name: 'Zoom', keybind: '2-Finger Pinch' },
+  { name: 'Orbit', keybind: '1-Finger Drag' },
+  { name: 'Pan', keybind: '2-Finger Drag' },
+];
 
-export const CollapsedCheatSheet: React.FC = () => (
-  <div className="collapsed-cheat-sheet">
-    <div className="cheat-sheet">
+const MOBILE_FLY_KEYBINDS: Keybinds = [
+  { name: 'Zoom', keybind: '2-Finger Pinch' },
+  { name: 'Orbit', keybind: '1-Finger Drag' },
+  { name: 'Pan', keybind: '2-Finger Drag' },
+  { name: 'Orbit Artist + Play Music', keybind: 'Tap' },
+];
+
+const CheatSheet: React.FC<{ isMobile: boolean; isOrbitMode: boolean }> = ({
+  isMobile,
+  isOrbitMode,
+}) => {
+  const { keybinds, keybindFlex } = (() => {
+    if (isMobile) {
+      if (isOrbitMode) {
+        return { keybinds: MOBILE_ORBIT_KEYBINDS, keybindFlex: undefined };
+      } else {
+        return { keybinds: MOBILE_FLY_KEYBINDS, keybindFlex: undefined };
+      }
+    } else {
+      if (isOrbitMode) {
+        return { keybinds: DESKTOP_ORBIT_KEYBINDS, keybindFlex: 1.3 };
+      } else {
+        return { keybinds: DESKTOP_FLY_KEYBINDS, keybindFlex: undefined };
+      }
+    }
+  })();
+
+  return (
+    <div className={`cheat-sheet${isMobile ? ' mobile-cheat-sheet' : ''}`}>
       <ul>
-        <CSItem name="Exit Fly Mode" keybind="ESCAPE" />
+        {keybinds.map((item) => (
+          <CSItem
+            key={item.name}
+            name={item.name}
+            keybindFlex={keybindFlex}
+            keybind={item.keybind}
+          />
+        ))}
       </ul>
     </div>
-  </div>
-);
+  );
+};
 
-export const CollapsedMobileCheatSheet: React.FC = () => (
-  <div className="collapsed-cheat-sheet">
-    <div className="cheat-sheet mobile-cheat-sheet">
-      <ul>TODO</ul>
+export const CollapsedCheatSheet: React.FC<{ isMobile: boolean; isOrbitMode: boolean }> = ({
+  isMobile,
+}) => {
+  if (isMobile) {
+    return null;
+  }
+
+  return (
+    <div className="collapsed-cheat-sheet">
+      <div className="cheat-sheet">
+        <ul>
+          <CSItem name="Exit Fly Mode" keybind="ESCAPE" />
+        </ul>
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 export default CheatSheet;

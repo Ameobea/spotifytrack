@@ -10,9 +10,14 @@ interface ArtistSearchProps {
     command: 'look-at' | 'fly-to'
   ) => void;
   getIfArtistIDsAreInEmbedding: (artistIDs: number[]) => boolean[];
+  onCloseUI: () => void;
 }
 
-const ArtistSearch: React.FC<ArtistSearchProps> = ({ onSubmit, getIfArtistIDsAreInEmbedding }) => {
+const ArtistSearch: React.FC<ArtistSearchProps> = ({
+  onSubmit,
+  getIfArtistIDsAreInEmbedding,
+  onCloseUI,
+}) => {
   const [selectedArtist, setSelectedArtist] = useState<{
     spotifyID: string;
     name: string;
@@ -81,12 +86,23 @@ const ArtistSearch: React.FC<ArtistSearchProps> = ({ onSubmit, getIfArtistIDsAre
       >
         Fly To
       </button>
+      <button className="artist-search-close-button" onClick={onCloseUI}>
+        Close
+      </button>
     </div>
   );
 };
 
-export const CollapsedArtistSearch: React.FC = () => (
-  <div className="collapsed-artist-search">Press Escape to search for an artist</div>
-);
+export const CollapsedArtistSearch: React.FC<{ isMobile: boolean; onShowUI: () => void }> = ({
+  isMobile,
+  onShowUI,
+}) =>
+  isMobile ? (
+    <button className="mobile-open-ui-button" onClick={onShowUI}>
+      Show Search
+    </button>
+  ) : (
+    <div className="collapsed-artist-search">Press Escape to search for an artist</div>
+  );
 
 export default ArtistSearch;

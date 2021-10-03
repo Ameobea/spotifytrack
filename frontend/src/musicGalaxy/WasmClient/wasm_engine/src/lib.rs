@@ -100,6 +100,8 @@ const ORBIT_LABEL_ARTIST_IDS: &[u32] = &[
     105,    // Avicii
     10072,  // The Red Hot Chili Peppers
     110546, // Vektroid
+    111155, // Elvis Presley
+    473,    // Eminem
 ];
 
 impl Default for ArtistMapCtx {

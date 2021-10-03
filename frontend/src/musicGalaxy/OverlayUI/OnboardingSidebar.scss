@@ -39,13 +39,16 @@
 
 @media screen and (max-width: 768px) {
   .onboarding-sidebar {
+    flex-direction: row;
+    box-sizing: border-box;
     width: 100vw;
-    max-width: 400px;
+    top: unset;
+    bottom: 0;
     left: 0;
     right: 0;
     margin-left: auto;
     margin-right: auto;
-    box-sizing: border-box;
+    padding: 9px;
     font-size: 15px;
     background-color: rgba(14, 14, 14, 0.97);
 
@@ -54,11 +57,12 @@
     }
 
     .onboarding-sidebar-action-button {
-      width: calc(max(80vw, 200px) - 60px);
+      width: 168px;
       font-size: 14px;
       height: 60px;
       line-height: 1.1em;
-      margin-bottom: 12px;
+      margin-bottom: 1px;
+      margin-top: 0 !important;
     }
   }
 }

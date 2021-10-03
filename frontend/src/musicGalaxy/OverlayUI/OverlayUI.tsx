@@ -1,4 +1,4 @@
-import React, { useEffect, useReducer, useRef } from 'react';
+import React, { useEffect, useReducer, useRef, useState } from 'react';
 import { getIsMobile, getUserSpotifyID } from '../ArtistMapInst';
 
 import {
@@ -10,11 +10,7 @@ import {
   PLAYING_ARTIST_LABEL_FADE_OUT_TIME_MS,
 } from '../conf';
 import ArtistSearch, { CollapsedArtistSearch } from './ArtistSearch';
-import CheatSheet, {
-  CollapsedCheatSheet,
-  CollapsedMobileCheatSheet,
-  MobileCheatSheet,
-} from './CheatSheet';
+import CheatSheet, { CollapsedCheatSheet } from './CheatSheet';
 import OnboardingSidebar from './OnboardingSidebar';
 import './OverlayUI.scss';
 
@@ -30,14 +26,15 @@ type Action =
   | { type: 'deleteLabel'; id: number | string }
   | { type: 'deleteAllLabels' }
   | { type: 'pointerLocked' }
-  | { type: 'pointerUnlocked' };
+  | { type: 'pointerUnlocked' }
+  | { type: 'setIsOrbitMode'; isOrbitMode: boolean };
 
 export class UIEventRegistry {
   private callback: ((actions: Action[]) => void) | null = null;
   private pendingActions: Action[] = [];
 
   public currentFOV = DEFAULT_FOV;
-  public controlMode: 'orbit' | 'pointerlock' | 'trackball' = 'orbit';
+  public controlMode: 'orbit' | 'pointerlock' | 'flyorbit' = 'orbit';
   public getLabelPosition: (id: number | string) => {
     x: number;
     y: number;
@@ -108,6 +105,10 @@ export class UIEventRegistry {
 
   public onPointerUnlocked() {
     this.callback?.([{ type: 'pointerUnlocked' }]);
+  }
+
+  public setIsOrbitMode(isOrbitMode: boolean) {
+    this.callback?.([{ type: 'setIsOrbitMode', isOrbitMode }]);
   }
 
   public flush() {
@@ -255,15 +256,15 @@ const renderCurPlaying = (
   ctx.globalAlpha = opacity ?? 1;
   ctx.fillStyle = '#141414';
   ctx.fillRect(
-    actualX - padding + (isMobile ? 2 : 0),
+    actualX - padding,
     actualY - padding,
     width + padding * 2,
-    height - (isMobile ? 2 : 0)
+    height - (isMobile ? 6 : 0)
   );
   ctx.fill();
   ctx.fillStyle = opacity === undefined ? '#ee44ab' : '#eee';
   ctx.font = `${isMobile ? 0.6 * 18 : 18}px PT Sans`;
-  ctx.fillText(text, actualX, actualY + 13);
+  ctx.fillText(text, actualX, actualY + (isMobile ? 9 : 13));
   ctx.globalAlpha = 1;
 };
 
@@ -327,6 +328,7 @@ const renderOrbitModeLabel = (
 const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onPointerDown }) => {
   const labelState = useRef(initialState);
   const canvasRef = useRef<CanvasRenderingContext2D | null>(null);
+  const [isOrbitMode, setIsOrbitMode] = useState(true);
   const [overlayState, dispatchOverlayAction] = useReducer(
     overlayStateReducer,
     buildDefaultOverlayState()
@@ -356,6 +358,9 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onP
           case 'pointerUnlocked':
             dispatchOverlayAction({ type: 'CLOSE_ONBOARDING' });
             dispatchOverlayAction({ type: 'OPEN_ARTIST_SEARCH' });
+            break;
+          case 'setIsOrbitMode':
+            setIsOrbitMode(action.isOrbitMode);
             break;
           default:
             console.warn('Unhandled action:', action);
@@ -525,13 +530,12 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onP
         <OnboardingSidebar
           dispatchOverlayAction={dispatchOverlayAction}
           lockPointer={() => eventRegistry.lockPointer()}
+          isMobile={eventRegistry.isMobile}
         />
       ) : overlayState.artistSearchOpen ? (
-        <>{eventRegistry.isMobile ? <MobileCheatSheet /> : <CheatSheet />}</>
-      ) : eventRegistry.isMobile ? (
-        <CollapsedMobileCheatSheet />
+        <CheatSheet isMobile={eventRegistry.isMobile} isOrbitMode={isOrbitMode} />
       ) : (
-        <CollapsedCheatSheet />
+        <CollapsedCheatSheet isMobile={eventRegistry.isMobile} isOrbitMode={isOrbitMode} />
       )}
       {overlayState.artistSearchOpen ? (
         <>
@@ -551,10 +555,16 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onP
             getIfArtistIDsAreInEmbedding={(artistIDs) =>
               eventRegistry.getIfArtistIDsAreInEmbedding(artistIDs)
             }
+            onCloseUI={() => eventRegistry.onPointerLocked()}
           />
         </>
       ) : (
-        <CollapsedArtistSearch />
+        <CollapsedArtistSearch
+          onShowUI={() => {
+            eventRegistry.onPointerUnlocked();
+          }}
+          isMobile={eventRegistry.isMobile}
+        />
       )}
       <canvas
         onClick={onPointerDown}

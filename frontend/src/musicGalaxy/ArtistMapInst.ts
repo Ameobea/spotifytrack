@@ -27,7 +27,9 @@ import {
   getArtistFlyToDurationMs,
   HIGHLIGHTED_ARTIST_COLOR,
   getHighlightedArtistsIntraOpacity,
-  INITIAL_ORBIT_DISTANCE,
+  INITIAL_ORBIT_POSITION,
+  INITIAL_CAMERA_ROTATION,
+  INITIAL_ORBIT_TARGET,
 } from './conf';
 import DataFetchClient, { ArtistMapDataWithId, ArtistRelationshipData } from './DataFetchClient';
 import { MovementInputHandler } from './MovementInputHandler';
@@ -148,7 +150,10 @@ interface LookAtState {
 
 export const getIsMobile = () =>
   (window.innerWidth > 0 ? window.innerWidth : screen.width) < 768 ||
-  (window.innerHeight > 0 ? window.innerHeight : screen.height) < 768;
+  (window.innerHeight > 0 ? window.innerHeight : screen.height) < 768 ||
+  'ontouchstart' in window ||
+  navigator.maxTouchPoints > 0 ||
+  (navigator as any).msMaxTouchPoints > 0;
 
 export class ArtistMapInst {
   public THREE: typeof import('three');
@@ -159,7 +164,7 @@ export class ArtistMapInst {
   private controls:
     | { type: 'pointerlock'; controls: PointerLockControls }
     | { type: 'orbit'; controls: OrbitControls }
-    | { type: 'trackball'; controls: OrbitControls };
+    | { type: 'flyorbit'; controls: OrbitControls };
   private isPointerLocked = false;
   private bloomPass: UnrealBloomPass;
   private bloomComposer: EffectComposer;
@@ -270,7 +275,11 @@ export class ArtistMapInst {
       this.cameraOverrides.direction = { target: pos, pivotCoefficient: CAMERA_PIVOT_COEFFICIENT };
     },
     flyToArtistID: (artistID: number) => {
-      const flyCameraMode = this.isMobile ? ('trackball' as const) : ('pointerlock' as const);
+      if (this.isMobile) {
+        this.eventRegistry.onPointerLocked();
+      }
+
+      const flyCameraMode = this.isMobile ? ('flyorbit' as const) : ('pointerlock' as const);
 
       if (this.controls.type !== flyCameraMode) {
         this.initControls(flyCameraMode);
@@ -442,17 +451,18 @@ export class ArtistMapInst {
       antialias: true,
     });
     this.renderer.setPixelRatio(window.devicePixelRatio ?? 1);
-    this.renderer.toneMapping = THREE.CineonToneMapping;
-    this.renderer.toneMappingExposure = 1;
+    this.renderer.toneMapping = THREE.LinearToneMapping;
+    this.renderer.toneMappingExposure = 1.1;
     this.clock = new THREE.Clock();
 
     window.addEventListener('keydown', (evt) => {
+      console.log({ key: evt.key });
       switch (evt.key) {
         case 'ArrowUp':
-          this.renderer.toneMappingExposure += 0.1;
+          this.renderer.toneMappingExposure += 0.01;
           break;
         case 'ArrowDown':
-          this.renderer.toneMappingExposure -= 0.1;
+          this.renderer.toneMappingExposure -= 0.01;
           if (this.renderer.toneMappingExposure < 0) {
             this.renderer.toneMappingExposure = 0;
           }
@@ -471,6 +481,21 @@ export class ArtistMapInst {
           break;
         case '5':
           this.renderer.toneMapping = THREE.NoToneMapping;
+          this.renderer.toneMappingExposure = 1.1;
+          break;
+        case '6':
+          this.renderer.toneMapping = THREE.CineonToneMapping;
+          this.renderer.toneMappingExposure = 1;
+        case '7':
+          this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+          this.renderer.toneMappingExposure = 0.755;
+        case '8':
+          this.renderer.toneMapping = THREE.LinearToneMapping;
+          this.renderer.toneMappingExposure = 1.1;
+        case 'Escape':
+          if (this.controls.type === 'orbit') {
+            this.eventRegistry.onPointerUnlocked();
+          }
           break;
       }
     });
@@ -481,12 +506,6 @@ export class ArtistMapInst {
       0.1,
       1200_000
     );
-    this.camera.position.set(
-      INITIAL_ORBIT_DISTANCE,
-      INITIAL_ORBIT_DISTANCE,
-      INITIAL_ORBIT_DISTANCE
-    );
-    this.camera.lookAt(0, 0, 0);
 
     this.raycaster = new THREE.Raycaster();
 
@@ -503,6 +522,18 @@ export class ArtistMapInst {
     window.addEventListener('resize', () => this.handleResize());
 
     this.initControls('orbit');
+    this.camera.position.set(
+      INITIAL_ORBIT_POSITION.x * (this.isMobile ? 1.2 : 1),
+      INITIAL_ORBIT_POSITION.y * (this.isMobile ? 1.2 : 1),
+      INITIAL_ORBIT_POSITION.z * (this.isMobile ? 1.2 : 1)
+    );
+    this.camera.rotation.set(
+      INITIAL_CAMERA_ROTATION.x,
+      INITIAL_CAMERA_ROTATION.y,
+      INITIAL_CAMERA_ROTATION.z
+    );
+    this.camera.updateProjectionMatrix();
+    this.camera.updateMatrixWorld();
     this.renderer.domElement.addEventListener('mousedown', (evt) => {
       this.handlePointerDown(evt);
     });
@@ -589,7 +620,7 @@ export class ArtistMapInst {
     this.cachedCanvasHeight = canvas.height;
   }
 
-  private initControls(controlMode: 'pointerlock' | 'orbit' | 'trackball') {
+  private initControls(controlMode: 'pointerlock' | 'orbit' | 'flyorbit') {
     if (
       (this.eventRegistry.controlMode === 'pointerlock' && controlMode === 'pointerlock') ||
       !this.controls
@@ -600,6 +631,7 @@ export class ArtistMapInst {
         .then((drawCommands) => this.pendingDrawCommands.push(drawCommands));
     }
     this.eventRegistry.controlMode = controlMode;
+    this.eventRegistry.setIsOrbitMode(controlMode === 'orbit');
 
     if (this.controls) {
       this.controls.controls.dispose();
@@ -607,7 +639,7 @@ export class ArtistMapInst {
 
     if (this.highlightedArtistsIntraLines) {
       (this.highlightedArtistsIntraLines.material as LineBasicMaterial).opacity =
-        getHighlightedArtistsIntraOpacity(controlMode);
+        getHighlightedArtistsIntraOpacity(controlMode, this.highlightedArtistIDs.size);
     }
 
     switch (controlMode) {
@@ -632,6 +664,7 @@ export class ArtistMapInst {
       }
       case 'orbit': {
         const controls = new this.THREE_EXTRA.OrbitControls(this.camera, this.renderer.domElement);
+        controls.target.set(INITIAL_ORBIT_TARGET.x, INITIAL_ORBIT_TARGET.y, INITIAL_ORBIT_TARGET.z);
         controls.autoRotate = true;
         controls.autoRotateSpeed = 0.048;
         controls.enableDamping = true;
@@ -641,7 +674,7 @@ export class ArtistMapInst {
         this.controls = { type: controlMode, controls };
         break;
       }
-      case 'trackball': {
+      case 'flyorbit': {
         const controls = new this.THREE_EXTRA.OrbitControls(this.camera, this.renderer.domElement);
         controls.enabled = true;
         this.controls = { type: controlMode, controls };
@@ -744,7 +777,10 @@ export class ArtistMapInst {
         intraLines.material = new this.THREE.LineBasicMaterial({
           color: HIGHLIGHTED_ARTIST_COLOR,
           transparent: true,
-          opacity: getHighlightedArtistsIntraOpacity(this.controls.type),
+          opacity: getHighlightedArtistsIntraOpacity(
+            this.controls.type,
+            this.highlightedArtistIDs.size
+          ),
         });
         this.scene.add(intraLines);
         this.highlightedArtistsIntraLines = intraLines;
@@ -1142,7 +1178,7 @@ export class ArtistMapInst {
       const pivotCoefficient = this.cameraOverrides.direction.pivotCoefficient;
 
       let totalDiff: number;
-      if (this.controls.type === 'trackball' || this.controls.type === 'orbit') {
+      if (this.controls.type === 'flyorbit' || this.controls.type === 'orbit') {
         const newOrbitTarget = this.controls.controls.target
           .clone()
           .multiplyScalar(pivotCoefficient)
@@ -1223,14 +1259,6 @@ export class ArtistMapInst {
       this.render(0);
     } else {
       this.controls.controls.update();
-
-      // Always Forward
-      // this.controls.controls.object.position.add(
-      //   this.camera
-      //     .getWorldDirection(VEC3_IDENTITY)
-      //     .clone()
-      //     .multiplyScalar(MOVEMENT_SPEED_UNITS_PER_SECOND * timeDelta * 1)
-      // );
 
       this.render(4);
     }

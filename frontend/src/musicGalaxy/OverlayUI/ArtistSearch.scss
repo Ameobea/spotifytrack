@@ -2,7 +2,7 @@
   .artist-search {
     top: 8px;
     right: 8px;
-    width: 420px;
+    width: 470px;
     height: 100%;
     overflow-y: visible;
     overflow-x: hidden;
@@ -12,7 +12,21 @@
 @media screen and (max-width: 767px) {
   .artist-search {
     input {
-      width: calc(100vw - 154px);
+      width: calc(100vw - 174px);
+      height: 22px !important;
+      font-size: 15px !important;
+    }
+
+    button {
+      height: 26px !important;
+      width: 55px !important;
+      padding: 3px 2px 4px 2px;
+      margin-left: 4px !important;
+      margin-right: 0px !important;
+    }
+
+    button.artist-search-close-button {
+      width: 44px !important;
     }
   }
 }
@@ -22,6 +36,15 @@
   flex-direction: row;
   position: absolute;
   z-index: 3;
+  pointer-events: none;
+
+  * {
+    pointer-events: all;
+  }
+
+  button {
+    user-select: none;
+  }
 
   input {
     background-color: #333;
@@ -29,18 +52,24 @@
     outline: none;
     color: #eee;
     font-size: 18px;
-    height: 26px;
+    height: 23px;
   }
 
   .artist-input-wrapper {
     margin-top: 0 !important;
+    pointer-events: none;
+
+    * {
+      pointer-events: all;
+    }
   }
 
   .artist-search-look-at-button,
-  .artist-search-fly-to-button {
+  .artist-search-fly-to-button,
+  .artist-search-close-button {
     margin-left: 8px;
-    height: 30px;
-    width: 66px;
+    height: 27px;
+    width: 90px;
     cursor: pointer;
     background-color: rgba(155, 155, 155, 0.9);
     color: #eee;
@@ -93,4 +122,18 @@
   z-index: 3;
   font-size: 16px;
   font-style: italic;
+}
+
+.mobile-open-ui-button {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 3;
+  font-size: 14.5px;
+  font-style: italic;
+  outline: none;
+  background-color: rgba(244, 244, 244, 0.2);
+  border: 1px solid rgba(155, 155, 155, 0.5);
+  color: #eeeeeedd;
+  padding: 3px 5px 3px 5px;
 }

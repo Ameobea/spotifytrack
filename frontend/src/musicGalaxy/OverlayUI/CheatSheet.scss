@@ -9,6 +9,7 @@
   pointer-events: none;
   padding: 3px 9px;
   width: 342px;
+  user-select: none;
 
   ul {
     margin-block-start: 0;
@@ -23,17 +24,16 @@
       padding-bottom: 4px;
       padding-top: 4px;
       border-bottom: 1px solid #cccccc56;
+      font-size: 13px;
 
       .name {
         flex: 1;
-        font-size: 15px;
         color: #eeeeee9b;
       }
 
       .keybind {
         flex: 0.45;
         font-family: 'Input Mono', 'Oxygen Mono', 'Hack', 'IBM Plex Mono', monospace;
-        font-size: 15px;
       }
     }
 
@@ -48,6 +48,32 @@
   top: unset;
   width: 100vw;
   left: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+
+  ul {
+    > div {
+      font-size: 13px !important;
+    }
+  }
+}
+
+@media screen and (orientation: landscape) {
+  .mobile-cheat-sheet {
+    max-width: 236px;
+    left: unset;
+    right: 0;
+
+    ul {
+      > div {
+        font-size: 11px !important;
+      }
+    }
+
+    .keybind {
+      flex: 0.8 !important;
+    }
+  }
 }
 
 .collapsed-cheat-sheet {

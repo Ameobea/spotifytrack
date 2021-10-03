@@ -1,19 +1,33 @@
 export const BASE_ARTIST_COLOR = 0x0f6e7a;
 export const PLAYING_ARTIST_COLOR = 0xee44ab;
-export const HIGHLIGHTED_ARTIST_COLOR = 0xad5303;
+export const HIGHLIGHTED_ARTIST_COLOR = 0xad6503;
 export const BASE_CONNECTION_COLOR = 0x2288ee;
 export const ARTIST_GEOMETRY_DETAIL = 3;
 export const AMBIENT_LIGHT_COLOR = 0x727272;
 export const ARTIST_LABEL_TEXT_COLOR = '#f2f2f2';
 
-export const DEFAULT_FOV = 84.4;
+export const DEFAULT_FOV = 80.3;
 export const CAMERA_PIVOT_COEFFICIENT = 0.96;
 export const CAMERA_OVERRIDE_TARGET_TOLERANCE = 0.02;
 
 export const MOVEMENT_SPEED_UNITS_PER_SECOND = 3020;
 export const SHIFT_SPEED_MULTIPLIER = 2.365;
 export const MAX_ARTIST_PLAY_CLICK_DISTANCE = 30_000;
-export const INITIAL_ORBIT_DISTANCE = 80_000;
+export const INITIAL_ORBIT_POSITION = {
+  x: -4160.963871145082,
+  y: -83571.31242528294,
+  z: 132532.40676410656,
+};
+export const INITIAL_CAMERA_ROTATION = {
+  x: 0.7313413434972131,
+  y: -0.08025528825788147,
+  z: 0.07181496403499675,
+};
+export const INITIAL_ORBIT_TARGET = {
+  x: 1631.6685787933548,
+  y: -13573.465913281103,
+  z: -31932.713515335818,
+};
 
 export const PLAYING_ARTIST_LABEL_FADE_OUT_TIME_MS = 2800;
 
@@ -73,7 +87,7 @@ export const getArtistLabelScaleFactor = (
   isMobile: boolean
 ) => {
   // Scale linearly with distance just like real life
-  let score = (1 / (distance * (isMobile ? 0.00015 : 0.00025))) * 0.95;
+  let score = (1 / (distance * (isMobile ? 0.0003 : 0.00025))) * 0.95;
 
   // Apply exponential scaling with popularity
   score -= 1;
@@ -102,7 +116,16 @@ export const getArtistFlyToDurationMs = (distance: number): number => {
 };
 
 export const getHighlightedArtistsIntraOpacity = (
-  controlMode: 'orbit' | 'pointerlock' | 'trackball'
+  controlMode: 'orbit' | 'pointerlock' | 'flyorbit',
+  totalHighlightedArtistCount: number
 ) => {
-  return controlMode === 'orbit' ? 0.11 : 0.033;
+  if (controlMode === 'orbit') {
+    if (totalHighlightedArtistCount <= 50) {
+      return 0.205;
+    }
+
+    return totalHighlightedArtistCount >= 100 ? 0.09 : 0.124;
+  }
+
+  return totalHighlightedArtistCount >= 100 ? 0.033 : 0.0525;
 };
