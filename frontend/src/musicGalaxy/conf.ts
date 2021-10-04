@@ -1,12 +1,12 @@
 export const BASE_ARTIST_COLOR = 0x0f6e7a;
-export const PLAYING_ARTIST_COLOR = 0xee44ab;
-export const HIGHLIGHTED_ARTIST_COLOR = 0xad6503;
+export const PLAYING_ARTIST_COLOR = 0xfe54bb;
+export const HIGHLIGHTED_ARTIST_COLOR = 0xaf6503;
 export const BASE_CONNECTION_COLOR = 0x2288ee;
 export const ARTIST_GEOMETRY_DETAIL = 3;
 export const AMBIENT_LIGHT_COLOR = 0x727272;
 export const ARTIST_LABEL_TEXT_COLOR = '#f2f2f2';
 
-export const DEFAULT_FOV = 80.3;
+export const DEFAULT_FOV = 84.3;
 export const CAMERA_PIVOT_COEFFICIENT = 0.96;
 export const CAMERA_OVERRIDE_TARGET_TOLERANCE = 0.02;
 
@@ -33,7 +33,7 @@ export const PLAYING_ARTIST_LABEL_FADE_OUT_TIME_MS = 2800;
 
 export const BASE_ARTIST_GEOMETRY_SIZE = 1.7;
 export const ARTIST_GEOMETRY_OPACITY = 0.35;
-export const BLOOMED_CONNECTION_OPACITY = 0.01;
+export const BLOOMED_CONNECTION_OPACITY = 0.0094;
 
 export const CROSSHAIR_COLOR = 'rgba(188, 188, 188, 0.38)';
 export const CROSSHAIR_WIDTH_PX = 2;
@@ -87,7 +87,7 @@ export const getArtistLabelScaleFactor = (
   isMobile: boolean
 ) => {
   // Scale linearly with distance just like real life
-  let score = (1 / (distance * (isMobile ? 0.0003 : 0.00025))) * 0.95;
+  let score = (1 / (distance * (isMobile ? 0.0003 : 0.00015))) * 0.95;
 
   // Apply exponential scaling with popularity
   score -= 1;
@@ -124,7 +124,7 @@ export const getHighlightedArtistsIntraOpacity = (
       return 0.205;
     }
 
-    return totalHighlightedArtistCount >= 100 ? 0.09 : 0.124;
+    return totalHighlightedArtistCount >= 100 ? 0.087 : 0.124;
   }
 
   return totalHighlightedArtistCount >= 100 ? 0.033 : 0.0525;

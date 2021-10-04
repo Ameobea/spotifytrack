@@ -153,6 +153,10 @@ export class WasmClient {
   public transitionToOrbitMode(): Uint32Array {
     return this.engine.transition_to_orbit_mode(this.ctxPtr);
   }
+
+  public forceRenderArtistLabel(artistID: number): Uint32Array {
+    return this.engine.force_render_artist_label(this.ctxPtr, artistID);
+  }
 }
 
 Comlink.expose(new WasmClient());

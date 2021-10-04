@@ -9,7 +9,7 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-wasm-bindgen = { version = "=0.2.74", features = ["nightly"] }
+wasm-bindgen = { version = "=0.2.78", features = ["nightly"] }
 console_error_panic_hook = "0.1.6"
 wasm-logger = "0.2.0"
 log = "0.4"

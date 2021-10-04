@@ -250,8 +250,8 @@ const renderCurPlaying = (
   actualY -= height;
 
   const padding = isMobile ? 2 : 10;
-  actualX = Math.max(padding * 2, Math.min(actualX, ctx.canvas.width - width - padding * 2));
-  actualY = Math.max(padding * 2, Math.min(actualY, ctx.canvas.height - padding * 2));
+  actualX = Math.max(padding * 2, Math.min(actualX, ctx.canvas.clientWidth - width - padding * 2));
+  actualY = Math.max(padding * 2, Math.min(actualY, ctx.canvas.clientHeight - height));
 
   ctx.globalAlpha = opacity ?? 1;
   ctx.fillStyle = '#141414';

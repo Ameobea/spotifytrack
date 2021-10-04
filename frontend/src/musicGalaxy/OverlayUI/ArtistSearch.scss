@@ -11,6 +11,8 @@
 
 @media screen and (max-width: 767px) {
   .artist-search {
+    margin-top: 2px;
+
     input {
       width: calc(100vw - 174px);
       height: 22px !important;
@@ -28,6 +30,12 @@
     button.artist-search-close-button {
       width: 44px !important;
     }
+  }
+}
+
+@media screen and (min-width: 768px) and (min-height: 768px) {
+  .artist-input-wrapper {
+    max-width: 500px;
   }
 }
 

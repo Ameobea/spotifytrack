@@ -272,6 +272,12 @@ export class ArtistMapInst {
         throw new UnreachableException();
       }
 
+      if (this.controls.type === 'orbit') {
+        wasmClient
+          .forceRenderArtistLabel(artistID)
+          .then((drawCommands) => this.pendingDrawCommands.push(drawCommands));
+      }
+
       this.cameraOverrides.direction = { target: pos, pivotCoefficient: CAMERA_PIVOT_COEFFICIENT };
     },
     flyToArtistID: (artistID: number) => {
@@ -451,12 +457,11 @@ export class ArtistMapInst {
       antialias: true,
     });
     this.renderer.setPixelRatio(window.devicePixelRatio ?? 1);
-    this.renderer.toneMapping = THREE.LinearToneMapping;
-    this.renderer.toneMappingExposure = 1.1;
+    this.renderer.toneMapping = THREE.NoToneMapping;
+    this.renderer.toneMappingExposure = 0.62;
     this.clock = new THREE.Clock();
 
     window.addEventListener('keydown', (evt) => {
-      console.log({ key: evt.key });
       switch (evt.key) {
         case 'ArrowUp':
           this.renderer.toneMappingExposure += 0.01;
@@ -469,35 +474,48 @@ export class ArtistMapInst {
           break;
         case '1':
           this.renderer.toneMapping = THREE.LinearToneMapping;
+          this.renderer.toneMappingExposure = 0.74;
           break;
         case '2':
           this.renderer.toneMapping = THREE.ReinhardToneMapping;
+          this.renderer.toneMappingExposure = 1.9845;
           break;
         case '3':
           this.renderer.toneMapping = THREE.CineonToneMapping;
+          this.renderer.toneMappingExposure = 0.99;
           break;
         case '4':
           this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+          this.renderer.toneMappingExposure = 0.8;
           break;
         case '5':
           this.renderer.toneMapping = THREE.NoToneMapping;
-          this.renderer.toneMappingExposure = 1.1;
+          this.renderer.toneMappingExposure = 0.625;
           break;
         case '6':
           this.renderer.toneMapping = THREE.CineonToneMapping;
-          this.renderer.toneMappingExposure = 1;
+          this.renderer.toneMappingExposure = 1.1;
+          break;
         case '7':
           this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-          this.renderer.toneMappingExposure = 0.755;
+          this.renderer.toneMappingExposure = 0.92;
+          break;
         case '8':
           this.renderer.toneMapping = THREE.LinearToneMapping;
-          this.renderer.toneMappingExposure = 1.1;
+          this.renderer.toneMappingExposure = 0.85;
+          break;
+        case '9':
+          this.renderer.toneMapping = THREE.ReinhardToneMapping;
+          this.renderer.toneMappingExposure = 2.2;
+          break;
         case 'Escape':
           if (this.controls.type === 'orbit') {
             this.eventRegistry.onPointerUnlocked();
           }
           break;
       }
+
+      console.log({ exposure: this.renderer.toneMappingExposure });
     });
 
     this.camera = new THREE.PerspectiveCamera(
@@ -523,9 +541,9 @@ export class ArtistMapInst {
 
     this.initControls('orbit');
     this.camera.position.set(
-      INITIAL_ORBIT_POSITION.x * (this.isMobile ? 1.2 : 1),
-      INITIAL_ORBIT_POSITION.y * (this.isMobile ? 1.2 : 1),
-      INITIAL_ORBIT_POSITION.z * (this.isMobile ? 1.2 : 1)
+      INITIAL_ORBIT_POSITION.x * (this.isMobile ? 1.4 : 1),
+      INITIAL_ORBIT_POSITION.y * (this.isMobile ? 1.4 : 1),
+      INITIAL_ORBIT_POSITION.z * (this.isMobile ? 1.4 : 1)
     );
     this.camera.rotation.set(
       INITIAL_CAMERA_ROTATION.x,
@@ -1081,7 +1099,7 @@ export class ArtistMapInst {
           if (label === 'FETCHING' || label === undefined) {
             throw new UnreachableException('Must have fetched label by now');
           } else if (label === null) {
-            console.log('Missing artist name for id=', artistID);
+            console.warn('Missing artist name for id=', artistID);
             // Spotify API must have missing data for this artist
             break;
           }

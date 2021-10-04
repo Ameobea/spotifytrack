@@ -63,6 +63,7 @@ pub struct ArtistMapCtx {
     pub connections_buffer: Vec<[[f32; 3]; 2]>,
     pub rendered_connections: HashSet<(usize, usize)>,
     pub did_set_highlighted_artists: bool,
+    pub last_force_labeled_artist_id: Option<u32>,
 }
 
 const DISTANCE_MULTIPLIER: [f32; 3] = [50500., 50400., 54130.];
@@ -118,6 +119,7 @@ impl Default for ArtistMapCtx {
             connections_buffer: Vec::new(),
             rendered_connections: HashSet::default(),
             did_set_highlighted_artists: false,
+            last_force_labeled_artist_id: None,
         }
     }
 }
@@ -169,6 +171,14 @@ impl ArtistMapCtx {
             artist_state
                 .render_state
                 .set(ArtistRenderState::HAS_RECENTLY_PLAYED, true);
+
+            if !artist_state
+                .render_state
+                .contains(ArtistRenderState::HAS_NAME)
+            {
+                draw_commands.push(FETCH_ARTIST_DATA_CMD);
+                draw_commands.push(next_artist_to_play);
+            }
         } else {
             self.playing_music_artist_id = None;
         }
@@ -991,6 +1001,7 @@ pub fn get_connections_for_artists(
 #[wasm_bindgen]
 pub fn transition_to_orbit_mode(ctx: *mut ArtistMapCtx) -> Vec<u32> {
     let ctx = unsafe { &mut *ctx };
+    ctx.last_force_labeled_artist_id = None;
 
     let mut draw_commands = Vec::new();
 
@@ -1020,6 +1031,68 @@ pub fn transition_to_orbit_mode(ctx: *mut ArtistMapCtx) -> Vec<u32> {
         info!("Transitioned to orbit mode and highlighted artists set; adding in extra labels...");
         ctx.add_highlighted_artist_orbit_labels(&mut draw_commands);
     }
+
+    draw_commands
+}
+
+#[wasm_bindgen]
+pub fn force_render_artist_label(ctx: *mut ArtistMapCtx, artist_id: u32) -> Vec<u32> {
+    let ctx = unsafe { &mut *ctx };
+
+    let mut draw_commands = Vec::new();
+
+    if let Some(last_force_rendered_artist_id) = ctx.last_force_labeled_artist_id {
+        info!(
+            "De-rendering last force-rendered artist id={}",
+            last_force_rendered_artist_id
+        );
+        let last_force_rendered_artist_index = match ctx
+            .artists_indices_by_id
+            .get(&last_force_rendered_artist_id)
+        {
+            Some(ix) => *ix,
+            None => return draw_commands,
+        };
+        let (_, state) = &mut ctx.all_artists[last_force_rendered_artist_index];
+        state
+            .render_state
+            .set(ArtistRenderState::RENDER_LABEL, false);
+        draw_commands.push(REMOVE_LABEL_CMD);
+        draw_commands.push(last_force_rendered_artist_id);
+    } else {
+        info!("No last force-rendered artist id; not de-rendering");
+    }
+
+    let artist_index = match ctx.artists_indices_by_id.get(&artist_id) {
+        Some(ix) => *ix,
+        None => return draw_commands,
+    };
+    let (_, state) = &mut ctx.all_artists[artist_index];
+
+    // If the label is already rendered, do nothing
+    if state.render_state.contains(ArtistRenderState::RENDER_LABEL) {
+        info!("Force-rendering already rendered artist label; doing nothing.");
+        ctx.last_force_labeled_artist_id = None;
+        return draw_commands;
+    } else {
+        info!(
+            "Artist label not currently rendered; setting `last_force_labeled_artist_id` to {}",
+            artist_id
+        );
+        ctx.last_force_labeled_artist_id = Some(artist_id);
+    }
+
+    state
+        .render_state
+        .set(ArtistRenderState::RENDER_LABEL, true);
+    draw_commands.push(
+        if state.render_state.contains(ArtistRenderState::HAS_NAME) {
+            ADD_LABEL_CMD
+        } else {
+            FETCH_ARTIST_DATA_CMD
+        },
+    );
+    draw_commands.push(artist_id);
 
     draw_commands
 }

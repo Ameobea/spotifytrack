@@ -33,7 +33,6 @@ const ArtistInput: React.FC<ArtistInputProps> = ({
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const lastSuggestions = useRef<AutocompleteSuggestion[]>([]);
-  console.log({ text });
   const { data: suggestions } = useQuery(['artistAutocomplete', text], ({ queryKey: [, text] }) =>
     text ? getArtistAutocompleteSuggestions(text, filterAutocompleteResults) : []
   );
