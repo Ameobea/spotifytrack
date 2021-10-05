@@ -95,7 +95,8 @@ export const initArtistMapInst = async (canvas: HTMLCanvasElement): Promise<Arti
       // Populate the wasm client running in a web worker with the fetched packed artist positions
       const packed = new Uint8Array(packedArtistPositions);
       return wasmClient.decodeAndRecordPackedArtistPositions(
-        Comlink.transfer(packed, [packed.buffer])
+        Comlink.transfer(packed, [packed.buffer]),
+        getIsMobile()
       );
     }),
     import('./lazyThree').then((mod) => mod.default),
@@ -151,9 +152,7 @@ interface LookAtState {
 export const getIsMobile = () =>
   (window.innerWidth > 0 ? window.innerWidth : screen.width) < 768 ||
   (window.innerHeight > 0 ? window.innerHeight : screen.height) < 768 ||
-  'ontouchstart' in window ||
-  navigator.maxTouchPoints > 0 ||
-  (navigator as any).msMaxTouchPoints > 0;
+  /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
 export class ArtistMapInst {
   public THREE: typeof import('three');
@@ -420,9 +419,9 @@ export class ArtistMapInst {
   private buildInstancedArtistMeshes() {
     const geometry = new this.THREE.IcosahedronGeometry(
       BASE_ARTIST_GEOMETRY_SIZE,
-      ARTIST_GEOMETRY_DETAIL
+      this.isMobile ? ARTIST_GEOMETRY_DETAIL - 1 : ARTIST_GEOMETRY_DETAIL
     );
-    const instanceColorBuffer = new Float32Array(100000 * 3);
+    const instanceColorBuffer = new Float32Array(12_000 * 3);
     const instanceColor = new this.THREE.InstancedBufferAttribute(instanceColorBuffer, 3);
     instanceColor.count = 0;
     geometry.setAttribute('instanceColor', instanceColor);
@@ -430,9 +429,8 @@ export class ArtistMapInst {
     const material = new this.THREE.MeshPhongMaterial({
       transparent: true,
       opacity: ARTIST_GEOMETRY_OPACITY,
-      depthWrite: true,
     });
-    const meshes = new this.THREE.InstancedMesh(geometry, material, 100000);
+    const meshes = new this.THREE.InstancedMesh(geometry, material, 12_000);
     meshes.instanceColor = instanceColor;
 
     meshes.count = 0;
@@ -457,8 +455,8 @@ export class ArtistMapInst {
       antialias: true,
     });
     this.renderer.setPixelRatio(window.devicePixelRatio ?? 1);
-    this.renderer.toneMapping = THREE.NoToneMapping;
-    this.renderer.toneMappingExposure = 0.62;
+    this.renderer.toneMapping = THREE.ReinhardToneMapping;
+    this.renderer.toneMappingExposure = 1.91;
     this.clock = new THREE.Clock();
 
     window.addEventListener('keydown', (evt) => {
@@ -565,7 +563,6 @@ export class ArtistMapInst {
       transparent: true,
       depthWrite: false,
       opacity: BLOOMED_CONNECTION_OPACITY,
-      blending: this.THREE.NormalBlending,
     });
     this.bloomedConnectionsMesh = new this.THREE.LineSegments(
       this.bloomedConnectionsGeometry,
@@ -795,6 +792,7 @@ export class ArtistMapInst {
         intraLines.material = new this.THREE.LineBasicMaterial({
           color: HIGHLIGHTED_ARTIST_COLOR,
           transparent: true,
+          depthWrite: false,
           opacity: getHighlightedArtistsIntraOpacity(
             this.controls.type,
             this.highlightedArtistIDs.size
@@ -851,6 +849,7 @@ export class ArtistMapInst {
     if (this.artistMeshes.instanceColor) {
       this.artistMeshes.instanceColor.count = startIx + newArtistCount;
     }
+    // console.log({ count: startIx + newArtistCount });
 
     const matrix = new this.THREE.Matrix4();
 

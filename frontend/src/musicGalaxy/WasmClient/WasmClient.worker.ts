@@ -14,8 +14,8 @@ export class WasmClient {
   /**
    * Returns the total number of artists in the embedding
    */
-  public decodeAndRecordPackedArtistPositions(packed: Uint8Array): number {
-    return this.engine.decode_and_record_packed_artist_positions(this.ctxPtr, packed);
+  public decodeAndRecordPackedArtistPositions(packed: Uint8Array, isMobile: boolean): number {
+    return this.engine.decode_and_record_packed_artist_positions(this.ctxPtr, packed, isMobile);
   }
 
   public getAllArtistData(): Float32Array {

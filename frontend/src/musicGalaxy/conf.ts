@@ -87,7 +87,7 @@ export const getArtistLabelScaleFactor = (
   isMobile: boolean
 ) => {
   // Scale linearly with distance just like real life
-  let score = (1 / (distance * (isMobile ? 0.0003 : 0.00015))) * 0.95;
+  let score = (1 / (distance * (isMobile ? 0.00020245 : 0.00015))) * 0.95;
 
   // Apply exponential scaling with popularity
   score -= 1;

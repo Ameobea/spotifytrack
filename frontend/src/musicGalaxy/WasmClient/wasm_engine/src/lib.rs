@@ -64,6 +64,7 @@ pub struct ArtistMapCtx {
     pub rendered_connections: HashSet<(usize, usize)>,
     pub did_set_highlighted_artists: bool,
     pub last_force_labeled_artist_id: Option<u32>,
+    pub is_mobile: bool,
 }
 
 const DISTANCE_MULTIPLIER: [f32; 3] = [50500., 50400., 54130.];
@@ -120,6 +121,7 @@ impl Default for ArtistMapCtx {
             rendered_connections: HashSet::default(),
             did_set_highlighted_artists: false,
             last_force_labeled_artist_id: None,
+            is_mobile: false,
         }
     }
 }
@@ -394,6 +396,7 @@ pub fn should_render_label(
     total_rendered_label_count: usize,
     artist_state: &ArtistState,
     distance: f32,
+    is_mobile: bool,
 ) -> bool {
     if distance < 6800. {
         return true;
@@ -402,16 +405,23 @@ pub fn should_render_label(
     let mut score = distance;
 
     // Higher popularity artists show up further away
-    score -= (artist_state.popularity as f32).powi(2) * 2.2;
+    score -= (artist_state.popularity as f32).powi(2) * 1.9;
 
     // If we're in a very dense area with many labels rendered, make it harder to render more
-    score += fastapprox::faster::pow(total_rendered_label_count as f32, 1.3) * 22.2;
+    score += fastapprox::faster::pow(
+        total_rendered_label_count as f32,
+        if is_mobile { 1.33 } else { 1.14 },
+    ) * 22.2;
 
     if artist_state
         .render_state
         .contains(ArtistRenderState::IS_HIGHLIGHTED)
     {
         score *= 0.3338
+    }
+
+    if is_mobile {
+        score *= 1.1347;
     }
 
     score <= LABEL_RENDER_DISTANCE
@@ -426,8 +436,13 @@ pub fn create_artist_map_ctx() -> *mut ArtistMapCtx {
 
 /// Returns total number of artists in the embedding
 #[wasm_bindgen]
-pub fn decode_and_record_packed_artist_positions(ctx: *mut ArtistMapCtx, packed: Vec<u8>) -> usize {
+pub fn decode_and_record_packed_artist_positions(
+    ctx: *mut ArtistMapCtx,
+    packed: Vec<u8>,
+    is_mobile: bool,
+) -> usize {
     let ctx = unsafe { &mut *ctx };
+    ctx.is_mobile = is_mobile;
 
     let ptr = packed.as_ptr() as *const u32;
     let count = unsafe { *ptr } as usize;
@@ -553,7 +568,12 @@ pub fn handle_received_artist_names(
             .render_state
             .contains(ArtistRenderState::RENDER_LABEL)
             && (!is_fly_mode
-                || should_render_label(ctx.total_rendered_label_count, artist_state, distance))
+                || should_render_label(
+                    ctx.total_rendered_label_count,
+                    artist_state,
+                    distance,
+                    ctx.is_mobile,
+                ))
         {
             ctx.total_rendered_label_count += 1;
             draw_commands.push(ADD_LABEL_CMD);
@@ -568,7 +588,12 @@ pub fn handle_received_artist_names(
     draw_commands
 }
 
-fn should_render_artist(distance: f32, popularity: u8, render_state: &ArtistRenderState) -> bool {
+fn should_render_artist(
+    distance: f32,
+    popularity: u8,
+    render_state: &ArtistRenderState,
+    is_mobile: bool,
+) -> bool {
     if popularity >= 85 {
         return true;
     }
@@ -583,6 +608,10 @@ fn should_render_artist(distance: f32, popularity: u8, render_state: &ArtistRend
 
     let mut score = distance;
     score -= (popularity as f32).powi(3) * 0.1;
+
+    if is_mobile {
+        score *= 1.56;
+    }
 
     score < 36_800.
 }
@@ -650,8 +679,12 @@ pub fn handle_new_position(
     for (artist_id, artist_state) in ctx.all_artists.iter_mut() {
         let distance = distance(&artist_state.position, &ctx.last_position);
 
-        let should_render_label =
-            should_render_label(ctx.total_rendered_label_count, artist_state, distance);
+        let should_render_label = should_render_label(
+            ctx.total_rendered_label_count,
+            artist_state,
+            distance,
+            ctx.is_mobile,
+        );
         if should_render_label
             != artist_state
                 .render_state
@@ -692,6 +725,7 @@ pub fn handle_new_position(
             distance,
             artist_state.popularity,
             &artist_state.render_state,
+            ctx.is_mobile,
         );
         if should_render_geometry
             != artist_state
@@ -874,8 +908,12 @@ pub fn handle_set_highlighted_artists(
 
         state.render_state.toggle(ArtistRenderState::IS_HIGHLIGHTED);
         let distance_to_artist = distance(&state.position, &cur_pos);
-        let should_render =
-            should_render_artist(distance_to_artist, state.popularity, &state.render_state);
+        let should_render = should_render_artist(
+            distance_to_artist,
+            state.popularity,
+            &state.render_state,
+            ctx.is_mobile,
+        );
         if should_render {
             draw_commands.push(ADD_ARTIST_GEOMETRY_CMD);
             draw_commands.push(*artist_id);
