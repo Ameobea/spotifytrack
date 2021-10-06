@@ -9,6 +9,7 @@ export const ARTIST_LABEL_TEXT_COLOR = '#f2f2f2';
 export const DEFAULT_FOV = 84.3;
 export const CAMERA_PIVOT_COEFFICIENT = 0.96;
 export const CAMERA_OVERRIDE_TARGET_TOLERANCE = 0.02;
+export const FRAME_TIMING_BUFFER_SIZE = Math.round(60 * 2);
 
 export const MOVEMENT_SPEED_UNITS_PER_SECOND = 3020;
 export const SHIFT_SPEED_MULTIPLIER = 2.365;
@@ -32,7 +33,7 @@ export const INITIAL_ORBIT_TARGET = {
 export const PLAYING_ARTIST_LABEL_FADE_OUT_TIME_MS = 2800;
 
 export const BASE_ARTIST_GEOMETRY_SIZE = 1.7;
-export const ARTIST_GEOMETRY_OPACITY = 0.35;
+export const ARTIST_GEOMETRY_OPACITY = 0.185;
 export const BLOOMED_CONNECTION_OPACITY = 0.0094;
 
 export const CROSSHAIR_COLOR = 'rgba(188, 188, 188, 0.38)';
@@ -44,7 +45,7 @@ export const BLOOM_PARAMS = {
   bloomRadius: 0.12,
 };
 
-export const SECONDS_BETWEEN_POSITION_UPDATES = 0.15;
+export const getSecondsBetweenPositionUpdates = (quality: number) => 1 / quality + 0.15;
 
 export const MUSIC_FADE_IN_TIME_SECS = 0.35;
 export const MUSIC_FADE_OUT_TIME_SECS = 3.6;

@@ -65,6 +65,7 @@ pub struct ArtistMapCtx {
     pub did_set_highlighted_artists: bool,
     pub last_force_labeled_artist_id: Option<u32>,
     pub is_mobile: bool,
+    pub quality: u8,
 }
 
 const DISTANCE_MULTIPLIER: [f32; 3] = [50500., 50400., 54130.];
@@ -73,6 +74,7 @@ const MAX_MUSIC_PLAY_DISTANCE: f32 = 13740.;
 const MAX_RECENTLY_PLAYED_ARTISTS_TO_TRACK: usize = 12;
 const MAX_RELATED_ARTIST_COUNT: usize = 20;
 const MAX_EXTRA_RANDOM_HIGHLIGHTED_ARTIST_ORBIT_MODE_LABEL_COUNT: usize = 12;
+const DEFAULT_QUALITY: u8 = 7;
 /// IDS of artists to be rendered when in orbit control mode.  Represent a wide variety of different
 /// artists from disparate parts of the galaxy.
 const ORBIT_LABEL_ARTIST_IDS: &[u32] = &[
@@ -122,6 +124,7 @@ impl Default for ArtistMapCtx {
             did_set_highlighted_artists: false,
             last_force_labeled_artist_id: None,
             is_mobile: false,
+            quality: DEFAULT_QUALITY,
         }
     }
 }
@@ -397,6 +400,7 @@ pub fn should_render_label(
     artist_state: &ArtistState,
     distance: f32,
     is_mobile: bool,
+    quality: u8,
 ) -> bool {
     if distance < 6800. {
         return true;
@@ -422,6 +426,16 @@ pub fn should_render_label(
 
     if is_mobile {
         score *= 1.1347;
+    }
+
+    let mut quality_diff = DEFAULT_QUALITY as i8 - quality as i8;
+    while quality_diff > 0 {
+        score *= 0.95;
+        quality_diff -= 1;
+    }
+    while quality_diff > 0 {
+        score *= 1.15;
+        quality_diff += 1;
     }
 
     score <= LABEL_RENDER_DISTANCE
@@ -573,6 +587,7 @@ pub fn handle_received_artist_names(
                     artist_state,
                     distance,
                     ctx.is_mobile,
+                    ctx.quality,
                 ))
         {
             ctx.total_rendered_label_count += 1;
@@ -593,11 +608,8 @@ fn should_render_artist(
     popularity: u8,
     render_state: &ArtistRenderState,
     is_mobile: bool,
+    quality: u8,
 ) -> bool {
-    if popularity >= 85 {
-        return true;
-    }
-
     if distance < 9000. {
         return true;
     }
@@ -611,6 +623,16 @@ fn should_render_artist(
 
     if is_mobile {
         score *= 1.56;
+    }
+
+    let mut quality_diff = DEFAULT_QUALITY as i8 - quality as i8;
+    while quality_diff > 0 {
+        score *= if is_mobile { 1.2 } else { 1.76 };
+        quality_diff -= 1;
+    }
+    while quality_diff < 0 {
+        score *= 0.72;
+        quality_diff += 1;
     }
 
     score < 36_800.
@@ -684,6 +706,7 @@ pub fn handle_new_position(
             artist_state,
             distance,
             ctx.is_mobile,
+            ctx.quality,
         );
         if should_render_label
             != artist_state
@@ -726,6 +749,7 @@ pub fn handle_new_position(
             artist_state.popularity,
             &artist_state.render_state,
             ctx.is_mobile,
+            ctx.quality,
         );
         if should_render_geometry
             != artist_state
@@ -913,6 +937,7 @@ pub fn handle_set_highlighted_artists(
             state.popularity,
             &state.render_state,
             ctx.is_mobile,
+            ctx.quality,
         );
         if should_render {
             draw_commands.push(ADD_ARTIST_GEOMETRY_CMD);
@@ -1133,4 +1158,10 @@ pub fn force_render_artist_label(ctx: *mut ArtistMapCtx, artist_id: u32) -> Vec<
     draw_commands.push(artist_id);
 
     draw_commands
+}
+
+#[wasm_bindgen]
+pub fn set_quality(ctx: *mut ArtistMapCtx, new_quality: u8) {
+    let ctx = unsafe { &mut *ctx };
+    ctx.quality = new_quality;
 }

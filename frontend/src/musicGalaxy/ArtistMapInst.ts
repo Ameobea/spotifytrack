@@ -11,7 +11,6 @@ import {
   BASE_CONNECTION_COLOR,
   getArtistSize,
   MOVEMENT_SPEED_UNITS_PER_SECOND,
-  SECONDS_BETWEEN_POSITION_UPDATES,
   ARTIST_GEOMETRY_OPACITY,
   DEFAULT_FOV,
   getArtistColor,
@@ -19,7 +18,6 @@ import {
   BLOOM_PARAMS,
   SHIFT_SPEED_MULTIPLIER,
   MAX_ARTIST_PLAY_CLICK_DISTANCE,
-  ARTIST_GEOMETRY_DETAIL,
   PLAYING_ARTIST_COLOR,
   CAMERA_PIVOT_COEFFICIENT,
   CAMERA_OVERRIDE_TARGET_TOLERANCE,
@@ -30,6 +28,8 @@ import {
   INITIAL_ORBIT_POSITION,
   INITIAL_CAMERA_ROTATION,
   INITIAL_ORBIT_TARGET,
+  FRAME_TIMING_BUFFER_SIZE,
+  getSecondsBetweenPositionUpdates,
 } from './conf';
 import DataFetchClient, { ArtistMapDataWithId, ArtistRelationshipData } from './DataFetchClient';
 import { MovementInputHandler } from './MovementInputHandler';
@@ -149,6 +149,8 @@ interface LookAtState {
   pivotCoefficient: number;
 }
 
+type Quality = 11 | 10 | 9 | 8 | 7 | 6 | 5 | 4;
+
 export const getIsMobile = () =>
   (window.innerWidth > 0 ? window.innerWidth : screen.width) < 768 ||
   (window.innerHeight > 0 ? window.innerHeight : screen.height) < 768 ||
@@ -174,6 +176,11 @@ export class ArtistMapInst {
   private cachedCanvasWidth: number;
   private cachedCanvasHeight: number;
   private cachedDevicePixelRatio = window.devicePixelRatio ?? 1;
+  private quality: Quality = 7;
+  private lastFrameTimings = new Array<number>(FRAME_TIMING_BUFFER_SIZE).fill(-1);
+  private lastQualityChangeTime: number | null = null;
+  private frameCount = 0;
+  private isFocused = true;
 
   private renderedArtistBufferIndicesByArtistID: Map<number, number> = new Map();
   private artistIDByRenderedArtistBufferIndex: Map<number, number> = new Map();
@@ -417,20 +424,17 @@ export class ArtistMapInst {
   }
 
   private buildInstancedArtistMeshes() {
-    const geometry = new this.THREE.IcosahedronGeometry(
-      BASE_ARTIST_GEOMETRY_SIZE,
-      this.isMobile ? ARTIST_GEOMETRY_DETAIL - 1 : ARTIST_GEOMETRY_DETAIL
-    );
-    const instanceColorBuffer = new Float32Array(12_000 * 3);
+    const geometry = new this.THREE.SphereGeometry(BASE_ARTIST_GEOMETRY_SIZE, 12, 8);
+    const instanceColorBuffer = new Float32Array(70_000 * 3);
     const instanceColor = new this.THREE.InstancedBufferAttribute(instanceColorBuffer, 3);
     instanceColor.count = 0;
     geometry.setAttribute('instanceColor', instanceColor);
 
-    const material = new this.THREE.MeshPhongMaterial({
+    const material = new this.THREE.MeshBasicMaterial({
       transparent: true,
       opacity: ARTIST_GEOMETRY_OPACITY,
     });
-    const meshes = new this.THREE.InstancedMesh(geometry, material, 12_000);
+    const meshes = new this.THREE.InstancedMesh(geometry, material, 70_000);
     meshes.instanceColor = instanceColor;
 
     meshes.count = 0;
@@ -453,6 +457,7 @@ export class ArtistMapInst {
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       antialias: true,
+      precision: 'lowp',
     });
     this.renderer.setPixelRatio(window.devicePixelRatio ?? 1);
     this.renderer.toneMapping = THREE.ReinhardToneMapping;
@@ -513,7 +518,17 @@ export class ArtistMapInst {
           break;
       }
 
-      console.log({ exposure: this.renderer.toneMappingExposure });
+      // console.log({ exposure: this.renderer.toneMappingExposure });
+    });
+
+    window.addEventListener('focus', () => {
+      console.warn('Tab Focused');
+      this.isFocused = true;
+      this.lastFrameTimings = new Array<number>(FRAME_TIMING_BUFFER_SIZE).fill(-1);
+    });
+    window.addEventListener('blur', () => {
+      console.warn('Tab Blurred');
+      this.isFocused = false;
     });
 
     this.camera = new THREE.PerspectiveCamera(
@@ -839,6 +854,9 @@ export class ArtistMapInst {
   }
 
   public renderArtists(artistsToRender: number[]) {
+    let minUpdatedArtistIx = Infinity;
+    let maxUpdatedArtistIx = 0;
+
     // Skip artists that are already rendered
     const newArtistCount = artistsToRender.filter(
       (id) => id !== null && id !== undefined && !this.renderedArtistBufferIndicesByArtistID.has(id)
@@ -848,8 +866,8 @@ export class ArtistMapInst {
     this.artistMeshes.count = startIx + newArtistCount;
     if (this.artistMeshes.instanceColor) {
       this.artistMeshes.instanceColor.count = startIx + newArtistCount;
+      maxUpdatedArtistIx = this.artistMeshes.instanceColor.count;
     }
-    // console.log({ count: startIx + newArtistCount });
 
     const matrix = new this.THREE.Matrix4();
 
@@ -868,6 +886,8 @@ export class ArtistMapInst {
 
       const existingBufferIndex = this.renderedArtistBufferIndicesByArtistID.get(id);
       const bufferIndex = existingBufferIndex ?? startIx + newRenderedArtistCount;
+      minUpdatedArtistIx = Math.min(minUpdatedArtistIx, bufferIndex);
+      maxUpdatedArtistIx = Math.max(maxUpdatedArtistIx, bufferIndex);
       if (existingBufferIndex === undefined) {
         newRenderedArtistCount += 1;
       }
@@ -880,11 +900,40 @@ export class ArtistMapInst {
       this.artistIDByRenderedArtistBufferIndex.set(bufferIndex, id);
     });
 
+    const existingUpdateStartIx =
+      this.artistMeshes.instanceMatrix.updateRange.count === -1
+        ? minUpdatedArtistIx
+        : this.artistMeshes.instanceMatrix.updateRange.offset /
+          this.artistMeshes.instanceMatrix.itemSize;
+    if (existingUpdateStartIx < minUpdatedArtistIx) {
+      minUpdatedArtistIx = existingUpdateStartIx;
+    }
+    const existingUpdateEndIx =
+      this.artistMeshes.instanceMatrix.updateRange.count === -1
+        ? maxUpdatedArtistIx
+        : this.artistMeshes.instanceMatrix.updateRange.offset /
+            this.artistMeshes.instanceMatrix.itemSize +
+          this.artistMeshes.instanceMatrix.count / this.artistMeshes.instanceMatrix.itemSize;
+    if (existingUpdateEndIx > maxUpdatedArtistIx) {
+      maxUpdatedArtistIx = existingUpdateEndIx;
+    }
+
     this.artistMeshes.instanceMatrix.needsUpdate = true;
+    this.artistMeshes.instanceMatrix.updateRange.offset =
+      minUpdatedArtistIx * this.artistMeshes.instanceMatrix.itemSize;
+    this.artistMeshes.instanceMatrix.updateRange.count =
+      (maxUpdatedArtistIx - minUpdatedArtistIx) * this.artistMeshes.instanceMatrix.itemSize;
     this.artistMeshes.instanceColor!.needsUpdate = true;
+    this.artistMeshes.instanceColor!.updateRange.offset =
+      minUpdatedArtistIx * this.artistMeshes.instanceColor!.itemSize;
+    this.artistMeshes.instanceColor!.updateRange.count =
+      (maxUpdatedArtistIx - minUpdatedArtistIx) * this.artistMeshes.instanceColor!.itemSize;
   }
 
   public removeArtists(artistInternalIDs: number[]) {
+    let minUpdatedArtistIx = Infinity;
+    let maxUpdatedArtistIx = this.artistMeshes.count - 1;
+
     const artistsToRemove = artistInternalIDs.filter((id) =>
       this.renderedArtistBufferIndicesByArtistID.has(id)
     );
@@ -905,6 +954,8 @@ export class ArtistMapInst {
         throw new UnreachableException();
       }
 
+      minUpdatedArtistIx = Math.min(minUpdatedArtistIx, targetBufferIndex);
+
       this.renderedArtistBufferIndicesByArtistID.delete(id);
       this.artistIDByRenderedArtistBufferIndex.delete(targetBufferIndex);
 
@@ -921,21 +972,34 @@ export class ArtistMapInst {
       this.artistMeshes.count -= 1;
     });
 
+    const existingUpdateStartIx =
+      this.artistMeshes.instanceMatrix.updateRange.count === -1
+        ? minUpdatedArtistIx
+        : this.artistMeshes.instanceMatrix.updateRange.offset /
+          this.artistMeshes.instanceMatrix.itemSize;
+    if (existingUpdateStartIx < minUpdatedArtistIx) {
+      minUpdatedArtistIx = existingUpdateStartIx;
+    }
+    const existingUpdateEndIx =
+      this.artistMeshes.instanceMatrix.updateRange.count === -1
+        ? maxUpdatedArtistIx
+        : this.artistMeshes.instanceMatrix.updateRange.offset /
+            this.artistMeshes.instanceMatrix.itemSize +
+          this.artistMeshes.instanceMatrix.count / this.artistMeshes.instanceMatrix.itemSize;
+    if (existingUpdateEndIx > maxUpdatedArtistIx) {
+      maxUpdatedArtistIx = existingUpdateEndIx;
+    }
+
     this.artistMeshes.instanceMatrix.needsUpdate = true;
+    this.artistMeshes.instanceMatrix.updateRange.offset =
+      minUpdatedArtistIx * this.artistMeshes.instanceMatrix.itemSize;
+    this.artistMeshes.instanceMatrix.updateRange.count =
+      (maxUpdatedArtistIx - minUpdatedArtistIx) * this.artistMeshes.instanceMatrix.itemSize;
     this.artistMeshes.instanceColor!.needsUpdate = true;
-  }
-
-  // private darkenNonBloomed() {
-  //   (this.nonBloomedConnectionsMesh.material as THREE.LineBasicMaterial).color.set(0);
-  // }
-
-  private restoreNonBloomed() {
-    // (this.nonBloomedConnectionsMesh.material as THREE.LineBasicMaterial).color =
-    //   new this.THREE.Color(0xa1fc03);
-    // (this.nonBloomedConnectionsMesh.material as THREE.LineBasicMaterial).needsUpdate = true;
-    (this.bloomedConnectionsMesh.material as THREE.LineBasicMaterial).color =
-      this.getConnectionColor();
-    (this.bloomedConnectionsMesh.material as THREE.LineBasicMaterial).needsUpdate = true;
+    this.artistMeshes.instanceColor!.updateRange.offset =
+      minUpdatedArtistIx * this.artistMeshes.instanceColor!.itemSize;
+    this.artistMeshes.instanceColor!.updateRange.count =
+      (maxUpdatedArtistIx - minUpdatedArtistIx) * this.artistMeshes.instanceColor!.itemSize;
   }
 
   private getConnectionColor(): THREE.Color {
@@ -963,7 +1027,7 @@ export class ArtistMapInst {
 
   private render(forward: number) {
     if (
-      this.secondSinceLastPositionUpdate > SECONDS_BETWEEN_POSITION_UPDATES &&
+      this.secondSinceLastPositionUpdate > getSecondsBetweenPositionUpdates(this.quality) &&
       !this.wasmPositionHandlerIsRunning
     ) {
       this.secondSinceLastPositionUpdate = 0;
@@ -1031,9 +1095,7 @@ export class ArtistMapInst {
 
     this.maybeAnimatePlayingArtist();
 
-    // this.darkenNonBloomed();
     this.bloomComposer.render();
-    this.restoreNonBloomed();
     this.finalComposer.render();
   }
 
@@ -1062,8 +1124,8 @@ export class ArtistMapInst {
       throw new UnreachableException(`Missing data for artist id=${artistID}`);
     }
     const size = getArtistSize(artistData.popularity, true, false) * 1.3;
-    const geometry = new this.THREE.IcosahedronGeometry(size, ARTIST_GEOMETRY_DETAIL + 2);
-    const material = new this.THREE.MeshPhongMaterial({
+    const geometry = new this.THREE.SphereGeometry(size, 26, 15);
+    const material = new this.THREE.MeshBasicMaterial({
       color: new this.THREE.Color(PLAYING_ARTIST_COLOR),
       opacity: 0.7,
       transparent: true,
@@ -1081,6 +1143,13 @@ export class ArtistMapInst {
     if (commands.length % 2 !== 0) {
       throw new UnreachableException('Invalid command count');
     }
+
+    this.artistMeshes.instanceMatrix.updateRange.count = -1;
+    this.artistMeshes.instanceMatrix.updateRange.offset = 0;
+    this.artistMeshes.instanceMatrix.needsUpdate = false;
+    this.artistMeshes.instanceColor!.updateRange.count = -1;
+    this.artistMeshes.instanceColor!.updateRange.offset = 0;
+    this.artistMeshes.instanceColor!.needsUpdate = false;
 
     const cmdCount = commands.length / 2;
 
@@ -1189,6 +1258,7 @@ export class ArtistMapInst {
   private animate() {
     this.pendingDrawCommands.forEach((commands) => this.processDrawCommands(commands));
     this.pendingDrawCommands = [];
+    this.frameCount += 1;
 
     if (this.cameraOverrides.direction) {
       const cameraDirection = this.camera.getWorldDirection(new this.THREE.Vector3());
@@ -1254,6 +1324,8 @@ export class ArtistMapInst {
     const timeDelta = this.clock.getDelta();
     this.secondSinceLastPositionUpdate += timeDelta;
 
+    this.maybeChangeQuality(timeDelta);
+
     if (this.controls.type === 'pointerlock') {
       const { forward, sideways, up } = this.movementInputHandler.getDirectionVector();
       this.controls.controls.moveRight(sideways * MOVEMENT_SPEED_UNITS_PER_SECOND * timeDelta);
@@ -1281,5 +1353,263 @@ export class ArtistMapInst {
     }
 
     requestAnimationFrame(() => this.animate());
+  }
+
+  private setQuality(newQuality: Quality) {
+    wasmClient.setQuality(newQuality);
+
+    switch (newQuality) {
+      case 11: {
+        this.artistMeshes.geometry = new this.THREE.SphereGeometry(
+          BASE_ARTIST_GEOMETRY_SIZE,
+          16,
+          11
+        );
+        break;
+      }
+      case 10: {
+        this.artistMeshes.geometry = new this.THREE.SphereGeometry(
+          BASE_ARTIST_GEOMETRY_SIZE,
+          16,
+          11
+        );
+        break;
+      }
+      case 9: {
+        this.artistMeshes.geometry = new this.THREE.SphereGeometry(
+          BASE_ARTIST_GEOMETRY_SIZE,
+          16,
+          11
+        );
+        break;
+      }
+      case 8: {
+        this.artistMeshes.geometry = new this.THREE.SphereGeometry(
+          BASE_ARTIST_GEOMETRY_SIZE,
+          16,
+          11
+        );
+        break;
+      }
+      case 7: {
+        this.artistMeshes.geometry = new this.THREE.SphereGeometry(
+          BASE_ARTIST_GEOMETRY_SIZE,
+          12,
+          8
+        );
+        break;
+      }
+      case 6: {
+        this.artistMeshes.geometry = new this.THREE.SphereGeometry(BASE_ARTIST_GEOMETRY_SIZE, 9, 6);
+        break;
+      }
+      case 5: {
+        this.artistMeshes.geometry = new this.THREE.SphereGeometry(BASE_ARTIST_GEOMETRY_SIZE, 9, 5);
+        break;
+      }
+      case 4: {
+        this.artistMeshes.geometry = new this.THREE.SphereGeometry(BASE_ARTIST_GEOMETRY_SIZE, 9, 5);
+        break;
+      }
+      default: {
+        console.error('Tried to set invalid quality: ', newQuality);
+      }
+    }
+
+    this.quality = newQuality;
+    this.lastQualityChangeTime = new Date().getTime();
+    this.lastFrameTimings = new Array<number>(FRAME_TIMING_BUFFER_SIZE).fill(-1);
+  }
+
+  private maybeChangeQuality(timeDelta: number) {
+    if (!this.isFocused) {
+      return;
+    }
+
+    this.lastFrameTimings.push(timeDelta);
+    this.lastFrameTimings.shift();
+
+    let frameCount = 0;
+    const averageFrameTime =
+      this.lastFrameTimings.reduce((acc, time) => {
+        if (time < 0) {
+          return acc;
+        }
+        frameCount += 1;
+        return acc + time;
+      }, 0) / frameCount;
+
+    const averageFPS = 1 / averageFrameTime;
+    if (this.frameCount % 20 === 0) {
+      // console.log({ quality: this.quality, averageFPS, timeDelta });
+    }
+
+    if (frameCount < 2 * 60) {
+      if (this.frameCount % 20 === 0) {
+        // console.warn('Too few measured frames; not adjusting quality');
+      }
+      return;
+    }
+    const now = new Date().getTime();
+    if (this.lastQualityChangeTime !== null && now - this.lastQualityChangeTime < 3_000) {
+      if (this.frameCount % 20 === 0) {
+        // console.warn('Quality changed recently; not adjusting', {
+        //   diffMS: now - this.lastQualityChangeTime,
+        // });
+      }
+      return;
+    }
+
+    switch (this.quality) {
+      case 11: {
+        if (averageFPS < 20) {
+          console.warn(
+            'Reducing to quality 5 because average FPS is low over the measurement period',
+            { curQuality: this.quality, averageFPS }
+          );
+          this.setQuality(5);
+        } else if (averageFPS < 50) {
+          console.warn(
+            'Reducing to quality 7 because average FPS is low over the measurement period',
+            { curQuality: this.quality, averageFPS }
+          );
+          this.setQuality(7);
+        }
+        break;
+      }
+      case 10: {
+        if (averageFPS < 20) {
+          console.warn(
+            'Reducing to quality 6 because average FPS is low over the measurement period',
+            { curQuality: this.quality, averageFPS }
+          );
+          this.setQuality(6);
+        } else if (averageFPS < 50) {
+          console.warn(
+            'Reducing to quality 8 because average FPS is low over the measurement period',
+            { curQuality: this.quality, averageFPS }
+          );
+          this.setQuality(8);
+        } else if (averageFPS > 58) {
+          console.warn(
+            'Increasing to quality 11 because average FPS is high over the measurement period',
+            { curQuality: this.quality, averageFPS }
+          );
+          this.setQuality(11);
+        }
+        break;
+      }
+      case 9: {
+        if (averageFPS < 20) {
+          console.warn(
+            'Reducing to quality 5 because average FPS is low over the measurement period',
+            { curQuality: this.quality, averageFPS }
+          );
+          this.setQuality(5);
+        } else if (averageFPS < 50) {
+          console.warn(
+            'Reducing to quality 6 because average FPS is low over the measurement period',
+            { curQuality: this.quality, averageFPS }
+          );
+          this.setQuality(6);
+        } else if (averageFPS > 59) {
+          console.warn(
+            'Increasing to quality 10 because average FPS is high over the measurement period',
+            { curQuality: this.quality, averageFPS }
+          );
+          this.setQuality(10);
+        }
+        break;
+      }
+      case 8: {
+        if (averageFPS < 20) {
+          console.warn(
+            'Reducing to quality 5 because average FPS is low over the measurement period',
+            { curQuality: this.quality, averageFPS }
+          );
+          this.setQuality(5);
+        } else if (averageFPS < 40) {
+          console.warn(
+            'Reducing to quality 6 because average FPS is low over the measurement period',
+            { curQuality: this.quality, averageFPS }
+          );
+          this.setQuality(6);
+        } else if (averageFPS > 59) {
+          console.warn(
+            'Increasing to quality 9 because average FPS is high over the measurement period',
+            { curQuality: this.quality, averageFPS }
+          );
+          this.setQuality(9);
+        }
+        break;
+      }
+      case 7: {
+        if (averageFPS < 20) {
+          console.warn(
+            'Reducing to quality 5 because average FPS is low over the measurement period',
+            { curQuality: this.quality, averageFPS }
+          );
+          this.setQuality(5);
+        } else if (averageFPS < 40) {
+          console.warn(
+            'Reducing to quality 6 because average FPS is low over the measurement period',
+            { curQuality: this.quality, averageFPS }
+          );
+          this.setQuality(6);
+        } else if (averageFPS > 59) {
+          console.warn(
+            'Increasing to quality 8 because average FPS is high over the measurement period',
+            { curQuality: this.quality, averageFPS }
+          );
+          this.setQuality(8);
+        }
+        break;
+      }
+      case 6: {
+        if (averageFPS < 40) {
+          console.warn(
+            'Reducing to quality 5 because average FPS is low over the measurement period',
+            { curQuality: this.quality, averageFPS }
+          );
+          this.setQuality(5);
+        } else if (averageFPS > 59) {
+          console.warn(
+            'Increasing to quality 7 because average FPS is high over the measurement period',
+            { curQuality: this.quality, averageFPS }
+          );
+          this.setQuality(7);
+        }
+        break;
+      }
+      case 5: {
+        if (averageFPS < 40) {
+          console.warn(
+            'Reducing to quality 4 because average FPS is low over the measurement period',
+            { curQuality: this.quality, averageFPS }
+          );
+          this.setQuality(4);
+        } else if (averageFPS > 59) {
+          console.warn(
+            'Increasing to quality 6 because average FPS is high over the measurement period',
+            { curQuality: this.quality, averageFPS }
+          );
+          this.setQuality(6);
+        }
+        break;
+      }
+      case 4: {
+        if (averageFPS > 55) {
+          console.warn(
+            'Increasing to quality 5 because average FPS is high over the measurement period',
+            { curQuality: this.quality, averageFPS }
+          );
+          this.setQuality(5);
+        }
+        break;
+      }
+      default: {
+        console.error('Unhandled quality: ', this.quality);
+      }
+    }
   }
 }

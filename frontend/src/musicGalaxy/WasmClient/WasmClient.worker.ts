@@ -157,6 +157,10 @@ export class WasmClient {
   public forceRenderArtistLabel(artistID: number): Uint32Array {
     return this.engine.force_render_artist_label(this.ctxPtr, artistID);
   }
+
+  public setQuality(newQuality: number) {
+    this.engine.set_quality(this.ctxPtr, newQuality);
+  }
 }
 
 Comlink.expose(new WasmClient());
