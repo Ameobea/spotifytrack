@@ -1,0 +1,57 @@
+.volume-and-return-to-orbit-mode-controls {
+  position: absolute;
+  top: 42px;
+  right: 8px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+
+  button {
+    background-color: rgba(155, 155, 155, 0.9);
+    color: #eee;
+    box-shadow: none;
+    border: 1px solid rgba(244, 244, 244, 0.4);
+    height: 28px;
+    cursor: pointer;
+  }
+
+  button.mute-button {
+    font-size: 18px;
+    width: 28px;
+    padding: 2px;
+    user-select: none;
+  }
+
+  button.return-to-orbit-mode-button {
+    font-size: 11px;
+    line-height: 1em;
+    width: 90px;
+    padding: 2px;
+    user-select: none;
+    padding: 1px 0px;
+    margin-left: 10px;
+  }
+
+  input[type='range'] {
+    transform: scale(0.8);
+  }
+}
+
+@media screen and (max-width: 768px) {
+  .volume-and-return-to-orbit-mode-controls {
+    top: 33px;
+    right: 2px;
+
+    button {
+      height: 24px;
+      cursor: pointer;
+    }
+
+    button.mute-button {
+      font-size: 16px;
+      width: 24px;
+      margin-left: -5px;
+      padding: 1px;
+    }
+  }
+}

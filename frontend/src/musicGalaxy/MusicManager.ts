@@ -19,11 +19,9 @@ interface PlayingArtist {
 }
 
 const pickPreviewURL = (previewURLs: string[]) => {
-  console.log(previewURLs);
   for (let i = 0; i < previewURLs.length; i++) {
     if (Math.random() < 0.4) {
       const subarray = previewURLs.slice(0, i + 1);
-      console.log(subarray);
       // Pick random element from subarray
       return subarray[Math.floor(Math.random() * subarray.length)];
     }
@@ -111,7 +109,6 @@ export default class MusicManager {
     onEnded: () => void
   ) {
     this.pendingPlayingArtistID = artistID;
-    // console.log(`start playback; artistID=${artistID}`);
     if (this.curPlaying) {
       console.warn(
         `Tried to start playing while a different artist was already playing; cur_playing=${this.curPlaying.artistID}, requested=${artistID}`
@@ -131,7 +128,7 @@ export default class MusicManager {
 
     const previewURLs = await getPreviewURLsByInternalID(artistID);
     if (!previewURLs || previewURLs.length === 0) {
-      // console.log('No preview URLs for artist_id=', artistID);
+      console.log('No preview URLs for artist_id=', artistID);
       onEnded();
       return;
     } else if (this.pendingPlayingArtistID !== artistID) {
@@ -214,5 +211,12 @@ export default class MusicManager {
       return;
     }
     this.curPlaying.panner.rolloffFactor = newRolloffFactor;
+  }
+
+  /**
+   * Sets new volume; should be on a scale from 0 to 1
+   */
+  public setVolume(newVolume: number) {
+    this.mainGain.gain.value = newVolume / 6;
   }
 }

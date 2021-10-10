@@ -13,6 +13,7 @@ import ArtistSearch, { CollapsedArtistSearch } from './ArtistSearch';
 import CheatSheet, { CollapsedCheatSheet } from './CheatSheet';
 import OnboardingSidebar from './OnboardingSidebar';
 import './OverlayUI.scss';
+import VolumeAndReturnToOrbitModeControls from './VolumeAndReturnToOrbitModeControls';
 
 interface State {
   labels: Map<string | number, { id: string | number; text: string; width: number }>;
@@ -27,7 +28,7 @@ type Action =
   | { type: 'deleteAllLabels' }
   | { type: 'pointerLocked' }
   | { type: 'pointerUnlocked' }
-  | { type: 'setIsOrbitMode'; isOrbitMode: boolean };
+  | { type: 'setControlMode'; newControlMode: 'orbit' | 'flyorbit' | 'pointerlock' };
 
 export class UIEventRegistry {
   private callback: ((actions: Action[]) => void) | null = null;
@@ -51,6 +52,8 @@ export class UIEventRegistry {
   public flyToArtistID: (artistID: number) => void;
   public lockPointer: () => void;
   public isMobile = getIsMobile();
+  public setVolume: (newVolume: number) => void;
+  public setControlMode: (newControlMode: 'orbit' | 'pointerlock' | 'flyorbit') => void;
 
   constructor({
     getLabelPosition,
@@ -61,6 +64,8 @@ export class UIEventRegistry {
     lookAtArtistID,
     lockPointer,
     flyToArtistID,
+    setVolume,
+    setControlMode,
   }: {
     getLabelPosition: (artistID: number | string) => {
       x: number;
@@ -76,6 +81,8 @@ export class UIEventRegistry {
     lookAtArtistID: (artistID: number) => void;
     lockPointer: () => void;
     flyToArtistID: (artistID: number) => void;
+    setVolume: (newVolume: number) => void;
+    setControlMode: (newControlMode: 'orbit' | 'pointerlock' | 'flyorbit') => void;
   }) {
     this.getLabelPosition = getLabelPosition;
     this.getShouldUpdate = getShouldUpdate;
@@ -85,6 +92,8 @@ export class UIEventRegistry {
     this.lookAtArtistID = lookAtArtistID;
     this.flyToArtistID = flyToArtistID;
     this.lockPointer = lockPointer;
+    this.setVolume = setVolume;
+    this.setControlMode = setControlMode;
   }
 
   public createLabel(id: number | string, text: string) {
@@ -107,8 +116,8 @@ export class UIEventRegistry {
     this.callback?.([{ type: 'pointerUnlocked' }]);
   }
 
-  public setIsOrbitMode(isOrbitMode: boolean) {
-    this.callback?.([{ type: 'setIsOrbitMode', isOrbitMode }]);
+  public onControlModeChange(newControlMode: 'orbit' | 'pointerlock' | 'flyorbit') {
+    this.callback?.([{ type: 'setControlMode', newControlMode }]);
   }
 
   public flush() {
@@ -327,7 +336,7 @@ const renderOrbitModeLabel = (
 const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height }) => {
   const labelState = useRef(initialState);
   const canvasRef = useRef<CanvasRenderingContext2D | null>(null);
-  const [isOrbitMode, setIsOrbitMode] = useState(true);
+  const [controlMode, setControlMode] = useState<'orbit' | 'flyorbit' | 'pointerlock'>('orbit');
   const [overlayState, dispatchOverlayAction] = useReducer(
     overlayStateReducer,
     buildDefaultOverlayState()
@@ -358,8 +367,8 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height }) =
             dispatchOverlayAction({ type: 'CLOSE_ONBOARDING' });
             dispatchOverlayAction({ type: 'OPEN_ARTIST_SEARCH' });
             break;
-          case 'setIsOrbitMode':
-            setIsOrbitMode(action.isOrbitMode);
+          case 'setControlMode':
+            setControlMode(action.newControlMode);
             break;
           default:
             console.warn('Unhandled action:', action);
@@ -532,9 +541,12 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height }) =
           isMobile={eventRegistry.isMobile}
         />
       ) : overlayState.artistSearchOpen ? (
-        <CheatSheet isMobile={eventRegistry.isMobile} isOrbitMode={isOrbitMode} />
+        <CheatSheet isMobile={eventRegistry.isMobile} isOrbitMode={controlMode === 'orbit'} />
       ) : (
-        <CollapsedCheatSheet isMobile={eventRegistry.isMobile} isOrbitMode={isOrbitMode} />
+        <CollapsedCheatSheet
+          isMobile={eventRegistry.isMobile}
+          isOrbitMode={controlMode === 'orbit'}
+        />
       )}
       {overlayState.artistSearchOpen ? (
         <>
@@ -555,6 +567,11 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height }) =
               eventRegistry.getIfArtistIDsAreInEmbedding(artistIDs)
             }
             onCloseUI={() => eventRegistry.onPointerLocked()}
+          />
+          <VolumeAndReturnToOrbitModeControls
+            onVolumeChange={(newVolume) => eventRegistry.setVolume(newVolume)}
+            onReturnToOrbitMode={() => eventRegistry.setControlMode('orbit')}
+            controlMode={controlMode}
           />
         </>
       ) : (

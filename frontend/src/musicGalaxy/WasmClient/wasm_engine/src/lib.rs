@@ -1096,6 +1096,18 @@ pub fn transition_to_orbit_mode(ctx: *mut ArtistMapCtx) -> Vec<u32> {
 
     let mut draw_commands = Vec::new();
 
+    if let Some(playing_artist_id) = ctx.playing_music_artist_id {
+        ctx.stop_playing_music(
+            playing_artist_id,
+            &mut draw_commands,
+            std::f32::NEG_INFINITY,
+            std::f32::NEG_INFINITY,
+            std::f32::NEG_INFINITY,
+            true,
+        );
+    }
+    ctx.most_recently_played_artist_ids.clear();
+
     for (id, state) in ctx.all_artists.iter_mut() {
         if state.render_state.contains(ArtistRenderState::RENDER_LABEL) {
             state.render_state.remove(ArtistRenderState::RENDER_LABEL);
@@ -1111,10 +1123,15 @@ pub fn transition_to_orbit_mode(ctx: *mut ArtistMapCtx) -> Vec<u32> {
             None => continue,
         };
         let (_, state) = &mut ctx.all_artists[artist_index];
+
         state
             .render_state
             .set(ArtistRenderState::RENDER_LABEL, true);
-        draw_commands.push(FETCH_ARTIST_DATA_CMD);
+        if state.render_state.contains(ArtistRenderState::HAS_NAME) {
+            draw_commands.push(ADD_LABEL_CMD);
+        } else {
+            draw_commands.push(FETCH_ARTIST_DATA_CMD);
+        }
         draw_commands.push(*artist_id);
     }
 

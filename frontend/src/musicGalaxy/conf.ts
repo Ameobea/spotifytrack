@@ -52,6 +52,7 @@ export const MUSIC_FADE_OUT_TIME_SECS = 3.6;
 export const MUSIC_DISTANCE_ROLLOFF_FACTOR = 0.84;
 export const SPEED_BOOST_MUSIC_DISTANCE_ROLLOFF_FACTOR = 0.6;
 export const MIN_MUSIC_PLAY_TIME_SECS = 0.8;
+export const DEFAULT_VOLUME = 0.6;
 
 export const getArtistSize = (
   popularity: number,

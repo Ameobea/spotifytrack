@@ -141,7 +141,8 @@ interface AutoFlyState {
   path: THREE.Curve<THREE.Vector3>;
   startTime: number;
   flightDurationMs: number;
-  artistID: number;
+  artistID: number | null;
+  callback?: () => void;
 }
 
 interface LookAtState {
@@ -280,6 +281,32 @@ export class ArtistMapInst {
       this.controls.controls.lock();
       this.isPointerLocked = true;
     },
+    setVolume: (newVolume: number) => this.musicManager.setVolume(newVolume),
+    setControlMode: (newControlMode: 'orbit' | 'flyorbit' | 'pointerlock') => {
+      if (newControlMode === 'orbit') {
+        this.cameraOverrides.movement = {
+          path: new this.THREE.QuadraticBezierCurve3(
+            this.camera.position.clone(),
+            new this.THREE.Vector3(0, 0, 0),
+            new this.THREE.Vector3(
+              INITIAL_ORBIT_POSITION.x,
+              INITIAL_ORBIT_POSITION.y,
+              INITIAL_ORBIT_POSITION.z
+            )
+          ),
+          startTime: new Date().getTime(),
+          flightDurationMs: 2800,
+          artistID: null,
+          callback: () => {
+            this.cameraOverrides.direction = {
+              target: new this.THREE.Vector3(0, 0, 0),
+              pivotCoefficient: 0.973,
+            };
+          },
+        };
+      }
+      this.initControls(newControlMode);
+    },
   });
 
   private lookAtArtistID(artistID: number) {
@@ -297,27 +324,8 @@ export class ArtistMapInst {
     this.cameraOverrides.direction = { target: pos, pivotCoefficient: CAMERA_PIVOT_COEFFICIENT };
   }
 
-  private flyToArtistID(artistID: number) {
-    if (this.isMobile) {
-      this.eventRegistry.onPointerLocked();
-    }
-
-    const flyCameraMode = this.isMobile ? ('flyorbit' as const) : ('pointerlock' as const);
-
-    if (this.controls.type !== flyCameraMode) {
-      this.initControls(flyCameraMode);
-      // TODO: Animate zoom
-      this.camera.zoom = 1;
-      this.camera.fov = DEFAULT_FOV;
-      this.eventRegistry.currentFOV = DEFAULT_FOV;
-      this.camera.updateProjectionMatrix();
-    }
-
+  private flyToPosition(dstPos: THREE.Vector3, artistID: number | null) {
     const srcPos = this.camera.position.clone();
-    const dstPos = this.artistDataByID.get(artistID)?.pos;
-    if (!dstPos) {
-      throw new UnreachableException();
-    }
 
     // See written notes for this
     const midpoint = dstPos.clone().add(srcPos).multiplyScalar(0.5);
@@ -344,7 +352,33 @@ export class ArtistMapInst {
       flightDurationMs: getArtistFlyToDurationMs(dstPos.distanceTo(srcPos)),
       artistID,
     };
-    console.log(`Flying to ${artistID}`, this.cameraOverrides.movement);
+    if (artistID !== null) {
+      console.log(`Flying to ${artistID}`, this.cameraOverrides.movement);
+    }
+  }
+
+  private flyToArtistID(artistID: number) {
+    if (this.isMobile) {
+      this.eventRegistry.onPointerLocked();
+    }
+
+    const flyCameraMode = this.isMobile ? ('flyorbit' as const) : ('pointerlock' as const);
+
+    if (this.controls.type !== flyCameraMode) {
+      this.initControls(flyCameraMode);
+      // TODO: Animate zoom
+      this.camera.zoom = 1;
+      this.camera.fov = DEFAULT_FOV;
+      this.eventRegistry.currentFOV = DEFAULT_FOV;
+      this.camera.updateProjectionMatrix();
+    }
+
+    const dstPos = this.artistDataByID.get(artistID)?.pos;
+    if (!dstPos) {
+      throw new UnreachableException();
+    }
+
+    this.flyToPosition(dstPos, artistID);
   }
 
   public handleScroll(deltaY: number) {
@@ -704,17 +738,14 @@ export class ArtistMapInst {
   }
 
   private initControls(controlMode: 'pointerlock' | 'orbit' | 'flyorbit') {
-    if (
-      (this.eventRegistry.controlMode === 'pointerlock' && controlMode === 'pointerlock') ||
-      !this.controls
-    ) {
+    if ((this.eventRegistry.controlMode !== 'orbit' && controlMode === 'orbit') || !this.controls) {
       this.eventRegistry.deleteAllLabels();
       wasmClient
         .transitionToOrbitMode()
         .then((drawCommands) => this.pendingDrawCommands.push(drawCommands));
     }
     this.eventRegistry.controlMode = controlMode;
-    this.eventRegistry.setIsOrbitMode(controlMode === 'orbit');
+    this.eventRegistry.onControlModeChange(controlMode);
 
     if (this.controls) {
       this.controls.controls.dispose();
@@ -1356,10 +1387,13 @@ export class ArtistMapInst {
         (curTime - this.cameraOverrides.movement.startTime) /
         this.cameraOverrides.movement.flightDurationMs;
       if (progress >= 1) {
-        wasmClient
-          .handleArtistManualPlay(this.cameraOverrides.movement.artistID)
-          .then((drawCommands) => this.pendingDrawCommands.push(drawCommands));
+        if (this.cameraOverrides.movement.artistID !== null) {
+          wasmClient
+            .handleArtistManualPlay(this.cameraOverrides.movement.artistID)
+            .then((drawCommands) => this.pendingDrawCommands.push(drawCommands));
+        }
         console.log('Camera movement finished');
+        this.cameraOverrides.movement.callback?.();
         this.cameraOverrides.movement = null;
 
         // Force position update
