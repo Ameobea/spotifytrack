@@ -65,6 +65,7 @@ pub struct ArtistMapCtx {
     pub is_mobile: bool,
     pub quality: u8,
     pub manual_play_artist_id: Option<u32>,
+    pub received_chunks: HashSet<(u32, u32)>,
 }
 
 const DISTANCE_MULTIPLIER: [f32; 3] = [50500., 50400., 54130.];
@@ -125,6 +126,7 @@ impl Default for ArtistMapCtx {
             is_mobile: false,
             quality: DEFAULT_QUALITY,
             manual_play_artist_id: None,
+            received_chunks: HashSet::default(),
         }
     }
 }
@@ -218,6 +220,8 @@ impl ArtistMapCtx {
             .next()
             .unwrap_or_default();
 
+        let quality_rng_adjustment = get_connection_render_quality_rng_adjustment(self.quality);
+
         for artist_id in new_artist_ids {
             let src_artist_ix = *self.artists_indices_by_id.get(artist_id).unwrap();
             let src = &self.all_artists[src_artist_ix].1;
@@ -240,7 +244,7 @@ impl ArtistMapCtx {
                 let related_artist_ix = relationship.related_artist_index;
                 let dst = &self.all_artists[related_artist_ix].1;
 
-                let should_render = should_render_connection(&src, &dst);
+                let should_render = should_render_connection(quality_rng_adjustment, &src, &dst);
                 if !should_render {
                     continue;
                 }
@@ -431,7 +435,7 @@ pub fn should_render_label(
         quality_diff -= 1;
     }
     while quality_diff > 0 {
-        score *= 1.15;
+        score *= 1.087;
         quality_diff += 1;
     }
 
@@ -625,7 +629,7 @@ fn should_render_artist(
 
     let mut quality_diff = DEFAULT_QUALITY as i8 - quality as i8;
     while quality_diff > 0 {
-        score *= if is_mobile { 1.2 } else { 1.76 };
+        score *= if is_mobile { 1.2 } else { 1.34 };
         quality_diff -= 1;
     }
     while quality_diff < 0 {
@@ -640,20 +644,50 @@ static mut RNG: *mut pcg::Pcg = std::ptr::null_mut();
 
 fn rng() -> &'static mut pcg::Pcg { unsafe { &mut *RNG } }
 
-fn should_render_connection(src: &ArtistState, dst: &ArtistState) -> bool {
-    let val = rng().gen_range(0.0f64, 1.0f64);
+fn get_connection_render_quality_rng_adjustment(quality: u8) -> f64 {
+    let mut quality_rng_adjustment = -0.1;
+
+    let mut quality_diff: i8 = DEFAULT_QUALITY as i8 - quality as i8;
+    // If quality is lower than default (difference is positive), we decrease the bottom range of
+    // generated random values for the score so that it's less likely at all distances that the
+    // connection is rendered
+    //
+    // rng range goes from (0, 1) to something like (-0.2, 1).
+    while quality_diff > 0 {
+        quality_rng_adjustment -= 0.15;
+        quality_diff -= 1;
+    }
+    // If quality is higher than default (difference is negative), we increase the bottom range of
+    // generated random values for the score so that it's less likely at all distances that the
+    // connection is rendered
+    //
+    // rng range goes from (0, 1) to something like (0.2, 1).
+    while quality_diff < 0 {
+        quality_rng_adjustment += 0.1;
+        quality_diff += 1;
+    }
+
+    quality_rng_adjustment
+}
+
+fn should_render_connection(
+    quality_rng_adjustment: f64,
+    src: &ArtistState,
+    dst: &ArtistState,
+) -> bool {
+    let val = rng().gen_range(quality_rng_adjustment, 1.0f64);
     let dist = distance(&src.position, &dst.position);
 
     if dist > 70000. {
         return false;
     } else if dist > 25000. {
-        return val > 0.96;
+        return val > 0.994;
     } else if dist > 17000. {
-        return val > 0.73;
+        return val > 0.82;
     } else if dist > 8000. {
-        return val > 0.45;
+        return val > 0.28;
     } else {
-        return val > 0.2;
+        return val > 0.185;
     }
 }
 
@@ -849,6 +883,7 @@ pub fn handle_artist_relationship_data(
     chunk_ix: u32,
 ) -> usize {
     let ctx = unsafe { &mut *ctx };
+    ctx.received_chunks.insert((chunk_ix, chunk_size));
 
     let artist_ids = ctx
         .sorted_artist_ids
@@ -908,6 +943,12 @@ pub fn handle_artist_relationship_data(
 pub fn get_connections_buffer_ptr(ctx: *mut ArtistMapCtx) -> *const f32 {
     let ctx = unsafe { &mut *ctx };
     ctx.connections_buffer.as_ptr() as *const f32
+}
+
+#[wasm_bindgen]
+pub fn get_connections_buffer_length(ctx: *mut ArtistMapCtx) -> usize {
+    let ctx = unsafe { &mut *ctx };
+    ctx.connections_buffer.len() * 6
 }
 
 #[wasm_bindgen]
@@ -1209,4 +1250,35 @@ pub fn force_render_artist_label(ctx: *mut ArtistMapCtx, artist_id: u32) -> Vec<
 pub fn set_quality(ctx: *mut ArtistMapCtx, new_quality: u8) {
     let ctx = unsafe { &mut *ctx };
     ctx.quality = new_quality;
+
+    if new_quality > DEFAULT_QUALITY {
+        info!("Not updating connections buffer because new quality is greater than default");
+        return;
+    }
+
+    // Re-build connections geometry to take into account new quality
+    info!(
+        "Set quality to {}; building new connections data buffer...",
+        new_quality
+    );
+    for relationships in &mut ctx.all_artist_relationships {
+        for relationship in &mut relationships.related_artist_indices {
+            relationship.connections_buffer_index = None;
+        }
+    }
+    ctx.connections_buffer.clear();
+    ctx.rendered_connections.clear();
+
+    info!(
+        "Updating connections buffer with connections from {} chunks: {:?}",
+        ctx.received_chunks.len(),
+        ctx.received_chunks
+    );
+
+    let mut chunks_to_rerender = ctx.received_chunks.iter().cloned().collect::<Vec<_>>();
+    chunks_to_rerender.sort_unstable();
+
+    for (chunk_ix, chunk_size) in chunks_to_rerender {
+        ctx.update_connections_buffer(chunk_size, chunk_ix);
+    }
 }

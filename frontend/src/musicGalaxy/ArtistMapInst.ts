@@ -4,6 +4,7 @@ import type { EffectComposer } from 'three/examples/jsm/postprocessing/EffectCom
 import * as Comlink from 'comlink';
 import { UnimplementedError, UnreachableException } from 'ameo-utils';
 import type { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass';
+import type Stats from 'three/examples/jsm/libs/stats.module';
 
 import { fetchPackedArtistPositions, getAllTopArtistInternalIDsForUser } from './api';
 import {
@@ -14,7 +15,6 @@ import {
   ARTIST_GEOMETRY_OPACITY,
   DEFAULT_FOV,
   getArtistColor,
-  BLOOMED_CONNECTION_OPACITY,
   BLOOM_PARAMS,
   SHIFT_SPEED_MULTIPLIER,
   MAX_ARTIST_PLAY_CLICK_DISTANCE,
@@ -30,6 +30,9 @@ import {
   INITIAL_ORBIT_TARGET,
   FRAME_TIMING_BUFFER_SIZE,
   getSecondsBetweenPositionUpdates,
+  DEFAULT_QUALITY,
+  getBloomedConnectionOpacity,
+  getHighlightedArtistsInterOpacity,
 } from './conf';
 import DataFetchClient, { ArtistMapDataWithId, ArtistRelationshipData } from './DataFetchClient';
 import { MovementInputHandler } from './MovementInputHandler';
@@ -45,6 +48,7 @@ interface ThreeExtra {
   ShaderPass: typeof import('three/examples/jsm/postprocessing/ShaderPass')['ShaderPass'];
   UnrealBloomPass: typeof import('three/examples/jsm/postprocessing/UnrealBloomPass')['UnrealBloomPass'];
   EffectComposer: typeof import('three/examples/jsm/postprocessing/EffectComposer')['EffectComposer'];
+  Stats: typeof import('three/examples/jsm/libs/stats.module');
 }
 
 const dataFetchClient = new DataFetchClient();
@@ -84,6 +88,7 @@ export const initArtistMapInst = async (canvas: HTMLCanvasElement): Promise<Arti
       ShaderPass,
       UnrealBloomPass,
       EffectComposer,
+      Stats,
     },
   ] = await Promise.all([
     fetchPackedArtistPositions().then(async (packedArtistPositions) => {
@@ -107,6 +112,7 @@ export const initArtistMapInst = async (canvas: HTMLCanvasElement): Promise<Arti
     ShaderPass,
     UnrealBloomPass,
     EffectComposer,
+    Stats,
   };
 
   const allArtistData = await wasmClient.getAllArtistData();
@@ -150,12 +156,22 @@ interface LookAtState {
   pivotCoefficient: number;
 }
 
-type Quality = 11 | 10 | 9 | 8 | 7 | 6 | 5 | 4;
+export type Quality = 11 | 10 | 9 | 8 | 7 | 6 | 5 | 4;
 
 export const getIsMobile = () =>
   (window.innerWidth > 0 ? window.innerWidth : screen.width) < 768 ||
-  (window.innerHeight > 0 ? window.innerHeight : screen.height) < 768 ||
+  (window.innerHeight > 0 ? window.innerHeight : screen.height) < 480 ||
   /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+export const getDevicePixelRatio = () => {
+  // Force pixel ratio to be 1 if on Macs; many older-gen macs (2015 and older) and I'm sure mac minis etc. aren't
+  // powerful enough to render performantly with large retina screens that have subpixel scaling.
+  if (['MacIntel', 'iPad'].includes(navigator.platform)) {
+    return 1;
+  }
+
+  return window.devicePixelRatio ?? 1;
+};
 
 export class ArtistMapInst {
   public THREE: typeof import('three');
@@ -176,19 +192,18 @@ export class ArtistMapInst {
   public isMobile = getIsMobile();
   private cachedCanvasWidth: number;
   private cachedCanvasHeight: number;
-  private cachedDevicePixelRatio = window.devicePixelRatio ?? 1;
-  private quality: Quality = 7;
+  private cachedDevicePixelRatio = getDevicePixelRatio();
+  private quality: Quality = DEFAULT_QUALITY;
   private lastFrameTimings = new Array<number>(FRAME_TIMING_BUFFER_SIZE).fill(-1);
   private lastQualityChangeTime: number | null = null;
   private frameCount = 0;
   private isFocused = true;
+  private stats: Stats | null = null;
 
   private renderedArtistBufferIndicesByArtistID: Map<number, number> = new Map();
   private artistIDByRenderedArtistBufferIndex: Map<number, number> = new Map();
   private bloomedConnectionsGeometry: THREE.BufferGeometry;
   private bloomedConnectionsMesh: THREE.Line;
-  // private nonBloomedConnectionsGeometry: THREE.BufferGeometry;
-  // private nonBloomedConnectionsMesh: THREE.Line;
   private highlightedArtistsIntraLines: THREE.LineSegments | null = null;
   private artistDataByID: Map<number, { pos: THREE.Vector3; popularity: number }> = new Map();
   private pendingDrawCommands: Uint32Array[] = [];
@@ -202,6 +217,7 @@ export class ArtistMapInst {
   private wasmPositionHandlerIsRunning = false;
   private highlightedArtistIDs: Set<number> = new Set();
   private raycaster: THREE.Raycaster;
+  private isDevMode = true;
   private cameraOverrides: {
     movement: AutoFlyState | null;
     direction: LookAtState | null;
@@ -214,7 +230,6 @@ export class ArtistMapInst {
 
   public getLabelPosition(labelID: string | number) {
     if (typeof labelID === 'string') {
-      // TODO
       throw new UnimplementedError();
     }
 
@@ -476,26 +491,43 @@ export class ArtistMapInst {
       canvas,
       antialias: true,
       precision: 'lowp',
+      powerPreference: 'high-performance',
+      alpha: true,
     });
-    this.renderer.setPixelRatio(window.devicePixelRatio ?? 1);
+    this.renderer.setPixelRatio(getDevicePixelRatio());
     this.renderer.toneMapping = THREE.ReinhardToneMapping;
-    this.renderer.toneMappingExposure = 1.91;
+    this.renderer.toneMappingExposure = navigator.platform === 'MacIntel' ? 1.87 : 1.644;
     this.clock = new THREE.Clock();
 
+    if (!this.isMobile) {
+      this.stats = this.THREE_EXTRA.Stats.default();
+      this.stats.domElement.style.position = 'absolute';
+      this.stats.domElement.style.bottom = '0px';
+      this.stats.domElement.style.left = '0px';
+      this.stats.domElement.style.top = 'unset';
+      canvas.parentNode!.appendChild(this.stats.dom);
+    }
+
     window.addEventListener('keydown', (evt) => {
+      if (!this.isDevMode) {
+        return;
+      }
+
       switch (evt.key) {
         case 'ArrowUp':
           this.renderer.toneMappingExposure += 0.01;
+          console.log({ exposure: this.renderer.toneMappingExposure });
           break;
         case 'ArrowDown':
           this.renderer.toneMappingExposure -= 0.01;
           if (this.renderer.toneMappingExposure < 0) {
             this.renderer.toneMappingExposure = 0;
           }
+          console.log({ exposure: this.renderer.toneMappingExposure });
           break;
         case '1':
-          this.renderer.toneMapping = THREE.LinearToneMapping;
-          this.renderer.toneMappingExposure = 0.74;
+          this.renderer.toneMapping = THREE.ReinhardToneMapping;
+          this.renderer.toneMappingExposure = navigator.platform === 'MacIntel' ? 1.87 : 1.644;
           break;
         case '2':
           this.renderer.toneMapping = THREE.ReinhardToneMapping;
@@ -507,7 +539,7 @@ export class ArtistMapInst {
           break;
         case '4':
           this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-          this.renderer.toneMappingExposure = 0.8;
+          this.renderer.toneMappingExposure = 1.4;
           break;
         case '5':
           this.renderer.toneMapping = THREE.NoToneMapping;
@@ -535,8 +567,6 @@ export class ArtistMapInst {
           }
           break;
       }
-
-      // console.log({ exposure: this.renderer.toneMappingExposure });
     });
 
     window.addEventListener('focus', () => {
@@ -570,6 +600,7 @@ export class ArtistMapInst {
         return;
       }
 
+      const pixelRatio = getDevicePixelRatio();
       const intersection = (() => {
         for (let tolerancePx = 0; tolerancePx < 5; tolerancePx++) {
           for (const signum of [-1, 1]) {
@@ -577,16 +608,8 @@ export class ArtistMapInst {
             const srcY = endPos.y + signum * tolerancePx;
 
             // Convert touch position to normalized device coordinates from -1 to 1
-            const x = clamp(
-              -1,
-              1,
-              (srcX / (this.cachedCanvasWidth / window.devicePixelRatio ?? 1)) * 2 - 1
-            );
-            const y = clamp(
-              -1,
-              1,
-              -(srcY / (this.cachedCanvasHeight / window.devicePixelRatio ?? 1)) * 2 + 1
-            );
+            const x = clamp(-1, 1, (srcX / (this.cachedCanvasWidth / pixelRatio)) * 2 - 1);
+            const y = clamp(-1, 1, -(srcY / (this.cachedCanvasHeight / pixelRatio)) * 2 + 1);
 
             this.raycaster.setFromCamera(new this.THREE.Vector2(x, y), this.camera);
             const intersection = this.raycaster.intersectObject(this.artistMeshes, false)[0];
@@ -664,25 +687,13 @@ export class ArtistMapInst {
       color: BASE_CONNECTION_COLOR,
       transparent: true,
       depthWrite: false,
-      opacity: BLOOMED_CONNECTION_OPACITY,
+      opacity: getBloomedConnectionOpacity(this.quality),
     });
     this.bloomedConnectionsMesh = new this.THREE.LineSegments(
       this.bloomedConnectionsGeometry,
       bloomedLineMaterial
     );
     this.scene.add(this.bloomedConnectionsMesh);
-
-    // this.nonBloomedConnectionsGeometry = new this.THREE.BufferGeometry();
-    // const nonBloomedLineMaterial = new this.THREE.LineBasicMaterial({
-    //   color: 0xa1fc03,
-    //   transparent: true,
-    //   opacity: 0.0,
-    // });
-    // this.nonBloomedConnectionsMesh = new this.THREE.Line(
-    //   this.nonBloomedConnectionsGeometry,
-    //   nonBloomedLineMaterial
-    // );
-    // this.scene.add(this.nonBloomedConnectionsMesh);
 
     const artistCount = allArtistData.length / 5;
     const artistPointsPositionsAttribute = new this.THREE.BufferAttribute(
@@ -879,9 +890,11 @@ export class ArtistMapInst {
     if (relationshipData.res.byteLength === 4) {
       // Render connections between highlighted artists
       if (this.highlightedArtistIDs.size > 0) {
-        const { intra, inter } = await wasmClient.getHighlightedConnecionsBackbone(
+        const { intra, inter } = await wasmClient.getHighlightedConnectionsBackbone(
           new Uint32Array([...this.highlightedArtistIDs])
         );
+        const interLineCount = inter.length / 6;
+        const intraLineCount = intra.length / 6;
 
         // Build more opaque lines between related highlighted artists and somewhat less opaque lines between
         // highlighted artists and non-highlighted artists they are connected to
@@ -904,9 +917,10 @@ export class ArtistMapInst {
         interBufferGeometry.setAttribute('position', new this.THREE.BufferAttribute(inter, 3));
         const interLines = new this.THREE.LineSegments(interBufferGeometry);
         interLines.material = new this.THREE.LineBasicMaterial({
-          color: HIGHLIGHTED_ARTIST_COLOR,
+          color: 0x914a07,
           transparent: true,
-          opacity: 0.01,
+          depthWrite: false,
+          opacity: getHighlightedArtistsInterOpacity(intraLineCount, interLineCount),
         });
         this.scene.add(interLines);
       }
@@ -922,19 +936,22 @@ export class ArtistMapInst {
         relationshipData.chunkSize,
         relationshipData.chunkIx
       )
-      .then((connectionsDataBuffer) => {
-        this.bloomedConnectionsGeometry.setAttribute(
-          'position',
-          new this.THREE.BufferAttribute(connectionsDataBuffer, 3)
-        );
-        this.bloomedConnectionsGeometry.boundingSphere?.set(
-          new this.THREE.Vector3(0, 0, 0),
-          1_000_000_000
-        );
-      });
+      .then((connectionsDataBuffer) => this.updateConnectionsBuffer(connectionsDataBuffer));
 
     // Fetch the next chunk
     dataFetchClient.fetchArtistRelationships(relationshipData.chunkIx + 1);
+  }
+
+  private updateConnectionsBuffer(connectionsDataBuffer: Float32Array) {
+    console.log(
+      'Updating connections data buffer; new rendered connection count: ',
+      connectionsDataBuffer.length / 6
+    );
+    this.bloomedConnectionsGeometry.setAttribute(
+      'position',
+      new this.THREE.BufferAttribute(connectionsDataBuffer, 3)
+    );
+    this.bloomedConnectionsGeometry.computeBoundingSphere();
   }
 
   public renderArtists(artistsToRender: number[]) {
@@ -1442,11 +1459,21 @@ export class ArtistMapInst {
       this.render(4);
     }
 
+    this.stats?.update();
+
     requestAnimationFrame(() => this.animate());
   }
 
   private setQuality(newQuality: Quality) {
-    wasmClient.setQuality(newQuality);
+    this.quality = newQuality;
+    this.lastQualityChangeTime = new Date().getTime();
+    this.lastFrameTimings = new Array<number>(FRAME_TIMING_BUFFER_SIZE).fill(-1);
+
+    wasmClient.setQuality(newQuality).then((connectionsDataBuffer) => {
+      this.updateConnectionsBuffer(connectionsDataBuffer);
+      (this.bloomedConnectionsMesh.material as THREE.LineBasicMaterial).opacity =
+        getBloomedConnectionOpacity(newQuality);
+    });
 
     switch (newQuality) {
       case 11: {
@@ -1460,7 +1487,7 @@ export class ArtistMapInst {
       case 10: {
         this.artistMeshes.geometry = new this.THREE.SphereGeometry(
           BASE_ARTIST_GEOMETRY_SIZE,
-          15,
+          14,
           9
         );
         break;
@@ -1468,16 +1495,16 @@ export class ArtistMapInst {
       case 9: {
         this.artistMeshes.geometry = new this.THREE.SphereGeometry(
           BASE_ARTIST_GEOMETRY_SIZE,
-          14,
-          9
+          13,
+          8
         );
         break;
       }
       case 8: {
         this.artistMeshes.geometry = new this.THREE.SphereGeometry(
           BASE_ARTIST_GEOMETRY_SIZE,
-          13,
-          8
+          12,
+          7
         );
         break;
       }
@@ -1505,10 +1532,6 @@ export class ArtistMapInst {
         console.error('Tried to set invalid quality: ', newQuality);
       }
     }
-
-    this.quality = newQuality;
-    this.lastQualityChangeTime = new Date().getTime();
-    this.lastFrameTimings = new Array<number>(FRAME_TIMING_BUFFER_SIZE).fill(-1);
   }
 
   private maybeChangeQuality(timeDelta: number) {
@@ -1522,7 +1545,7 @@ export class ArtistMapInst {
     let frameCount = 0;
     const averageFrameTime =
       this.lastFrameTimings.reduce((acc, time) => {
-        if (time < 0) {
+        if (time < 0 || time > 1300) {
           return acc;
         }
         frameCount += 1;
@@ -1530,23 +1553,12 @@ export class ArtistMapInst {
       }, 0) / frameCount;
 
     const averageFPS = 1 / averageFrameTime;
-    if (this.frameCount % 20 === 0) {
-      // console.log({ quality: this.quality, averageFPS, timeDelta });
-    }
 
     if (frameCount < 2 * 60) {
-      if (this.frameCount % 20 === 0) {
-        // console.warn('Too few measured frames; not adjusting quality');
-      }
       return;
     }
     const now = new Date().getTime();
     if (this.lastQualityChangeTime !== null && now - this.lastQualityChangeTime < 3_000) {
-      if (this.frameCount % 20 === 0) {
-        // console.warn('Quality changed recently; not adjusting', {
-        //   diffMS: now - this.lastQualityChangeTime,
-        // });
-      }
       return;
     }
 
@@ -1554,32 +1566,32 @@ export class ArtistMapInst {
       case 11: {
         if (averageFPS < 20) {
           console.warn(
-            'Reducing to quality 5 because average FPS is low over the measurement period',
+            'Reducing to quality 8 because average FPS is low over the measurement period',
             { curQuality: this.quality, averageFPS }
           );
-          this.setQuality(5);
+          this.setQuality(8);
         } else if (averageFPS < 50) {
           console.warn(
-            'Reducing to quality 7 because average FPS is low over the measurement period',
+            'Reducing to quality 9 because average FPS is low over the measurement period',
             { curQuality: this.quality, averageFPS }
           );
-          this.setQuality(7);
+          this.setQuality(9);
         }
         break;
       }
       case 10: {
         if (averageFPS < 20) {
           console.warn(
-            'Reducing to quality 6 because average FPS is low over the measurement period',
-            { curQuality: this.quality, averageFPS }
-          );
-          this.setQuality(6);
-        } else if (averageFPS < 50) {
-          console.warn(
             'Reducing to quality 8 because average FPS is low over the measurement period',
             { curQuality: this.quality, averageFPS }
           );
           this.setQuality(8);
+        } else if (averageFPS < 50) {
+          console.warn(
+            'Reducing to quality 9 because average FPS is low over the measurement period',
+            { curQuality: this.quality, averageFPS }
+          );
+          this.setQuality(9);
         } else if (averageFPS > 58) {
           console.warn(
             'Increasing to quality 11 because average FPS is high over the measurement period',

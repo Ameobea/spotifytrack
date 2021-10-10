@@ -87,6 +87,15 @@ export class WasmClient {
     return Comlink.transfer(drawCommands, [drawCommands.buffer]);
   }
 
+  private getConnectionsBuffer(): Float32Array {
+    const connectionsBufferPtr = this.engine.get_connections_buffer_ptr(this.ctxPtr);
+    const connectionsBufferLength = this.engine.get_connections_buffer_length(this.ctxPtr);
+    const memory: WebAssembly.Memory = this.engine.get_memory();
+    return new Float32Array(
+      memory.buffer.slice(connectionsBufferPtr, connectionsBufferPtr + connectionsBufferLength * 4)
+    );
+  }
+
   /**
    * Returns the new connection data buffer to be rendered
    */
@@ -95,17 +104,9 @@ export class WasmClient {
     chunkSize: number,
     chunkIx: number
   ): Float32Array {
-    const connectionsBufferLength = this.engine.handle_artist_relationship_data(
-      this.ctxPtr,
-      relationshipData,
-      chunkSize,
-      chunkIx
-    );
-    const connectionsBufferPtr = this.engine.get_connections_buffer_ptr(this.ctxPtr);
-    const memory: WebAssembly.Memory = this.engine.get_memory();
-    const connectionsBuffer = new Float32Array(
-      memory.buffer.slice(connectionsBufferPtr, connectionsBufferPtr + connectionsBufferLength * 4)
-    );
+    this.engine.handle_artist_relationship_data(this.ctxPtr, relationshipData, chunkSize, chunkIx);
+
+    const connectionsBuffer = this.getConnectionsBuffer();
     return Comlink.transfer(connectionsBuffer, [connectionsBuffer.buffer]);
   }
 
@@ -132,7 +133,7 @@ export class WasmClient {
     return Comlink.transfer(drawCommands, [drawCommands.buffer]);
   }
 
-  public getHighlightedConnecionsBackbone(highlightedArtistIDs: Uint32Array): {
+  public getHighlightedConnectionsBackbone(highlightedArtistIDs: Uint32Array): {
     intra: Float32Array;
     inter: Float32Array;
   } {
@@ -158,8 +159,13 @@ export class WasmClient {
     return this.engine.force_render_artist_label(this.ctxPtr, artistID);
   }
 
-  public setQuality(newQuality: number) {
+  /**
+   * Returns a new artist relationships connections buffer to be rendered
+   */
+  public setQuality(newQuality: number): Float32Array {
     this.engine.set_quality(this.ctxPtr, newQuality);
+    const connectionsBuffer = this.getConnectionsBuffer();
+    return Comlink.transfer(connectionsBuffer, [connectionsBuffer.buffer]);
   }
 
   /**

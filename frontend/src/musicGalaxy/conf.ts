@@ -1,7 +1,9 @@
-export const BASE_ARTIST_COLOR = 0x0f6e7a;
+import type { Quality } from './ArtistMapInst';
+
+export const BASE_ARTIST_COLOR = 0x1ab3d3;
 export const PLAYING_ARTIST_COLOR = 0xfe54bb;
-export const HIGHLIGHTED_ARTIST_COLOR = 0xbd5a03;
-export const BASE_CONNECTION_COLOR = 0x2288ee;
+export const HIGHLIGHTED_ARTIST_COLOR = 0xad4a03;
+export const BASE_CONNECTION_COLOR = 0x0088dd;
 export const ARTIST_GEOMETRY_DETAIL = 3;
 export const AMBIENT_LIGHT_COLOR = 0x727272;
 export const ARTIST_LABEL_TEXT_COLOR = '#f2f2f2';
@@ -12,7 +14,7 @@ export const CAMERA_OVERRIDE_TARGET_TOLERANCE = 0.02;
 export const FRAME_TIMING_BUFFER_SIZE = Math.round(60 * 2);
 
 export const MOVEMENT_SPEED_UNITS_PER_SECOND = 3020;
-export const SHIFT_SPEED_MULTIPLIER = 2.365;
+export const SHIFT_SPEED_MULTIPLIER = 2.395;
 export const MAX_ARTIST_PLAY_CLICK_DISTANCE = 30_000;
 export const INITIAL_ORBIT_POSITION = {
   x: -4160.963871145082,
@@ -33,8 +35,50 @@ export const INITIAL_ORBIT_TARGET = {
 export const PLAYING_ARTIST_LABEL_FADE_OUT_TIME_MS = 2800;
 
 export const BASE_ARTIST_GEOMETRY_SIZE = 1.7;
-export const ARTIST_GEOMETRY_OPACITY = 0.2;
-export const BLOOMED_CONNECTION_OPACITY = 0.0094;
+export const ARTIST_GEOMETRY_OPACITY = 0.24;
+export const DEFAULT_QUALITY: Quality = 7;
+
+export const getBloomedConnectionOpacity = (quality: Quality): number => {
+  const baseOpacity = 0.0102;
+
+  if (quality >= DEFAULT_QUALITY) {
+    return baseOpacity;
+  }
+
+  const qualityDiff = DEFAULT_QUALITY - quality;
+  const addedOpacity = Math.pow(qualityDiff, 2) * 0.0002;
+  return baseOpacity + addedOpacity;
+};
+
+export const getHighlightedArtistsInterOpacity = (
+  intraLineCount: number,
+  interLineCount: number
+): number => {
+  console.log({ intraLineCount, interLineCount });
+
+  let opacity = 0.0222;
+
+  if (intraLineCount < 30) {
+    opacity += 0.015;
+  }
+  if (intraLineCount < 100) {
+    opacity += 0.01;
+  }
+  if (intraLineCount < 500) {
+    opacity += 0.008;
+  }
+
+  if (interLineCount > 5000) {
+    opacity -= 0.0052;
+  }
+  if (interLineCount > 3000) {
+    opacity -= 0.002;
+  }
+
+  console.log({ backboneInterOpacity: opacity });
+
+  return opacity;
+};
 
 export const CROSSHAIR_COLOR = 'rgba(188, 188, 188, 0.38)';
 export const CROSSHAIR_WIDTH_PX = 2;

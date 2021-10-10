@@ -1,0 +1,23 @@
+MUSIC:
+ * music
+ * musical
+ * tune
+ * groove
+ * melody
+ * sonic
+ * vibe
+ * audio
+ * sound
+
+GALAXY:
+ * galaxy
+ * galactic
+ * stellar
+ * star
+ * space
+ * cosmos
+ * cosmic
+ * universe
+ * nebula
+ * astro
+ * astronomy

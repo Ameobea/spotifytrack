@@ -20,19 +20,19 @@ export class MovementInputHandler {
   constructor(setSoundRolloffFactor: (newRolloffFactor: number) => void) {
     window.addEventListener('keydown', (evt) => {
       switch (evt.code) {
-        case 'ArrowUp':
+        // case 'ArrowUp':
         case 'KeyW':
           this.inputs.up = true;
           break;
-        case 'ArrowLeft':
+        // case 'ArrowLeft':
         case 'KeyA':
           this.inputs.left = true;
           break;
-        case 'ArrowDown':
+        // case 'ArrowDown':
         case 'KeyS':
           this.inputs.down = true;
           break;
-        case 'ArrowRight':
+        // case 'ArrowRight':
         case 'KeyD':
           this.inputs.right = true;
           break;

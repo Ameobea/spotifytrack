@@ -38,6 +38,7 @@ const ArtistMap: React.FC = () => {
         <OverlayUI eventRegistry={eventRegistry} width={width} height={height} />
       ) : null}
       <canvas
+        style={{ backgroundColor: 'black' }}
         className="artist-map-canvas"
         width={width}
         height={height}

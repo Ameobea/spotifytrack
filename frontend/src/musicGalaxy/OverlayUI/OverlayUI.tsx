@@ -341,6 +341,12 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height }) =
     overlayStateReducer,
     buildDefaultOverlayState()
   );
+  const forceLabelsUpdate = useRef(false);
+
+  // Canvas seems to get cleared when component re-renders; force a render when that happens to re-populate labels etc.
+  useEffect(() => {
+    forceLabelsUpdate.current = true;
+  });
 
   useEffect(() => {
     const handleActions = (actions: Action[]) => {
@@ -391,7 +397,8 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height }) =
         return;
       }
 
-      const shouldUpdate = eventRegistry.getShouldUpdate();
+      const shouldUpdate = forceLabelsUpdate.current || eventRegistry.getShouldUpdate();
+      forceLabelsUpdate.current = false;
       if (
         !shouldUpdate &&
         labelState.current.fadingOutPlayingArtistLabels.length === 0 &&
@@ -415,6 +422,7 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height }) =
       }
 
       // If we're rendering orbit mode labels, we need to sort them by distance, furthest to closest
+
       const labelsToRender = (
         eventRegistry.controlMode === 'orbit'
           ? [...labelState.current.labels.entries()].sort((a, b) => {
@@ -576,9 +584,7 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height }) =
         </>
       ) : (
         <CollapsedArtistSearch
-          onShowUI={() => {
-            eventRegistry.onPointerUnlocked();
-          }}
+          onShowUI={() => eventRegistry.onPointerUnlocked()}
           isMobile={eventRegistry.isMobile}
         />
       )}
