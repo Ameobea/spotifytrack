@@ -18,6 +18,20 @@ interface PlayingArtist {
   startTime: number;
 }
 
+const pickPreviewURL = (previewURLs: string[]) => {
+  console.log(previewURLs);
+  for (let i = 0; i < previewURLs.length; i++) {
+    if (Math.random() < 0.4) {
+      const subarray = previewURLs.slice(0, i + 1);
+      console.log(subarray);
+      // Pick random element from subarray
+      return subarray[Math.floor(Math.random() * subarray.length)];
+    }
+  }
+
+  return previewURLs[Math.floor(Math.random() * previewURLs.length)];
+};
+
 export default class MusicManager {
   private ctx: AudioContext;
   /**
@@ -137,8 +151,7 @@ export default class MusicManager {
       return;
     }
 
-    // TODO: Pick random one
-    const url = previewURLs[0];
+    const url = pickPreviewURL(previewURLs);
     const audioElement = new Audio(url);
     audioElement.crossOrigin = 'anonymous';
     const track = this.ctx.createMediaElementSource(audioElement);

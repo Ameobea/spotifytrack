@@ -161,6 +161,13 @@ export class WasmClient {
   public setQuality(newQuality: number) {
     this.engine.set_quality(this.ctxPtr, newQuality);
   }
+
+  /**
+   * Returns set of draw commands to execute
+   */
+  public playLastArtist(): Uint32Array {
+    return this.engine.play_last_artist(this.ctxPtr);
+  }
 }
 
 Comlink.expose(new WasmClient());

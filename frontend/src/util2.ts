@@ -10,3 +10,5 @@ export const map = <T, T2>(x: T | null | undefined, pred: (x: T) => T2): T2 | nu
   R.isNil(x) ? x : pred(x);
 
 export const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export const clamp = (min: number, max: number, x: number) => Math.min(Math.max(min, x), max);

@@ -135,7 +135,6 @@ interface OverlayUIProps {
   width: number;
   height: number;
   eventRegistry: UIEventRegistry;
-  onPointerDown: (evt: React.MouseEvent<HTMLCanvasElement, MouseEvent>) => void;
 }
 
 const initialState: State = {
@@ -325,7 +324,7 @@ const renderOrbitModeLabel = (
   ctx.fillText(label.text, x - label.width / 2.3, y);
 };
 
-const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onPointerDown }) => {
+const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height }) => {
   const labelState = useRef(initialState);
   const canvasRef = useRef<CanvasRenderingContext2D | null>(null);
   const [isOrbitMode, setIsOrbitMode] = useState(true);
@@ -567,7 +566,6 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height, onP
         />
       )}
       <canvas
-        onClick={onPointerDown}
         className="artist-map-overlay-ui"
         width={width}
         height={height}

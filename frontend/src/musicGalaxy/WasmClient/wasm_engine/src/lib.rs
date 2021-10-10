@@ -26,9 +26,7 @@ bitflags! {
         const RENDER_GEOMETRY = 0b0000_0100;
         /// Name has been received from spotify and we can actually render it
         const HAS_NAME = 0b0000_1000;
-        /// Artist's music has recently been played
-        const HAS_RECENTLY_PLAYED = 0b0001_0000;
-        const IS_HIGHLIGHTED = 0b0010_0000;
+        const IS_HIGHLIGHTED = 0b0001_0000;
     }
 }
 
@@ -66,6 +64,7 @@ pub struct ArtistMapCtx {
     pub last_force_labeled_artist_id: Option<u32>,
     pub is_mobile: bool,
     pub quality: u8,
+    pub manual_play_artist_id: Option<u32>,
 }
 
 const DISTANCE_MULTIPLIER: [f32; 3] = [50500., 50400., 54130.];
@@ -125,6 +124,7 @@ impl Default for ArtistMapCtx {
             last_force_labeled_artist_id: None,
             is_mobile: false,
             quality: DEFAULT_QUALITY,
+            manual_play_artist_id: None,
         }
     }
 }
@@ -136,10 +136,7 @@ impl ArtistMapCtx {
         self.all_artists
             .iter()
             .filter_map(|(id, state)| {
-                if state
-                    .render_state
-                    .contains(ArtistRenderState::HAS_RECENTLY_PLAYED)
-                {
+                if self.most_recently_played_artist_ids.contains(id) {
                     None
                 } else {
                     let dist = distance(&state.position, &cur_position);
@@ -154,6 +151,25 @@ impl ArtistMapCtx {
             .map(|(id, _)| id)
     }
 
+    pub fn start_playing_artist_id(&mut self, draw_commands: &mut Vec<u32>, artist_id: u32) {
+        debug!("Starting music for artist id={}", artist_id);
+        draw_commands.push(START_PLAYING_MUSIC_CMD);
+        draw_commands.push(artist_id);
+        self.playing_music_artist_id = Some(artist_id);
+        self.manual_play_artist_id = None;
+
+        let artist_ix = self.artists_indices_by_id.get(&artist_id).unwrap();
+        let artist_state = &mut self.all_artists[*artist_ix].1;
+
+        if !artist_state
+            .render_state
+            .contains(ArtistRenderState::HAS_NAME)
+        {
+            draw_commands.push(FETCH_ARTIST_DATA_CMD);
+            draw_commands.push(artist_id);
+        }
+    }
+
     pub fn maybe_start_playing_new_music(
         &mut self,
         draw_commands: &mut Vec<u32>,
@@ -163,27 +179,7 @@ impl ArtistMapCtx {
     ) {
         let next_artist_to_play = self.get_next_artist_to_play(cur_x, cur_y, cur_z);
         if let Some(next_artist_to_play) = next_artist_to_play {
-            debug!("Starting music for artist id={}", next_artist_to_play);
-            draw_commands.push(START_PLAYING_MUSIC_CMD);
-            draw_commands.push(next_artist_to_play);
-            self.playing_music_artist_id = Some(next_artist_to_play);
-
-            let artist_ix = self
-                .artists_indices_by_id
-                .get(&next_artist_to_play)
-                .unwrap();
-            let artist_state = &mut self.all_artists[*artist_ix].1;
-            artist_state
-                .render_state
-                .set(ArtistRenderState::HAS_RECENTLY_PLAYED, true);
-
-            if !artist_state
-                .render_state
-                .contains(ArtistRenderState::HAS_NAME)
-            {
-                draw_commands.push(FETCH_ARTIST_DATA_CMD);
-                draw_commands.push(next_artist_to_play);
-            }
+            self.start_playing_artist_id(draw_commands, next_artist_to_play);
         } else {
             self.playing_music_artist_id = None;
         }
@@ -196,21 +192,22 @@ impl ArtistMapCtx {
         cur_x: f32,
         cur_y: f32,
         cur_z: f32,
+        force_do_not_record_as_recently_played: bool,
     ) {
         draw_commands.push(STOP_PLAYING_MUSIC_CMD);
         draw_commands.push(artist_id);
-        self.most_recently_played_artist_ids.push_front(artist_id);
 
-        if self.most_recently_played_artist_ids.len() > MAX_RECENTLY_PLAYED_ARTISTS_TO_TRACK {
-            let artist_id = self.most_recently_played_artist_ids.pop_back().unwrap();
-            let artist_ix = self.artists_indices_by_id.get(&artist_id).unwrap();
-            self.all_artists[*artist_ix]
-                .1
-                .render_state
-                .set(ArtistRenderState::HAS_RECENTLY_PLAYED, false);
+        if !force_do_not_record_as_recently_played {
+            self.most_recently_played_artist_ids.push_front(artist_id);
         }
 
-        self.maybe_start_playing_new_music(draw_commands, cur_x, cur_y, cur_z);
+        if self.most_recently_played_artist_ids.len() > MAX_RECENTLY_PLAYED_ARTISTS_TO_TRACK {
+            self.most_recently_played_artist_ids.pop_back();
+        }
+
+        if cur_x.is_finite() {
+            self.maybe_start_playing_new_music(draw_commands, cur_x, cur_y, cur_z);
+        }
     }
 
     pub fn update_connections_buffer(&mut self, chunk_size: u32, chunk_ix: u32) {
@@ -608,6 +605,7 @@ fn should_render_artist(
     popularity: u8,
     render_state: &ArtistRenderState,
     is_mobile: bool,
+    is_fly_mode: bool,
     quality: u8,
 ) -> bool {
     if distance < 9000. {
@@ -631,7 +629,7 @@ fn should_render_artist(
         quality_diff -= 1;
     }
     while quality_diff < 0 {
-        score *= 0.72;
+        score *= if is_fly_mode { 0.808 } else { 0.72 };
         quality_diff += 1;
     }
 
@@ -749,6 +747,7 @@ pub fn handle_new_position(
             artist_state.popularity,
             &artist_state.render_state,
             ctx.is_mobile,
+            is_fly_mode,
             ctx.quality,
         );
         if should_render_geometry
@@ -777,12 +776,20 @@ pub fn handle_new_position(
     let projected_next_pos = [projected_next_x, projected_next_y, projected_next_z];
     match ctx.playing_music_artist_id {
         Some(artist_id) => {
+            let was_manual_play = ctx.manual_play_artist_id == Some(artist_id);
+
             let artist_index = ctx.artists_indices_by_id.get(&artist_id).unwrap();
-            if distance(
+            let distance_to_listener = distance(
                 &ctx.all_artists[*artist_index].1.position,
                 &projected_next_pos,
-            ) > MAX_MUSIC_PLAY_DISTANCE
-            {
+            );
+            let max_distance = if was_manual_play {
+                MAX_MUSIC_PLAY_DISTANCE * 2.
+            } else {
+                MAX_MUSIC_PLAY_DISTANCE
+            };
+
+            if distance_to_listener > max_distance {
                 debug!(
                     "Stopping music for artist_id={} due to movement out of range",
                     artist_id
@@ -793,6 +800,7 @@ pub fn handle_new_position(
                     projected_next_x,
                     projected_next_y,
                     projected_next_z,
+                    false,
                 );
             }
         },
@@ -827,7 +835,7 @@ pub fn on_music_finished_playing(
         return draw_commands;
     }
 
-    ctx.stop_playing_music(artist_id, &mut draw_commands, cur_x, cur_y, cur_z);
+    ctx.stop_playing_music(artist_id, &mut draw_commands, cur_x, cur_y, cur_z, false);
 
     draw_commands
 }
@@ -937,6 +945,7 @@ pub fn handle_set_highlighted_artists(
             state.popularity,
             &state.render_state,
             ctx.is_mobile,
+            is_fly_mode,
             ctx.quality,
         );
         if should_render {
@@ -973,6 +982,7 @@ pub fn handle_set_highlighted_artists(
 /// Returns a list of draw commands to execute
 #[wasm_bindgen]
 pub fn handle_artist_manual_play(ctx: *mut ArtistMapCtx, artist_id: u32) -> Vec<u32> {
+    info!("Handling manual play for artist_id={}", artist_id);
     let ctx = unsafe { &mut *ctx };
 
     let mut draw_commands = Vec::new();
@@ -988,14 +998,32 @@ pub fn handle_artist_manual_play(ctx: *mut ArtistMapCtx, artist_id: u32) -> Vec<
             std::f32::NEG_INFINITY,
             std::f32::NEG_INFINITY,
             std::f32::NEG_INFINITY,
+            true,
         );
     }
 
-    ctx.playing_music_artist_id = Some(artist_id);
-    draw_commands.push(STOP_PLAYING_MUSIC_CMD);
-    draw_commands.push(artist_id);
+    ctx.start_playing_artist_id(&mut draw_commands, artist_id);
+    ctx.manual_play_artist_id = Some(artist_id);
 
     draw_commands
+}
+
+/// Returns a list of draw commands to execute
+#[wasm_bindgen]
+pub fn play_last_artist(ctx: *mut ArtistMapCtx) -> Vec<u32> {
+    let ctx = unsafe { &mut *ctx };
+
+    let last_played_artist_id = match ctx.most_recently_played_artist_ids.pop_front() {
+        Some(id) => id,
+        None => {
+            info!("No last played artist; not playing last played artist");
+            return Vec::new();
+        },
+    };
+
+    info!("Playing last played artist_id={}", last_played_artist_id);
+
+    handle_artist_manual_play(ctx, last_played_artist_id)
 }
 
 #[wasm_bindgen]
