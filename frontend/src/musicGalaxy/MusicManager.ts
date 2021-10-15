@@ -71,11 +71,36 @@ export default class MusicManager {
     return Math.max(...samples);
   }
 
+  private lastListenerPosition: {
+    pos: { x: number; y: number; z: number };
+    cameraForward: { x: number; y: number; z: number };
+    cameraUp: { x: number; y: number; z: number };
+  } = {
+    pos: { x: 0, y: 0, z: 0 },
+    cameraForward: { x: 0, y: 0, z: 0 },
+    cameraUp: { x: 0, y: 0, z: 0 },
+  };
+
   public setListenerPosition(
     pos: { x: number; y: number; z: number },
     cameraForward: { x: number; y: number; z: number },
     cameraUp: { x: number; y: number; z: number }
   ) {
+    if (
+      pos.x === this.lastListenerPosition.pos.x &&
+      pos.y === this.lastListenerPosition.pos.y &&
+      pos.z === this.lastListenerPosition.pos.z &&
+      cameraForward.x === this.lastListenerPosition.cameraForward.x &&
+      cameraForward.y === this.lastListenerPosition.cameraForward.y &&
+      cameraForward.z === this.lastListenerPosition.cameraForward.z &&
+      cameraUp.x === this.lastListenerPosition.cameraUp.x &&
+      cameraUp.y === this.lastListenerPosition.cameraUp.y &&
+      cameraUp.z === this.lastListenerPosition.cameraUp.z
+    ) {
+      return;
+    }
+    this.lastListenerPosition = { pos, cameraForward, cameraUp };
+
     const listener = this.ctx.listener;
 
     // Firefox :shrug:

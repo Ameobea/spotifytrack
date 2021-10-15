@@ -64,6 +64,7 @@ lazy_static! {
 }
 
 impl ArtistMapCtx {
+    #[inline(never)]
     pub fn populate_connection_colors_buffer(&mut self) {
         self.connection_colors_buffer = Vec::with_capacity(self.connections_buffer.len() * 2);
 
@@ -89,6 +90,7 @@ impl ArtistMapCtx {
         }
     }
 
+    #[inline(never)]
     pub fn populate_artist_color_buffer(&mut self) {
         self.artist_colors_buffer = Vec::with_capacity(self.all_artists.len());
 

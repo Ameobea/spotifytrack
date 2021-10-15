@@ -17,6 +17,8 @@ interface ArtistInputProps {
     suggestions: AutocompleteSuggestion[]
   ) => Promise<AutocompleteSuggestion[]> | AutocompleteSuggestion[];
   placeholder?: string;
+  onFocus?: () => void;
+  onBlur?: () => void;
 }
 
 const ArtistInput: React.FC<ArtistInputProps> = ({
@@ -26,6 +28,8 @@ const ArtistInput: React.FC<ArtistInputProps> = ({
   showImage = true,
   filterAutocompleteResults = (suggestions: AutocompleteSuggestion[]) => suggestions,
   placeholder,
+  onFocus,
+  onBlur,
 }) => {
   const [text, setText] = useState('');
   const [isFocused, setIsFocused] = useState(false);
@@ -61,8 +65,14 @@ const ArtistInput: React.FC<ArtistInputProps> = ({
           setIsFocused(true);
           setText('');
           onSelect(null);
+          onFocus?.();
         }}
-        onBlur={() => setTimeout(() => setIsFocused(false), 100)}
+        onBlur={() =>
+          setTimeout(() => {
+            setIsFocused(false);
+            onBlur?.();
+          }, 100)
+        }
         className="artist-input"
         value={text}
         onChange={(evt) => {

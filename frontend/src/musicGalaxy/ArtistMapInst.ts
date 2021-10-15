@@ -202,6 +202,7 @@ export class ArtistMapInst {
   private frameCount = 0;
   private isFocused = true;
   private stats: Stats | null = null;
+  private artistSearchOpen = false;
 
   private renderedArtistBufferIndicesByArtistID: Map<number, number> = new Map();
   private artistIDByRenderedArtistBufferIndex: Map<number, number> = new Map();
@@ -325,6 +326,9 @@ export class ArtistMapInst {
         };
       }
       this.initControls(newControlMode);
+    },
+    setArtistSearchOpen: (isOpen: boolean) => {
+      this.artistSearchOpen = isOpen;
     },
   });
 
@@ -1228,7 +1232,13 @@ export class ArtistMapInst {
 
     const cameraDirection = this.camera.getWorldDirection(new this.THREE.Vector3());
     const cameraUp = this.camera.up;
-    this.musicManager.setListenerPosition(this.camera.position.clone(), cameraDirection, cameraUp);
+    if (this.controls.type !== 'orbit') {
+      this.musicManager.setListenerPosition(
+        this.camera.position.clone(),
+        cameraDirection,
+        cameraUp
+      );
+    }
 
     this.maybeAnimatePlayingArtist();
 
@@ -1470,21 +1480,24 @@ export class ArtistMapInst {
     this.maybeChangeQuality(timeDelta);
 
     if (this.controls.type === 'pointerlock') {
-      const { forward, sideways, up } = this.movementInputHandler.getDirectionVector();
-      this.controls.controls.moveRight(sideways * MOVEMENT_SPEED_UNITS_PER_SECOND * timeDelta);
-      this.controls.controls
-        .getObject()
-        .position.add(
-          this.controls.controls
-            .getDirection(VEC3_IDENTITY)
-            .clone()
-            .multiplyScalar(MOVEMENT_SPEED_UNITS_PER_SECOND * timeDelta * forward)
-        )
-        .add(
-          this.camera.up.clone().multiplyScalar(MOVEMENT_SPEED_UNITS_PER_SECOND * timeDelta * up)
-        );
+      if (!this.artistSearchOpen) {
+        const { forward, sideways, up } = this.movementInputHandler.getDirectionVector();
+        this.controls.controls.moveRight(sideways * MOVEMENT_SPEED_UNITS_PER_SECOND * timeDelta);
+        this.controls.controls
+          .getObject()
+          .position.add(
+            this.controls.controls
+              .getDirection(VEC3_IDENTITY)
+              .clone()
+              .multiplyScalar(MOVEMENT_SPEED_UNITS_PER_SECOND * timeDelta * forward)
+          )
+          .add(
+            this.camera.up.clone().multiplyScalar(MOVEMENT_SPEED_UNITS_PER_SECOND * timeDelta * up)
+          );
+        this.render(forward);
+      }
 
-      this.render(forward);
+      this.render(0);
     } else if (this.controls.type === 'orbit') {
       this.controls.controls.update();
 

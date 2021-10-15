@@ -54,8 +54,6 @@ export const getHighlightedArtistsInterOpacity = (
   intraLineCount: number,
   interLineCount: number
 ): number => {
-  console.log({ intraLineCount, interLineCount });
-
   let opacity = 0.0222;
 
   if (intraLineCount < 30) {
@@ -74,8 +72,6 @@ export const getHighlightedArtistsInterOpacity = (
   if (interLineCount > 3000) {
     opacity -= 0.002;
   }
-
-  console.log({ backboneInterOpacity: opacity });
 
   return opacity;
 };

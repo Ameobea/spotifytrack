@@ -54,6 +54,7 @@ export class UIEventRegistry {
   public isMobile = getIsMobile();
   public setVolume: (newVolume: number) => void;
   public setControlMode: (newControlMode: 'orbit' | 'pointerlock' | 'flyorbit') => void;
+  public setArtistSearchOpen: (isOpen: boolean) => void;
 
   constructor({
     getLabelPosition,
@@ -66,6 +67,7 @@ export class UIEventRegistry {
     flyToArtistID,
     setVolume,
     setControlMode,
+    setArtistSearchOpen,
   }: {
     getLabelPosition: (artistID: number | string) => {
       x: number;
@@ -83,6 +85,7 @@ export class UIEventRegistry {
     flyToArtistID: (artistID: number) => void;
     setVolume: (newVolume: number) => void;
     setControlMode: (newControlMode: 'orbit' | 'pointerlock' | 'flyorbit') => void;
+    setArtistSearchOpen: (isOpen: boolean) => void;
   }) {
     this.getLabelPosition = getLabelPosition;
     this.getShouldUpdate = getShouldUpdate;
@@ -94,6 +97,7 @@ export class UIEventRegistry {
     this.lockPointer = lockPointer;
     this.setVolume = setVolume;
     this.setControlMode = setControlMode;
+    this.setArtistSearchOpen = setArtistSearchOpen;
   }
 
   public createLabel(id: number | string, text: string) {
@@ -310,15 +314,19 @@ const renderOrbitModeLabel = (
   label: { id: string | number; text: string; width: number },
   { x, y, distance }: { x: number; y: number; distance: number },
   minDistance: number,
-  maxDistance: number
+  maxDistance: number,
+  lastFont: string
 ) => {
   const normalizedDistance = (distance - minDistance) / (maxDistance - minDistance);
   // Scale linearly based on distance
   const scale = (1 - normalizedDistance) * 0.6 + 0.45;
   const opacity = Math.min(1, scale * 1.1);
 
-  const fontSize = Math.round(12 * scale * 100) / 100;
-  ctx.font = `${fontSize}px PT Sans`;
+  const fontSize = Math.round(12 * scale * 4) / 4;
+  const font = `${fontSize}px PT Sans`;
+  if (lastFont !== font) {
+    ctx.font = font;
+  }
   ctx.fillStyle = `#141414${Math.floor(Math.min(opacity + 0.1, 0.85) * 0xff).toString(16)}`;
   ctx.fillRect(
     x - label.width / 2.3 - 3 * scale,
@@ -331,6 +339,8 @@ const renderOrbitModeLabel = (
     Math.min(opacity * 1.3 + 0.15, 1) * 0xff
   ).toString(16)}`;
   ctx.fillText(label.text, x - label.width / 2.3, y);
+
+  return font;
 };
 
 const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height }) => {
@@ -453,6 +463,7 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height }) =
         }
       );
 
+      let lastFont = '';
       for (const {
         id: artistID,
         label,
@@ -476,7 +487,14 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height }) =
         }
 
         if (eventRegistry.controlMode === 'orbit') {
-          renderOrbitModeLabel(ctx, label, { x, y, distance }, minDistance, maxDistance);
+          lastFont = renderOrbitModeLabel(
+            ctx,
+            label,
+            { x, y, distance },
+            minDistance,
+            maxDistance,
+            lastFont
+          );
           continue;
         }
 
@@ -575,6 +593,8 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height }) =
               eventRegistry.getIfArtistIDsAreInEmbedding(artistIDs)
             }
             onCloseUI={() => eventRegistry.onPointerLocked()}
+            onFocus={() => eventRegistry.setArtistSearchOpen(true)}
+            onBlur={() => eventRegistry.setArtistSearchOpen(false)}
           />
           {controlMode === 'orbit' ? null : (
             <VolumeAndReturnToOrbitModeControls

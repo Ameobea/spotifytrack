@@ -222,6 +222,7 @@ impl ArtistMapCtx {
         }
     }
 
+    #[inline(never)]
     pub fn update_connections_buffer(&mut self, chunk_size: u32, chunk_ix: u32) {
         let new_artist_ids = self
             .sorted_artist_ids
@@ -323,9 +324,8 @@ impl ArtistMapCtx {
 
             if min_distance_to_existing_label <= 10_000. {
                 info!(
-                    "Custom label min distance to existing label is too small ({}); not rendering \
-                     any more custom labels",
-                    min_distance_to_existing_label
+                    "Custom label min distance to existing label is too small; not rendering any \
+                     more custom labels",
                 );
                 // If min distance is very small, don't place any more
                 return;

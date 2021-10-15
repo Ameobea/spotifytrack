@@ -11,12 +11,16 @@ interface ArtistSearchProps {
   ) => void;
   getIfArtistIDsAreInEmbedding: (artistIDs: number[]) => boolean[];
   onCloseUI: () => void;
+  onFocus?: () => void;
+  onBlur?: () => void;
 }
 
 const ArtistSearch: React.FC<ArtistSearchProps> = ({
   onSubmit,
   getIfArtistIDsAreInEmbedding,
   onCloseUI,
+  onFocus,
+  onBlur,
 }) => {
   const [selectedArtist, setSelectedArtist] = useState<{
     spotifyID: string;
@@ -37,6 +41,8 @@ const ArtistSearch: React.FC<ArtistSearchProps> = ({
           return autocompleteResults.filter((_res, i) => hasInEmbeddingFlags[i]);
         }}
         placeholder="Search for an artist"
+        onFocus={onFocus}
+        onBlur={onBlur}
       />
       <button
         className="artist-search-look-at-button"
