@@ -7,10 +7,14 @@ extern crate log;
 use std::{collections::VecDeque, sync::Once};
 
 use bitflags::bitflags;
+use coloring::COLOR_NOISE_SEED;
 use float_ord::FloatOrd;
 use fnv::{FnvHashMap as HashMap, FnvHashSet as HashSet};
+use noise::Seedable;
 use rand::{seq::SliceRandom, Rng, SeedableRng};
 use wasm_bindgen::prelude::*;
+
+mod coloring;
 
 #[wasm_bindgen]
 extern "C" {
@@ -66,6 +70,9 @@ pub struct ArtistMapCtx {
     pub quality: u8,
     pub manual_play_artist_id: Option<u32>,
     pub received_chunks: HashSet<(u32, u32)>,
+    pub color_noise: noise::SuperSimplex,
+    pub connection_colors_buffer: Vec<[f32; 3]>,
+    pub artist_colors_buffer: Vec<(u32, [f32; 3])>,
 }
 
 const DISTANCE_MULTIPLIER: [f32; 3] = [50500., 50400., 54130.];
@@ -127,6 +134,9 @@ impl Default for ArtistMapCtx {
             quality: DEFAULT_QUALITY,
             manual_play_artist_id: None,
             received_chunks: HashSet::default(),
+            color_noise: noise::SuperSimplex::new().set_seed(COLOR_NOISE_SEED),
+            connection_colors_buffer: Vec::new(),
+            artist_colors_buffer: Vec::new(),
         }
     }
 }
@@ -505,6 +515,9 @@ pub fn decode_and_record_packed_artist_positions(
     ctx.sorted_artist_ids.sort_unstable();
 
     info!("Successfully parsed + stored {} artist positions", count);
+
+    ctx.populate_artist_color_buffer();
+
     count
 }
 
@@ -766,7 +779,7 @@ pub fn handle_new_position(
                 // Remove artist label
                 render_commands.push(1);
                 if ctx.total_rendered_label_count == 0 {
-                    error!(
+                    warn!(
                         "Total rendered label count accounting error; was zero and tried to \
                          subtract one when removing artist label"
                     );
@@ -935,6 +948,7 @@ pub fn handle_artist_relationship_data(
         packed_relationship_data.len()
     );
     ctx.update_connections_buffer(chunk_size, chunk_ix);
+    ctx.populate_connection_colors_buffer();
 
     ctx.connections_buffer.len() * 6
 }
@@ -949,6 +963,30 @@ pub fn get_connections_buffer_ptr(ctx: *mut ArtistMapCtx) -> *const f32 {
 pub fn get_connections_buffer_length(ctx: *mut ArtistMapCtx) -> usize {
     let ctx = unsafe { &mut *ctx };
     ctx.connections_buffer.len() * 6
+}
+
+#[wasm_bindgen]
+pub fn get_connections_color_buffer_ptr(ctx: *mut ArtistMapCtx) -> *const f32 {
+    let ctx = unsafe { &mut *ctx };
+    ctx.connection_colors_buffer.as_ptr() as *const f32
+}
+
+#[wasm_bindgen]
+pub fn get_connections_color_buffer_length(ctx: *mut ArtistMapCtx) -> usize {
+    let ctx = unsafe { &mut *ctx };
+    ctx.connection_colors_buffer.len() * 3
+}
+
+#[wasm_bindgen]
+pub fn get_artist_colors_buffer_ptr(ctx: *mut ArtistMapCtx) -> *const f32 {
+    let ctx = unsafe { &mut *ctx };
+    ctx.artist_colors_buffer.as_ptr() as *const f32
+}
+
+#[wasm_bindgen]
+pub fn get_artist_colors_buffer_length(ctx: *mut ArtistMapCtx) -> usize {
+    let ctx = unsafe { &mut *ctx };
+    ctx.artist_colors_buffer.len() * 4
 }
 
 #[wasm_bindgen]
@@ -1281,4 +1319,5 @@ pub fn set_quality(ctx: *mut ArtistMapCtx, new_quality: u8) {
     for (chunk_ix, chunk_size) in chunks_to_rerender {
         ctx.update_connections_buffer(chunk_size, chunk_ix);
     }
+    ctx.populate_connection_colors_buffer();
 }

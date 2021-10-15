@@ -6,15 +6,17 @@ import './VolumeAndReturnToOrbitModeControls.scss';
 interface VolumeAndReturnToOrbitModeControlsProps {
   onVolumeChange: (volume: number) => void;
   onReturnToOrbitMode: () => void;
-  controlMode: 'orbit' | 'flyorbit' | 'pointerlock';
 }
 
 const VolumeAndReturnToOrbitModeControls: React.FC<VolumeAndReturnToOrbitModeControlsProps> = ({
   onVolumeChange,
   onReturnToOrbitMode,
-  controlMode,
 }) => {
-  const [volume, setVolume] = useState(DEFAULT_VOLUME);
+  const [volume, setVolume] = useState(
+    localStorage.volume === null || localStorage.volume === undefined
+      ? DEFAULT_VOLUME
+      : +localStorage.volume
+  );
 
   return (
     <div className="volume-and-return-to-orbit-mode-controls">
@@ -25,24 +27,25 @@ const VolumeAndReturnToOrbitModeControls: React.FC<VolumeAndReturnToOrbitModeCon
         step="0.01"
         value={volume}
         onChange={(e) => {
-          setVolume(parseFloat(e.target.value));
-          onVolumeChange(parseFloat(e.target.value));
+          const newVolume = +e.target.value;
+          setVolume(newVolume);
+          onVolumeChange(newVolume);
+          localStorage.volume = newVolume;
         }}
       />
       <button
         onClick={() => {
           onVolumeChange(0);
           setVolume(0);
+          localStorage.volume = 0;
         }}
         className="mute-button"
       >
         🔇
       </button>
-      {controlMode !== 'orbit' ? (
-        <button onClick={onReturnToOrbitMode} className="return-to-orbit-mode-button">
-          Return to Overview Mode
-        </button>
-      ) : null}
+      <button onClick={onReturnToOrbitMode} className="return-to-orbit-mode-button">
+        Return to Overview Mode
+      </button>
     </div>
   );
 };

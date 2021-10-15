@@ -14,8 +14,10 @@ export class WasmClient {
   /**
    * Returns the total number of artists in the embedding
    */
-  public decodeAndRecordPackedArtistPositions(packed: Uint8Array, isMobile: boolean): number {
-    return this.engine.decode_and_record_packed_artist_positions(this.ctxPtr, packed, isMobile);
+  public decodeAndRecordPackedArtistPositions(packed: Uint8Array, isMobile: boolean) {
+    this.engine.decode_and_record_packed_artist_positions(this.ctxPtr, packed, isMobile);
+
+    return this.getArtistColorsByID();
   }
 
   public getAllArtistData(): Float32Array {
@@ -96,6 +98,20 @@ export class WasmClient {
     );
   }
 
+  private getConnectionsColorBuffer(): Float32Array {
+    const connectionsColorBufferPtr = this.engine.get_connections_color_buffer_ptr(this.ctxPtr);
+    const connectionsColorBufferLength = this.engine.get_connections_color_buffer_length(
+      this.ctxPtr
+    );
+    const memory: WebAssembly.Memory = this.engine.get_memory();
+    return new Float32Array(
+      memory.buffer.slice(
+        connectionsColorBufferPtr,
+        connectionsColorBufferPtr + connectionsColorBufferLength * 4
+      )
+    );
+  }
+
   /**
    * Returns the new connection data buffer to be rendered
    */
@@ -103,11 +119,15 @@ export class WasmClient {
     relationshipData: Uint8Array,
     chunkSize: number,
     chunkIx: number
-  ): Float32Array {
+  ): { connectionsBuffer: Float32Array; connectionsColorBuffer: Float32Array } {
     this.engine.handle_artist_relationship_data(this.ctxPtr, relationshipData, chunkSize, chunkIx);
 
     const connectionsBuffer = this.getConnectionsBuffer();
-    return Comlink.transfer(connectionsBuffer, [connectionsBuffer.buffer]);
+    const connectionsColorBuffer = this.getConnectionsColorBuffer();
+    return Comlink.transfer({ connectionsBuffer, connectionsColorBuffer }, [
+      connectionsBuffer.buffer,
+      connectionsColorBuffer.buffer,
+    ]);
   }
 
   public setHighlightedArtists(
@@ -162,10 +182,17 @@ export class WasmClient {
   /**
    * Returns a new artist relationships connections buffer to be rendered
    */
-  public setQuality(newQuality: number): Float32Array {
+  public setQuality(newQuality: number): {
+    connectionsBuffer: Float32Array;
+    connectionsColorBuffer: Float32Array;
+  } {
     this.engine.set_quality(this.ctxPtr, newQuality);
     const connectionsBuffer = this.getConnectionsBuffer();
-    return Comlink.transfer(connectionsBuffer, [connectionsBuffer.buffer]);
+    const connectionsColorBuffer = this.getConnectionsColorBuffer();
+    return Comlink.transfer({ connectionsBuffer, connectionsColorBuffer }, [
+      connectionsBuffer.buffer,
+      connectionsColorBuffer.buffer,
+    ]);
   }
 
   /**
@@ -173,6 +200,32 @@ export class WasmClient {
    */
   public playLastArtist(): Uint32Array {
     return this.engine.play_last_artist(this.ctxPtr);
+  }
+
+  public getArtistColorsByID(): Map<number, readonly [number, number, number]> {
+    const artistColorsBufferPtr = this.engine.get_artist_colors_buffer_ptr(this.ctxPtr);
+    const artistColorsBufferLength = this.engine.get_artist_colors_buffer_length(this.ctxPtr);
+    const memory: WebAssembly.Memory = this.engine.get_memory();
+    const artistColorsBuffer = new Float32Array(
+      memory.buffer.slice(
+        artistColorsBufferPtr,
+        artistColorsBufferPtr + artistColorsBufferLength * 4
+      )
+    );
+    const artistColorsBufferU32View = new Uint32Array(artistColorsBuffer.buffer);
+
+    const artistColorsByID = new Map<number, readonly [number, number, number]>();
+    for (let i = 0; i < artistColorsBufferLength; i += 4) {
+      const artistID = artistColorsBufferU32View[i];
+      const color = [
+        artistColorsBuffer[i + 1],
+        artistColorsBuffer[i + 2],
+        artistColorsBuffer[i + 3],
+      ] as const;
+      artistColorsByID.set(artistID, color);
+    }
+
+    return artistColorsByID;
   }
 }
 

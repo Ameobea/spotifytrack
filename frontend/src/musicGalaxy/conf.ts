@@ -1,9 +1,9 @@
 import type { Quality } from './ArtistMapInst';
 
-export const BASE_ARTIST_COLOR = 0x1ab3d3;
+export const BASE_ARTIST_COLOR = 0x1586a6;
 export const PLAYING_ARTIST_COLOR = 0xfe54bb;
 export const HIGHLIGHTED_ARTIST_COLOR = 0xad4a03;
-export const BASE_CONNECTION_COLOR = 0x0088dd;
+export const BASE_CONNECTION_COLOR = 0x0072dd;
 export const ARTIST_GEOMETRY_DETAIL = 3;
 export const AMBIENT_LIGHT_COLOR = 0x727272;
 export const ARTIST_LABEL_TEXT_COLOR = '#f2f2f2';
@@ -35,7 +35,7 @@ export const INITIAL_ORBIT_TARGET = {
 export const PLAYING_ARTIST_LABEL_FADE_OUT_TIME_MS = 2800;
 
 export const BASE_ARTIST_GEOMETRY_SIZE = 1.7;
-export const ARTIST_GEOMETRY_OPACITY = 0.24;
+export const ARTIST_GEOMETRY_OPACITY = 0.2;
 export const DEFAULT_QUALITY: Quality = 7;
 
 export const getBloomedConnectionOpacity = (quality: Quality): number => {
@@ -143,18 +143,6 @@ export const getArtistLabelScaleFactor = (
   score *= 1 / Math.pow(fov / DEFAULT_FOV, 1.5);
 
   return Math.max(Math.min(score, 18), 0);
-};
-
-export const getArtistColor = (isHighlighted: boolean, isPlaying: boolean): number => {
-  if (isPlaying) {
-    return PLAYING_ARTIST_COLOR;
-  }
-
-  if (isHighlighted) {
-    return HIGHLIGHTED_ARTIST_COLOR;
-  }
-
-  return BASE_ARTIST_COLOR;
 };
 
 export const getArtistFlyToDurationMs = (distance: number): number => {

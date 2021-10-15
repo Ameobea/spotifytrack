@@ -576,11 +576,12 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height }) =
             }
             onCloseUI={() => eventRegistry.onPointerLocked()}
           />
-          <VolumeAndReturnToOrbitModeControls
-            onVolumeChange={(newVolume) => eventRegistry.setVolume(newVolume)}
-            onReturnToOrbitMode={() => eventRegistry.setControlMode('orbit')}
-            controlMode={controlMode}
-          />
+          {controlMode === 'orbit' ? null : (
+            <VolumeAndReturnToOrbitModeControls
+              onVolumeChange={(newVolume) => eventRegistry.setVolume(newVolume)}
+              onReturnToOrbitMode={() => eventRegistry.setControlMode('orbit')}
+            />
+          )}
         </>
       ) : (
         <CollapsedArtistSearch

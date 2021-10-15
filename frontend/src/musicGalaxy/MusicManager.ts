@@ -4,6 +4,7 @@
 
 import { getPreviewURLsByInternalID } from './api';
 import {
+  DEFAULT_VOLUME,
   MIN_MUSIC_PLAY_TIME_SECS,
   MUSIC_DISTANCE_ROLLOFF_FACTOR,
   MUSIC_FADE_IN_TIME_SECS,
@@ -50,9 +51,14 @@ export default class MusicManager {
     this.ctx = new AudioContext();
     this.mainGain = this.ctx.createGain();
     this.analyzer = this.ctx.createAnalyser();
-    this.mainGain.gain.value = 0.1;
     this.mainGain.connect(this.analyzer);
     this.analyzer.connect(this.ctx.destination);
+
+    this.setVolume(
+      localStorage.volume === null || localStorage.volume === undefined
+        ? DEFAULT_VOLUME
+        : +localStorage.volume
+    );
   }
 
   public startCtx() {

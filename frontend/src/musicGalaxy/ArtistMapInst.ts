@@ -14,7 +14,6 @@ import {
   MOVEMENT_SPEED_UNITS_PER_SECOND,
   ARTIST_GEOMETRY_OPACITY,
   DEFAULT_FOV,
-  getArtistColor,
   BLOOM_PARAMS,
   SHIFT_SPEED_MULTIPLIER,
   MAX_ARTIST_PLAY_CLICK_DISTANCE,
@@ -33,6 +32,7 @@ import {
   DEFAULT_QUALITY,
   getBloomedConnectionOpacity,
   getHighlightedArtistsInterOpacity,
+  BASE_ARTIST_COLOR,
 } from './conf';
 import DataFetchClient, { ArtistMapDataWithId, ArtistRelationshipData } from './DataFetchClient';
 import { MovementInputHandler } from './MovementInputHandler';
@@ -69,7 +69,10 @@ const waitForWasmClientInitialization = async () => {
 export const getUserSpotifyID = (): string | null => {
   const searchParams = new URLSearchParams(window.location.search);
   const userSpotifyID = searchParams.get('spotifyID') || searchParams.get('spotifyId');
-  if (userSpotifyID) {
+  if (userSpotifyID === 'x') {
+    delete localStorage['userSpotifyID'];
+    return null;
+  } else if (userSpotifyID) {
     localStorage.setItem('userSpotifyID', userSpotifyID);
     return userSpotifyID;
   }
@@ -79,7 +82,7 @@ export const getUserSpotifyID = (): string | null => {
 
 export const initArtistMapInst = async (canvas: HTMLCanvasElement): Promise<ArtistMapInst> => {
   const [
-    ,
+    artistColorsByID,
     {
       THREE,
       PointerLockControls,
@@ -117,7 +120,7 @@ export const initArtistMapInst = async (canvas: HTMLCanvasElement): Promise<Arti
 
   const allArtistData = await wasmClient.getAllArtistData();
 
-  const inst = new ArtistMapInst(THREE, THREE_EXTRA, canvas, allArtistData);
+  const inst = new ArtistMapInst(THREE, THREE_EXTRA, canvas, allArtistData, artistColorsByID);
   dataFetchClient.fetchArtistRelationships(0);
 
   // Set highlighted artists.
@@ -208,6 +211,7 @@ export class ArtistMapInst {
   private artistDataByID: Map<number, { pos: THREE.Vector3; popularity: number }> = new Map();
   private pendingDrawCommands: Uint32Array[] = [];
   private artistMeshes: THREE.InstancedMesh;
+  private artistColorsByID: Map<number, readonly [number, number, number]> | null = null;
   private playingArtistScale = 1;
   private playingArtistGeometry: THREE.Mesh | null = null;
   private movementInputHandler: MovementInputHandler;
@@ -478,7 +482,8 @@ export class ArtistMapInst {
     THREE: typeof import('three'),
     THREE_EXTRA: ThreeExtra,
     canvas: HTMLCanvasElement,
-    allArtistData: Float32Array
+    allArtistData: Float32Array,
+    artistColorsByID: Map<number, readonly [number, number, number]>
   ) {
     this.THREE = THREE;
     this.THREE_EXTRA = THREE_EXTRA;
@@ -486,6 +491,7 @@ export class ArtistMapInst {
     this.lastCameraDirection = VEC3_IDENTITY.clone();
     this.cachedCanvasWidth = canvas.width;
     this.cachedCanvasHeight = canvas.height;
+    this.artistColorsByID = artistColorsByID;
 
     this.renderer = new THREE.WebGLRenderer({
       canvas,
@@ -494,9 +500,10 @@ export class ArtistMapInst {
       powerPreference: 'high-performance',
       alpha: true,
     });
+    this.renderer.outputEncoding = THREE.sRGBEncoding;
     this.renderer.setPixelRatio(getDevicePixelRatio());
     this.renderer.toneMapping = THREE.ReinhardToneMapping;
-    this.renderer.toneMappingExposure = navigator.platform === 'MacIntel' ? 1.87 : 1.644;
+    this.renderer.toneMappingExposure = navigator.platform === 'MacIntel' ? 1.97 : 1.764;
     this.clock = new THREE.Clock();
 
     if (!this.isMobile) {
@@ -527,7 +534,7 @@ export class ArtistMapInst {
           break;
         case '1':
           this.renderer.toneMapping = THREE.ReinhardToneMapping;
-          this.renderer.toneMappingExposure = navigator.platform === 'MacIntel' ? 1.87 : 1.644;
+          this.renderer.toneMappingExposure = navigator.platform === 'MacIntel' ? 1.97 : 1.757;
           break;
         case '2':
           this.renderer.toneMapping = THREE.ReinhardToneMapping;
@@ -684,7 +691,7 @@ export class ArtistMapInst {
 
     this.bloomedConnectionsGeometry = new this.THREE.BufferGeometry();
     const bloomedLineMaterial = new this.THREE.LineBasicMaterial({
-      color: BASE_CONNECTION_COLOR,
+      vertexColors: true,
       transparent: true,
       depthWrite: false,
       opacity: getBloomedConnectionOpacity(this.quality),
@@ -942,7 +949,13 @@ export class ArtistMapInst {
     dataFetchClient.fetchArtistRelationships(relationshipData.chunkIx + 1);
   }
 
-  private updateConnectionsBuffer(connectionsDataBuffer: Float32Array) {
+  private updateConnectionsBuffer({
+    connectionsBuffer: connectionsDataBuffer,
+    connectionsColorBuffer,
+  }: {
+    connectionsBuffer: Float32Array;
+    connectionsColorBuffer: Float32Array;
+  }) {
     console.log(
       'Updating connections data buffer; new rendered connection count: ',
       connectionsDataBuffer.length / 6
@@ -951,7 +964,30 @@ export class ArtistMapInst {
       'position',
       new this.THREE.BufferAttribute(connectionsDataBuffer, 3)
     );
+    this.bloomedConnectionsGeometry.setAttribute(
+      'color',
+      new this.THREE.Float32BufferAttribute(connectionsColorBuffer, 3)
+    );
     this.bloomedConnectionsGeometry.computeBoundingSphere();
+  }
+
+  private getArtistColor(id: number, isHighlighted: boolean, isPlaying: boolean): THREE.Color {
+    if (isPlaying) {
+      return new this.THREE.Color(PLAYING_ARTIST_COLOR);
+    }
+
+    if (isHighlighted) {
+      return new this.THREE.Color(HIGHLIGHTED_ARTIST_COLOR);
+    }
+
+    const color = this.artistColorsByID?.get(id);
+    if (!color) {
+      console.error('Missing artist color', { artistColorsByID: this.artistColorsByID, id });
+      return new this.THREE.Color(BASE_ARTIST_COLOR);
+    }
+
+    const [r, g, b] = color;
+    return new this.THREE.Color(r, g, b);
   }
 
   public renderArtists(artistsToRender: number[]) {
@@ -994,7 +1030,7 @@ export class ArtistMapInst {
       }
 
       this.artistMeshes.setMatrixAt(bufferIndex, matrix);
-      const color = new this.THREE.Color(getArtistColor(isHighlighted, isPlaying));
+      const color = this.getArtistColor(id, isHighlighted, isPlaying);
       this.artistMeshes.setColorAt(bufferIndex, color);
 
       this.renderedArtistBufferIndicesByArtistID.set(id, bufferIndex);
@@ -1470,9 +1506,11 @@ export class ArtistMapInst {
     this.lastFrameTimings = new Array<number>(FRAME_TIMING_BUFFER_SIZE).fill(-1);
 
     wasmClient.setQuality(newQuality).then((connectionsDataBuffer) => {
-      this.updateConnectionsBuffer(connectionsDataBuffer);
-      (this.bloomedConnectionsMesh.material as THREE.LineBasicMaterial).opacity =
-        getBloomedConnectionOpacity(newQuality);
+      if (newQuality <= DEFAULT_QUALITY) {
+        this.updateConnectionsBuffer(connectionsDataBuffer);
+        (this.bloomedConnectionsMesh.material as THREE.LineBasicMaterial).opacity =
+          getBloomedConnectionOpacity(newQuality);
+      }
     });
 
     switch (newQuality) {
@@ -1545,7 +1583,7 @@ export class ArtistMapInst {
     let frameCount = 0;
     const averageFrameTime =
       this.lastFrameTimings.reduce((acc, time) => {
-        if (time < 0 || time > 1300) {
+        if (time < 0 || time > 1.3) {
           return acc;
         }
         frameCount += 1;
