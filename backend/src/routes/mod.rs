@@ -577,8 +577,8 @@ pub(crate) async fn oauth_cb(
         Some(s) if !s.is_empty() => {
             if s == "galaxy" {
                 return Ok(Redirect::to(format!(
-                    "{}/music-galaxy.html?spotifyID={}",
-                    CONF.website_url, user_spotify_id
+                    "https://galaxy.spotifytrack.net/?spotifyID={}",
+                    user_spotify_id
                 )));
             }
 

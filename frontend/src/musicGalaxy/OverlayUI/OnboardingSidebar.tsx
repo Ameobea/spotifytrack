@@ -1,6 +1,7 @@
 import React from 'react';
 
 import { API_BASE_URL } from 'src/conf';
+import { GALAXY_BLOG_POST_LINK } from '../conf';
 import './OnboardingSidebar.scss';
 import { OverlayAction } from './OverlayUI';
 
