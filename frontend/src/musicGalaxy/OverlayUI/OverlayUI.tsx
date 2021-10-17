@@ -1,4 +1,5 @@
-import React, { useEffect, useReducer, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { getSentry } from 'src/sentry';
 import About from '../About';
 import { getIsMobile, getUserSpotifyID } from '../ArtistMapInst';
 
@@ -347,7 +348,11 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height }) =
   const labelState = useRef(initialState);
   const canvasRef = useRef<CanvasRenderingContext2D | null>(null);
   const [controlMode, setControlMode] = useState<'orbit' | 'flyorbit' | 'pointerlock'>('orbit');
-  const [aboutPageOpen, setAboutPageOpen] = useState(false);
+  const [aboutPageOpen, setAboutPageOpenInner] = useState(false);
+  const setAboutPageOpen = useCallback((open: boolean) => {
+    setAboutPageOpenInner(open);
+    getSentry()?.captureMessage('Music Galaxy: About page opened');
+  }, []);
   const [overlayState, dispatchOverlayAction] = useReducer(
     overlayStateReducer,
     buildDefaultOverlayState()
@@ -584,16 +589,25 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height }) =
       {overlayState.artistSearchOpen ? (
         <>
           <ArtistSearch
-            onSubmit={({ internalID }, command) => {
+            onSubmit={({ internalID, name }, command) => {
               switch (command) {
-                case 'look-at':
+                case 'look-at': {
+                  getSentry()?.captureMessage('Music Galaxy: Look at artist', {
+                    extra: { internalID, name },
+                  });
                   eventRegistry.lookAtArtistID(internalID);
                   break;
-                case 'fly-to':
+                }
+                case 'fly-to': {
+                  getSentry()?.captureMessage('Music Galaxy: Fly to artist', {
+                    extra: { internalID, name },
+                  });
                   eventRegistry.flyToArtistID(internalID);
                   break;
-                default:
+                }
+                default: {
                   console.warn('Unhandled artist search command:', command);
+                }
               }
             }}
             getIfArtistIDsAreInEmbedding={(artistIDs) =>
@@ -606,7 +620,10 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height }) =
           {controlMode === 'orbit' ? null : (
             <VolumeAndReturnToOrbitModeControls
               onVolumeChange={(newVolume) => eventRegistry.setVolume(newVolume)}
-              onReturnToOrbitMode={() => eventRegistry.setControlMode('orbit')}
+              onReturnToOrbitMode={() => {
+                getSentry()?.captureMessage('Music Galaxy: Return to orbit mode');
+                eventRegistry.setControlMode('orbit');
+              }}
             />
           )}
         </>

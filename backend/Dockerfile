@@ -1,6 +1,6 @@
-FROM debian:jessie AS builder
+FROM debian:stable AS builder
 
-RUN apt-get update && apt-get install -y curl libmysqlclient-dev build-essential libssl-dev pkg-config
+RUN apt-get update && apt-get install -y curl libmariadbclient-dev-compat build-essential libssl-dev pkg-config
 RUN update-ca-certificates
 
 # Install rust
@@ -13,9 +13,9 @@ ADD . ./
 
 RUN cargo build --release
 
-FROM debian:jessie
+FROM debian:stable
 
-RUN apt-get update && apt-get install -y libmysqlclient-dev
+RUN apt-get update && apt-get install -y libmariadbclient-dev-compat
 
 COPY --from=builder \
   /target/release/spotify-homepage-backend \

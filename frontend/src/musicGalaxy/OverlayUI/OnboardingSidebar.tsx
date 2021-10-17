@@ -1,6 +1,7 @@
 import React from 'react';
 
 import { API_BASE_URL } from 'src/conf';
+import { getSentry } from 'src/sentry';
 import { GALAXY_BLOG_POST_LINK } from '../conf';
 import './OnboardingSidebar.scss';
 import { OverlayAction } from './OverlayUI';
@@ -56,6 +57,9 @@ const DesktopOnboardingSidebar: React.FC<OnboardingSidebarProps> = ({
 
     <ActionButton
       onClick={() => {
+        getSentry()?.captureMessage(
+          'Music Galaxy: Onboarding Sidebar: Clicked Link Spotify button'
+        );
         window.location.href = `${API_BASE_URL}/authorize?playlist_perms=false&state=galaxy`;
       }}
     >
@@ -65,6 +69,9 @@ const DesktopOnboardingSidebar: React.FC<OnboardingSidebarProps> = ({
     </ActionButton>
     <ActionButton
       onClick={() => {
+        getSentry()?.captureMessage(
+          'Music Galaxy: Onboarding Sidebar: Clicked Explore Without Connecting button'
+        );
         dispatchOverlayAction({ type: 'CLOSE_ONBOARDING' });
         lockPointer();
       }}
