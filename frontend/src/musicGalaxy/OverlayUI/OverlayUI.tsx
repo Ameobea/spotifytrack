@@ -1,11 +1,11 @@
 import React, { useEffect, useReducer, useRef, useState } from 'react';
+import About from '../About';
 import { getIsMobile, getUserSpotifyID } from '../ArtistMapInst';
 
 import {
   ARTIST_LABEL_TEXT_COLOR,
   CROSSHAIR_COLOR,
   CROSSHAIR_WIDTH_PX,
-  DEFAULT_FOV,
   getArtistLabelScaleFactor,
   PLAYING_ARTIST_LABEL_FADE_OUT_TIME_MS,
 } from '../conf';
@@ -34,7 +34,7 @@ export class UIEventRegistry {
   private callback: ((actions: Action[]) => void) | null = null;
   private pendingActions: Action[] = [];
 
-  public currentFOV = DEFAULT_FOV;
+  public currentZoom = 1;
   public controlMode: 'orbit' | 'pointerlock' | 'flyorbit' = 'orbit';
   public getLabelPosition: (id: number | string) => {
     x: number;
@@ -347,6 +347,7 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height }) =
   const labelState = useRef(initialState);
   const canvasRef = useRef<CanvasRenderingContext2D | null>(null);
   const [controlMode, setControlMode] = useState<'orbit' | 'flyorbit' | 'pointerlock'>('orbit');
+  const [aboutPageOpen, setAboutPageOpen] = useState(false);
   const [overlayState, dispatchOverlayAction] = useReducer(
     overlayStateReducer,
     buildDefaultOverlayState()
@@ -501,7 +502,7 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height }) =
         const scale = getArtistLabelScaleFactor(
           distance,
           popularity,
-          eventRegistry.currentFOV,
+          eventRegistry.currentZoom,
           eventRegistry.isMobile
         );
 
@@ -560,14 +561,20 @@ const OverlayUI: React.FC<OverlayUIProps> = ({ eventRegistry, width, height }) =
 
   return (
     <>
+      {aboutPageOpen ? <About onClose={() => setAboutPageOpen(false)} /> : null}
       {overlayState.onboardingOpen ? (
         <OnboardingSidebar
           dispatchOverlayAction={dispatchOverlayAction}
           lockPointer={() => eventRegistry.lockPointer()}
           isMobile={eventRegistry.isMobile}
+          setAboutPageOpen={() => setAboutPageOpen(true)}
         />
       ) : overlayState.artistSearchOpen ? (
-        <CheatSheet isMobile={eventRegistry.isMobile} isOrbitMode={controlMode === 'orbit'} />
+        <CheatSheet
+          isMobile={eventRegistry.isMobile}
+          isOrbitMode={controlMode === 'orbit'}
+          setAboutPageOpen={() => setAboutPageOpen(true)}
+        />
       ) : (
         <CollapsedCheatSheet
           isMobile={eventRegistry.isMobile}

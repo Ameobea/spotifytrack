@@ -79,6 +79,8 @@ export const getHighlightedArtistsInterOpacity = (
 export const CROSSHAIR_COLOR = 'rgba(188, 188, 188, 0.38)';
 export const CROSSHAIR_WIDTH_PX = 2;
 
+export const GALAXY_BLOG_POST_LINK = 'https://cprimozic.net/blog/TODO_TODO_TODO'; // TODO
+
 export const BLOOM_PARAMS = {
   bloomStrength: 2.45,
   bloomThreshold: 0,
@@ -125,7 +127,7 @@ export const getArtistSize = (
 export const getArtistLabelScaleFactor = (
   distance: number,
   popularity: number,
-  fov: number,
+  zoom: number,
   isMobile: boolean
 ) => {
   // Scale linearly with distance just like real life
@@ -136,7 +138,7 @@ export const getArtistLabelScaleFactor = (
   score += (popularity / 100) * 2;
 
   // Make labels larger when FOV is lower to account for the zoom effect it has
-  score *= 1 / Math.pow(fov / DEFAULT_FOV, 1.5);
+  score *= 1 / Math.pow(1 / zoom, 1.5);
 
   return Math.max(Math.min(score, 18), 0);
 };

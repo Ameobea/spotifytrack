@@ -98,16 +98,16 @@ export class WasmClient {
     );
   }
 
-  private getConnectionsColorBuffer(): Float32Array {
+  private getConnectionsColorBuffer(): Uint8ClampedArray {
     const connectionsColorBufferPtr = this.engine.get_connections_color_buffer_ptr(this.ctxPtr);
     const connectionsColorBufferLength = this.engine.get_connections_color_buffer_length(
       this.ctxPtr
     );
     const memory: WebAssembly.Memory = this.engine.get_memory();
-    return new Float32Array(
+    return new Uint8ClampedArray(
       memory.buffer.slice(
         connectionsColorBufferPtr,
-        connectionsColorBufferPtr + connectionsColorBufferLength * 4
+        connectionsColorBufferPtr + connectionsColorBufferLength
       )
     );
   }
@@ -119,7 +119,7 @@ export class WasmClient {
     relationshipData: Uint8Array,
     chunkSize: number,
     chunkIx: number
-  ): { connectionsBuffer: Float32Array; connectionsColorBuffer: Float32Array } {
+  ): { connectionsBuffer: Float32Array; connectionsColorBuffer: Uint8ClampedArray } {
     this.engine.handle_artist_relationship_data(this.ctxPtr, relationshipData, chunkSize, chunkIx);
 
     const connectionsBuffer = this.getConnectionsBuffer();
@@ -184,7 +184,7 @@ export class WasmClient {
    */
   public setQuality(newQuality: number): {
     connectionsBuffer: Float32Array;
-    connectionsColorBuffer: Float32Array;
+    connectionsColorBuffer: Uint8ClampedArray;
   } {
     this.engine.set_quality(this.ctxPtr, newQuality);
     const connectionsBuffer = this.getConnectionsBuffer();

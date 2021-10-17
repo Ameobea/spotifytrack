@@ -9,7 +9,6 @@ import type Stats from 'three/examples/jsm/libs/stats.module';
 import { fetchPackedArtistPositions, getAllTopArtistInternalIDsForUser } from './api';
 import {
   BASE_ARTIST_GEOMETRY_SIZE,
-  BASE_CONNECTION_COLOR,
   getArtistSize,
   MOVEMENT_SPEED_UNITS_PER_SECOND,
   ARTIST_GEOMETRY_OPACITY,
@@ -392,7 +391,7 @@ export class ArtistMapInst {
       // TODO: Animate zoom
       this.camera.zoom = 1;
       this.camera.fov = DEFAULT_FOV;
-      this.eventRegistry.currentFOV = DEFAULT_FOV;
+      this.eventRegistry.currentZoom = 1;
       this.camera.updateProjectionMatrix();
     }
 
@@ -405,10 +404,16 @@ export class ArtistMapInst {
   }
 
   public handleScroll(deltaY: number) {
-    const newFOV = Math.max(10, Math.min(120, this.camera.fov + deltaY * 0.08));
-    this.camera.fov = newFOV;
-    this.eventRegistry.currentFOV = newFOV;
+    // Orbit mode controls already intercept + handle wheel events
+    if (this.controls.type === 'orbit') {
+      return;
+    }
+
+    const newZoom = Math.max(0.45, Math.min(2, this.camera.zoom + -deltaY * 0.0005));
+    this.camera.zoom = newZoom;
     this.camera.updateProjectionMatrix();
+    this.eventRegistry.currentZoom = newZoom;
+
     this.forceLabelsUpdate = true;
   }
 
@@ -466,8 +471,10 @@ export class ArtistMapInst {
 
   private buildInstancedArtistMeshes() {
     const geometry = new this.THREE.SphereGeometry(BASE_ARTIST_GEOMETRY_SIZE, 12, 8);
-    const instanceColorBuffer = new Float32Array(70_000 * 3);
-    const instanceColor = new this.THREE.InstancedBufferAttribute(instanceColorBuffer, 3);
+    // Use 8-bit color channels because that seems to be faster.  This is technically not what three.js
+    // is expecting and some methods break like `setColorAt`
+    const instanceColorBuffer = new Uint8ClampedArray(70_000 * 3);
+    const instanceColor = new this.THREE.InstancedBufferAttribute(instanceColorBuffer, 3, true);
     instanceColor.count = 0;
     geometry.setAttribute('instanceColor', instanceColor);
 
@@ -477,6 +484,13 @@ export class ArtistMapInst {
     });
     const meshes = new this.THREE.InstancedMesh(geometry, material, 70_000);
     meshes.instanceColor = instanceColor;
+    // These methods don't work with non-f32 instancecolor buffers; ensure that they aren't used
+    meshes.getColorAt = () => {
+      throw new UnreachableException();
+    };
+    meshes.setColorAt = () => {
+      throw new UnreachableException();
+    };
 
     meshes.count = 0;
     return meshes;
@@ -500,7 +514,7 @@ export class ArtistMapInst {
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       antialias: true,
-      precision: 'lowp',
+      // precision: 'lowp',
       powerPreference: 'high-performance',
       alpha: true,
     });
@@ -509,6 +523,8 @@ export class ArtistMapInst {
     this.renderer.toneMapping = THREE.ReinhardToneMapping;
     this.renderer.toneMappingExposure = navigator.platform === 'MacIntel' ? 1.97 : 1.764;
     this.clock = new THREE.Clock();
+    this.renderer.info.autoReset = false;
+    (window as any).renderer = this.renderer;
 
     if (!this.isMobile) {
       this.stats = this.THREE_EXTRA.Stats.default();
@@ -958,7 +974,7 @@ export class ArtistMapInst {
     connectionsColorBuffer,
   }: {
     connectionsBuffer: Float32Array;
-    connectionsColorBuffer: Float32Array;
+    connectionsColorBuffer: Uint8ClampedArray;
   }) {
     console.log(
       'Updating connections data buffer; new rendered connection count: ',
@@ -968,9 +984,12 @@ export class ArtistMapInst {
       'position',
       new this.THREE.BufferAttribute(connectionsDataBuffer, 3)
     );
+    if (connectionsColorBuffer.length % 6 !== 0) {
+      throw new UnreachableException('Expected multiple of 6 for colors buffer');
+    }
     this.bloomedConnectionsGeometry.setAttribute(
       'color',
-      new this.THREE.Float32BufferAttribute(connectionsColorBuffer, 3)
+      new this.THREE.Uint8ClampedBufferAttribute(connectionsColorBuffer, 3, true)
     );
     this.bloomedConnectionsGeometry.computeBoundingSphere();
   }
@@ -1035,7 +1054,13 @@ export class ArtistMapInst {
 
       this.artistMeshes.setMatrixAt(bufferIndex, matrix);
       const color = this.getArtistColor(id, isHighlighted, isPlaying);
-      this.artistMeshes.setColorAt(bufferIndex, color);
+      // this.artistMeshes.setColorAt(bufferIndex, color);
+      (this.artistMeshes.instanceColor!.array as Uint8ClampedArray)[bufferIndex * 3] =
+        color.r * 255;
+      (this.artistMeshes.instanceColor!.array as Uint8ClampedArray)[bufferIndex * 3 + 1] =
+        color.g * 255;
+      (this.artistMeshes.instanceColor!.array as Uint8ClampedArray)[bufferIndex * 3 + 2] =
+        color.b * 255;
 
       this.renderedArtistBufferIndicesByArtistID.set(id, bufferIndex);
       this.artistIDByRenderedArtistBufferIndex.set(bufferIndex, id);
@@ -1080,7 +1105,6 @@ export class ArtistMapInst {
     );
 
     const matrix = new this.THREE.Matrix4();
-    const color = new this.THREE.Color();
     artistsToRemove.forEach((id) => {
       const targetBufferIndex = this.renderedArtistBufferIndicesByArtistID.get(id);
       const idOfLastArtist = this.artistIDByRenderedArtistBufferIndex.get(
@@ -1104,8 +1128,17 @@ export class ArtistMapInst {
         // Swap the last element into the position of the one that's being removed
         this.artistMeshes.getMatrixAt(this.artistMeshes.count - 1, matrix);
         this.artistMeshes.setMatrixAt(targetBufferIndex, matrix);
-        this.artistMeshes.getColorAt(this.artistMeshes.count - 1, color);
-        this.artistMeshes.setColorAt(targetBufferIndex, color);
+        // this.artistMeshes.getColorAt(this.artistMeshes.count - 1, color);
+        // this.artistMeshes.setColorAt(targetBufferIndex, color);
+        (this.artistMeshes.instanceColor!.array as Uint8ClampedArray)[targetBufferIndex * 3] = (
+          this.artistMeshes.instanceColor!.array as Uint8ClampedArray
+        )[(this.artistMeshes.count - 1) * 3];
+        (this.artistMeshes.instanceColor!.array as Uint8ClampedArray)[targetBufferIndex * 3 + 1] = (
+          this.artistMeshes.instanceColor!.array as Uint8ClampedArray
+        )[(this.artistMeshes.count - 1) * 3 + 1];
+        (this.artistMeshes.instanceColor!.array as Uint8ClampedArray)[targetBufferIndex * 3 + 2] = (
+          this.artistMeshes.instanceColor!.array as Uint8ClampedArray
+        )[(this.artistMeshes.count - 1) * 3 + 2];
         this.artistIDByRenderedArtistBufferIndex.set(targetBufferIndex, idOfLastArtist);
         this.renderedArtistBufferIndicesByArtistID.set(idOfLastArtist, targetBufferIndex);
       }
@@ -1143,10 +1176,6 @@ export class ArtistMapInst {
       (maxUpdatedArtistIx - minUpdatedArtistIx) * this.artistMeshes.instanceColor!.itemSize;
   }
 
-  private getConnectionColor(): THREE.Color {
-    return new this.THREE.Color(BASE_CONNECTION_COLOR);
-  }
-
   private maybeAnimatePlayingArtist() {
     if (!this.playingArtistGeometry) {
       return;
@@ -1156,7 +1185,7 @@ export class ArtistMapInst {
     if (!Number.isFinite(gain)) {
       throw new UnreachableException('Bad gain returned from music manager: ' + gain);
     }
-    const scale = Math.pow(2, gain * 12.4);
+    const scale = Math.pow(2, gain * 7.4);
     // Low-pass filter the scale to avoid it flickering
     this.playingArtistScale = this.playingArtistScale * 0.7 + scale * 0.3;
     const newMatrix = new this.THREE.Matrix4();
@@ -1167,6 +1196,8 @@ export class ArtistMapInst {
   }
 
   private render(forward: number) {
+    this.renderer.info.reset();
+
     if (
       this.secondSinceLastPositionUpdate > getSecondsBetweenPositionUpdates(this.quality) &&
       !this.wasmPositionHandlerIsRunning
@@ -1254,6 +1285,8 @@ export class ArtistMapInst {
     }
 
     this.scene.remove(this.playingArtistGeometry);
+    this.playingArtistGeometry.geometry.dispose();
+    (this.playingArtistGeometry.material as THREE.MeshBasicMaterial).dispose();
     this.playingArtistGeometry = null;
 
     // Trigger the old geometry to come back to normal size
@@ -1444,6 +1477,7 @@ export class ArtistMapInst {
         }
       }
     }
+
     if (this.cameraOverrides.movement) {
       const curTime = new Date().getTime();
       const progress =

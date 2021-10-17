@@ -10,7 +10,7 @@ use super::ArtistMapCtx;
 const NOISE_POS_DIVISOR: f64 = 84_000.;
 const BASE_ARTIST_COLOR: u32 = 0x1586a6;
 const BASE_CONNECTION_COLOR: u32 = 0x0072dd;
-pub const COLOR_NOISE_SEED: u32 = 1238432289;
+pub const COLOR_NOISE_SEED: u32 = 1238432211;
 
 fn expand_range(byte: u8) -> f64 { byte as f64 / 255. }
 
@@ -66,7 +66,7 @@ lazy_static! {
 impl ArtistMapCtx {
     #[inline(never)]
     pub fn populate_connection_colors_buffer(&mut self) {
-        self.connection_colors_buffer = Vec::with_capacity(self.connections_buffer.len() * 2);
+        self.connection_colors_buffer = Vec::with_capacity(self.connections_buffer.len() * 6);
 
         for pos in &self.connections_buffer {
             let midpoint = [
@@ -82,11 +82,15 @@ impl ArtistMapCtx {
             ]);
             let color = CONNECTION_COLOR_GRADIENT.get(val);
             let (r, g, b) = color.into_components();
-            self.connection_colors_buffer
-                .push([r as f32, g as f32, b as f32]);
-
-            self.connection_colors_buffer
-                .push([r as f32, g as f32, b as f32]);
+            let r = (r * 255.) as u8;
+            let g = (g * 255.) as u8;
+            let b = (b * 255.) as u8;
+            self.connection_colors_buffer.push(r);
+            self.connection_colors_buffer.push(g);
+            self.connection_colors_buffer.push(b);
+            self.connection_colors_buffer.push(r);
+            self.connection_colors_buffer.push(g);
+            self.connection_colors_buffer.push(b);
         }
     }
 

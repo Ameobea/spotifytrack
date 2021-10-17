@@ -15,4 +15,4 @@ deploy:
 
 monkey-patch-worker-url:
   # Loading web workers from different origins is not supported, so this re-writes the worker URL to load it directly from the same origin.
-  sed -i --regexp-extended "s/new URL\(\\w+\.\\w+/new URL\('https:\/\/spotifytrack\.net\/'/g" ./dist/musicGalaxy*.js
+  sed -i --regexp-extended "s/new URL\(\\w+\.\\w+/new URL\('https:\/\/galaxy\.spotifytrack\.net\/'/g" ./dist/musicGalaxy*.js

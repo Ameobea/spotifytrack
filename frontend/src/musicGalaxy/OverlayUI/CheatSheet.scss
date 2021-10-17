@@ -48,7 +48,6 @@
   top: unset;
   width: 100vw;
   left: 0;
-  overflow: hidden;
   box-sizing: border-box;
 
   ul {
@@ -85,4 +84,31 @@
       padding-bottom: 0;
     }
   }
+}
+
+.cheat-sheet-about-button {
+  position: absolute;
+  z-index: 3;
+  pointer-events: auto;
+  user-select: none;
+  color: #eeeeee9b;
+  background-color: #141414dd;
+  padding: 3px 9px;
+  right: 0;
+  border: 1px solid #cccccc56;
+  cursor: pointer;
+}
+
+.mobile-cheat-sheet-about-button {
+  top: -23px;
+  border-top-left-radius: 3px;
+  border-top-right-radius: 3px;
+  font-size: 13px;
+}
+
+.desktop-cheat-sheet-about-button {
+  bottom: -26px;
+  border-bottom-left-radius: 3px;
+  border-bottom-right-radius: 3px;
+  font-size: 15.5px;
 }

@@ -35,6 +35,7 @@ const DESKTOP_ORBIT_KEYBINDS: Keybinds = [
   { name: 'Zoom', keybind: 'Scroll Wheel' },
   { name: 'Move Camera In/Out', keybind: 'Hold + Drag Middle Mouse' },
   { name: 'Pan', keybind: 'Hold + Drag Right Mouse' },
+  { name: 'Enter Fly Mode', keybind: 'Search for an artist' },
 ];
 
 const MOBILE_ORBIT_KEYBINDS: Keybinds = [
@@ -50,10 +51,13 @@ const MOBILE_FLY_KEYBINDS: Keybinds = [
   { name: 'Orbit Artist + Play Music', keybind: 'Tap' },
 ];
 
-const CheatSheet: React.FC<{ isMobile: boolean; isOrbitMode: boolean }> = ({
-  isMobile,
-  isOrbitMode,
-}) => {
+interface CheatSheetProps {
+  isMobile: boolean;
+  isOrbitMode: boolean;
+  setAboutPageOpen: () => void;
+}
+
+const CheatSheet: React.FC<CheatSheetProps> = ({ isMobile, isOrbitMode, setAboutPageOpen }) => {
   const { keybinds, keybindFlex } = (() => {
     if (isMobile) {
       if (isOrbitMode) {
@@ -72,6 +76,14 @@ const CheatSheet: React.FC<{ isMobile: boolean; isOrbitMode: boolean }> = ({
 
   return (
     <div className={`cheat-sheet${isMobile ? ' mobile-cheat-sheet' : ''}`}>
+      {isMobile ? (
+        <button
+          className="cheat-sheet-about-button mobile-cheat-sheet-about-button"
+          onClick={setAboutPageOpen}
+        >
+          About
+        </button>
+      ) : null}
       <ul>
         {keybinds.map((item) => (
           <CSItem
@@ -82,6 +94,14 @@ const CheatSheet: React.FC<{ isMobile: boolean; isOrbitMode: boolean }> = ({
           />
         ))}
       </ul>
+      {!isMobile ? (
+        <button
+          className="cheat-sheet-about-button desktop-cheat-sheet-about-button"
+          onClick={setAboutPageOpen}
+        >
+          About
+        </button>
+      ) : null}
     </div>
   );
 };

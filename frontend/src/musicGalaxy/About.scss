@@ -1,0 +1,70 @@
+.galaxy-about-page-backdrop {
+  position: absolute;
+  height: 100vh;
+  width: 100vw;
+  background-color: rgba(14, 14, 14, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 14;
+
+  .galaxy-about-page {
+    position: absolute;
+    background-color: #080808;
+    width: calc(min(90vw, 600px));
+    min-height: 50vh;
+    max-height: 85vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    z-index: 15;
+    padding: 18px 18px 10px 18px;
+    font-size: 18px;
+    box-sizing: border-box;
+    border-radius: 6px;
+
+    p {
+      margin-bottom: 0;
+    }
+
+    h2 {
+      margin-top: 12px;
+      margin-bottom: 8px;
+      text-align: center;
+    }
+
+    hr {
+      width: 100%;
+      margin-top: 20px;
+      margin-bottom: 20px;
+    }
+  }
+}
+
+.galaxy-about-close-button {
+  position: absolute;
+  right: 18px;
+  width: 27px;
+  height: 27px;
+  display: flex;
+  text-align: center;
+  padding: 2px 0px 0px 6.3px;
+  font-size: 20px;
+  border-radius: 20px;
+  outline: none;
+  border: 1px solid white;
+  background-color: transparent;
+  color: white;
+  cursor: pointer;
+  font-weight: bold;
+  box-shadow: 0px 0px 1px 0px #fff;
+}
+
+@media screen and (max-width: 768px) {
+  .galaxy-about-page-backdrop {
+    .galaxy-about-page {
+      font-size: 16px;
+    }
+  }
+}

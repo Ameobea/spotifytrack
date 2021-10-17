@@ -71,7 +71,7 @@ pub struct ArtistMapCtx {
     pub manual_play_artist_id: Option<u32>,
     pub received_chunks: HashSet<(u32, u32)>,
     pub color_noise: noise::SuperSimplex,
-    pub connection_colors_buffer: Vec<[f32; 3]>,
+    pub connection_colors_buffer: Vec<u8>,
     pub artist_colors_buffer: Vec<(u32, [f32; 3])>,
 }
 
@@ -85,17 +85,17 @@ const DEFAULT_QUALITY: u8 = 7;
 /// IDS of artists to be rendered when in orbit control mode.  Represent a wide variety of different
 /// artists from disparate parts of the galaxy.
 const ORBIT_LABEL_ARTIST_IDS: &[u32] = &[
-    14710,    // The Beatles
-    109666,   // The Living Tombstone
-    486,      // Taylor Swift
-    108584,   // Flux Pavilion
-    779,      // BTS
-    4394417,  // Florida Georgia Line
-    5538103,  // Kidz Bop Kids
-    1415410,  // Bad Bunny
-    54,       // Joji
-    635,      // 21 Savage
-    6822165,  // Sfera Ebbasta
+    14710,   // The Beatles
+    109666,  // The Living Tombstone
+    486,     // Taylor Swift
+    108584,  // Flux Pavilion
+    779,     // BTS
+    4394417, // Florida Georgia Line
+    5538103, // Kidz Bop Kids
+    1415410, // Bad Bunny
+    54,      // Joji
+    635,     // 21 Savage
+    // 6822165,  // Sfera Ebbasta
     1121203,  // Livetune
     35177268, // Joe Rogan
     88531684, // LO-FI BEATS
@@ -974,7 +974,7 @@ pub fn get_connections_color_buffer_ptr(ctx: *mut ArtistMapCtx) -> *const f32 {
 #[wasm_bindgen]
 pub fn get_connections_color_buffer_length(ctx: *mut ArtistMapCtx) -> usize {
     let ctx = unsafe { &mut *ctx };
-    ctx.connection_colors_buffer.len() * 3
+    ctx.connection_colors_buffer.len()
 }
 
 #[wasm_bindgen]
