@@ -467,10 +467,15 @@ pub fn decode_and_record_packed_artist_positions(
     is_mobile: bool,
 ) -> usize {
     let ctx = unsafe { &mut *ctx };
-    ctx.is_mobile = is_mobile;
 
     let ptr = packed.as_ptr() as *const u32;
     let count = unsafe { *ptr } as usize;
+
+    ctx.all_artists.reserve(count);
+    ctx.all_artist_relationships.reserve(count);
+    ctx.sorted_artist_ids.reserve(count);
+    ctx.artists_indices_by_id.reserve(count);
+    ctx.is_mobile = is_mobile;
 
     let mut maxs = [f32::NEG_INFINITY; 3];
     let mut mins = [f32::INFINITY; 3];

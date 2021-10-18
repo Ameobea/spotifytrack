@@ -221,7 +221,7 @@ export class ArtistMapInst {
   private wasmPositionHandlerIsRunning = false;
   private highlightedArtistIDs: Set<number> = new Set();
   private raycaster: THREE.Raycaster;
-  private isDevMode = true;
+  private isDevMode = false;
   private cameraOverrides: {
     movement: AutoFlyState | null;
     direction: LookAtState | null;
@@ -1263,12 +1263,23 @@ export class ArtistMapInst {
 
     const cameraDirection = this.camera.getWorldDirection(new this.THREE.Vector3());
     const cameraUp = this.camera.up;
-    if (this.controls.type !== 'orbit') {
-      this.musicManager.setListenerPosition(
-        this.camera.position.clone(),
-        cameraDirection,
-        cameraUp
-      );
+    if (this.controls.type !== 'orbit' && this.playingArtistGeometry) {
+      // If mobile, we set the listener position to the position of the playing artist
+      //
+      // But still preserve the spatialization effect when the camera is moving
+      if (this.isMobile && !this.cameraOverrides.movement) {
+        this.musicManager.setListenerPosition(
+          this.playingArtistGeometry.position,
+          new this.THREE.Vector3(),
+          new this.THREE.Vector3()
+        );
+      } else {
+        this.musicManager.setListenerPosition(
+          this.camera.position.clone(),
+          cameraDirection,
+          cameraUp
+        );
+      }
     }
 
     this.maybeAnimatePlayingArtist();

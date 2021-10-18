@@ -79,7 +79,7 @@ export const getHighlightedArtistsInterOpacity = (
 export const CROSSHAIR_COLOR = 'rgba(188, 188, 188, 0.38)';
 export const CROSSHAIR_WIDTH_PX = 2;
 
-export const GALAXY_BLOG_POST_LINK = 'https://cprimozic.net/blog/TODO_TODO_TODO'; // TODO
+export const GALAXY_BLOG_POST_LINK = 'https://cprimozic.net/blog/building-music-galaxy/';
 
 export const BLOOM_PARAMS = {
   bloomStrength: 2.45,

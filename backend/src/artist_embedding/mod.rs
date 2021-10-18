@@ -92,7 +92,7 @@ impl<const DIMS: usize> ArtistEmbeddingContext<DIMS> {
         // Sort the pairs to maybe increase compression ratio who knows
         pairs.sort_unstable_by_key(|(id, _pos)| *id);
 
-        let packed_byte_size = 1
+        let packed_byte_size = 4
             + (pairs.len() * 4)
             + (pairs.len() * DIMS * 4)
             + if artist_popularities_by_id.is_some() {

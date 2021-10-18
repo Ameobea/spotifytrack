@@ -35,9 +35,11 @@ const VolumeAndReturnToOrbitModeControls: React.FC<VolumeAndReturnToOrbitModeCon
       />
       <button
         onClick={() => {
-          onVolumeChange(0);
-          setVolume(0);
-          localStorage.volume = 0;
+          const newVolume = volume === 0 ? DEFAULT_VOLUME : 0;
+
+          onVolumeChange(newVolume);
+          setVolume(newVolume);
+          localStorage.volume = newVolume;
         }}
         className="mute-button"
       >
