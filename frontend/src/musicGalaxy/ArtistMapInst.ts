@@ -684,7 +684,7 @@ export class ArtistMapInst {
     );
 
     this.scene = new THREE.Scene();
-    this.scene.fog = new this.THREE.Fog(0x000000, 1, 9_472_000);
+    this.scene.fog = null; // new this.THREE.Fog(0x000000, 1, 9_472_000);
 
     const light = new THREE.AmbientLight(AMBIENT_LIGHT_COLOR);
     this.scene.add(light);
@@ -714,7 +714,10 @@ export class ArtistMapInst {
       vertexColors: true,
       transparent: true,
       depthWrite: false,
+      depthTest: false,
       opacity: getBloomedConnectionOpacity(this.quality),
+      // premultipliedAlpha: true,
+      // precision: 'lowp',
     });
     this.bloomedConnectionsMesh = new this.THREE.LineSegments(
       this.bloomedConnectionsGeometry,
@@ -723,11 +726,6 @@ export class ArtistMapInst {
     this.scene.add(this.bloomedConnectionsMesh);
 
     const artistCount = allArtistData.length / 5;
-    const artistPointsPositionsAttribute = new this.THREE.BufferAttribute(
-      new Float32Array(artistCount * 3),
-      3
-    );
-    artistPointsPositionsAttribute.needsUpdate = true;
 
     const allArtistDataU32 = new Uint32Array(allArtistData.buffer);
     for (let i = 0; i < artistCount; i++) {
@@ -740,13 +738,6 @@ export class ArtistMapInst {
         ),
         popularity: allArtistDataU32[i * 5 + 4],
       });
-
-      artistPointsPositionsAttribute.setXYZ(
-        i * 4,
-        allArtistData[i * 4 + 1],
-        allArtistData[i * 4 + 2],
-        allArtistData[i * 4 + 3]
-      );
     }
 
     this.initBloomPass();
@@ -1320,6 +1311,7 @@ export class ArtistMapInst {
       color: new this.THREE.Color(PLAYING_ARTIST_COLOR),
       opacity: 0.7,
       transparent: true,
+      // precision: 'lowp',
     });
     this.playingArtistGeometry = new this.THREE.Mesh(geometry, material);
     this.playingArtistGeometry.position.copy(artistData.pos);

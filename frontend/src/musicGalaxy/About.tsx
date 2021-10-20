@@ -48,6 +48,14 @@ const About: React.FC<{ onClose: () => void }> = ({ onClose }) => (
         on the creation of this project.
       </p>
       <p>
+        Music Galaxy is part of the broader{' '}
+        <a target="_blank" href="https://spotifytrack.net">
+          Spotifytrack
+        </a>{' '}
+        project which has various stats and charts for tracking + analyzing your personal musical
+        journey over time.
+      </p>
+      <p>
         The visualization itself is created with Three.js and powered by a backend written in Rust.
         Full source code is available{' '}
         <a
