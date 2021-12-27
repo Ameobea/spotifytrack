@@ -1,3 +1,5 @@
+set dotenv-load := true
+
 build-wasm-client:
   cd src/musicGalaxy/WasmClient/wasm_engine && just build
 
@@ -14,5 +16,13 @@ deploy:
   rsync -Prv -e "ssh -o StrictHostKeyChecking=no -o IdentitiesOnly=yes -F /dev/null" ./dist/* debian@ameo.dev:/var/www/spotifytrack.net/
 
 monkey-patch-worker-url:
+  #!/usr/bin/env bash
+  set -euxo pipefail
+
   # Loading web workers from different origins is not supported, so this re-writes the worker URL to load it directly from the same origin.
-  sed -i --regexp-extended "s/new URL\(\\w+\.\\w+/new URL\('https:\/\/galaxy\.spotifytrack\.net\/'/g" ./dist/musicGalaxy*.js
+  if ! command -v gsed &> /dev/null
+  then
+      sed -i --regexp-extended "s/new URL\(\\w+\.\\w+/new URL\('https:\/\/galaxy\.spotifytrack\.net\/'/g" ./dist/musicGalaxy*.js
+  else
+      gsed -i --regexp-extended "s/new URL\(\\w+\.\\w+/new URL\('https:\/\/galaxy\.spotifytrack\.net\/'/g" ./dist/musicGalaxy*.js
+  fi

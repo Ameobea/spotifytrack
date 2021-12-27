@@ -54,6 +54,25 @@ const Home: React.FC<ReactRouterRouteProps> = () => (
         ></img>
       </div>
     </Carousel>
+
+    <div className="description-container">
+      <h3>Features</h3>
+      <ul>
+        <li>
+          View the first time you listened to your favorite artists and tracks on Spotify. Browse
+          back to see what music you were listening to at different points in the past
+        </li>
+        <li>
+          Compare your top tracks + artists to your friends and generate a sharable link so they can
+          view your overlap in musical preferences as well
+        </li>
+        <li>
+          Explore the interactive 3D <a href="https://galaxy.spotifytrack.net">Music Galaxy</a>,
+          personalized with your personal Spotify data. Listen to new songs and explore
+          relationships between artists to discover new musicians and styles
+        </li>
+      </ul>
+    </div>
   </main>
 );
 
