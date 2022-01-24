@@ -49,7 +49,7 @@ export const getArtistDataByInternalIDs = (internalIDs: number[]): Promise<(stri
 
 export const getArtistRelationshipsByInternalIDs = (internalIDs: number[]): Promise<ArrayBuffer> =>
   retryRequest(() =>
-    fetch(`${API_BASE_URL}/map_artist_relationships_by_internal_ids`, {
+    fetch(`${API_BASE_URL}/map_artist_relationships_by_internal_ids?rev=ily`, {
       method: 'POST',
       body: JSON.stringify(internalIDs),
     })
@@ -71,7 +71,7 @@ export const getArtistRelationshipsChunk = async (
         `${API_BASE_URL.replace(
           'spotifytrack.net',
           'spotifytrack.b-cdn.net'
-        )}/map_artist_relationships_chunk?chunk_ix=${chunkIx}&chunk_size=${chunkSize}`
+        )}/map_artist_relationships_chunk?chunk_ix=${chunkIx}&chunk_size=${chunkSize}&rev=ily`
       ).then(async (res) => {
         if (!res.ok) {
           throw await res.text();
@@ -95,7 +95,7 @@ export const fetchPackedArtistPositions = (): Promise<ArrayBuffer> =>
       `${API_BASE_URL.replace(
         'spotifytrack.net',
         'spotifytrack.b-cdn.net'
-      )}/packed_3d_artist_coords`
+      )}/packed_3d_artist_coords?rev=ily`
     )
   ).then(async (res) => {
     if (!res.ok) {
