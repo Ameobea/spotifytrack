@@ -1715,7 +1715,7 @@ pub(crate) async fn get_artist_relationships_chunk(
         }
     }
 
-    let artist_internal_ids = get_map_3d_artist_ctx()
+    let artist_internal_ids: Vec<i32> = get_map_3d_artist_ctx(&conn, &spotify_access_token)
         .await
         .sorted_artist_ids
         .chunks(chunk_size as usize)
