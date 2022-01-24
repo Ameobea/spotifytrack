@@ -257,17 +257,28 @@ const maybeUpdateMobileSelectedDay = (
   mobileSelectedDay.current = { lastSelectedDay: selectedDay, mergedDay };
 };
 
+const NoHistoryWarning: React.FC = () => (
+  <div className="no-history-warning">
+    <p>
+      SpotifyTrack has started tracking your listening history. However, history from before the
+      first time you&apos;ve used the site is not available.
+    </p>
+    <p>Check back in a few days/weeks to see new artists and tracks on this page!</p>
+  </div>
+);
+
 const Timeline: React.FC<{ mobile: boolean }> = ({ mobile }) => {
   const { username } = useUsername();
 
   const [curMonth, setCurMonth] = useState(dayjs().startOf('month'));
-  const { data } = useQuery(['timeline', username, curMonth.toString()], () =>
+  const { data: origData } = useQuery(['timeline', username, curMonth.toString()], () =>
     fetchTimelineEvents(username, curMonth.toString())
   );
 
   const weeks = useMemo(() => {
     const month = curMonth.month();
     const startOfCurMonth = curMonth.startOf('month');
+    const data = R.clone(origData);
 
     const weeks: TimelineDay[][] = [];
     let curWeek: TimelineDay[] = [];
@@ -333,15 +344,29 @@ const Timeline: React.FC<{ mobile: boolean }> = ({ mobile }) => {
     weeks.push(curWeek);
 
     return weeks;
-  }, [data, curMonth]);
+  }, [origData, curMonth]);
   const [selectedDay, setSelectedDay] = useState<TimelineDay | null>(null);
-  const mobileSelectedDay =
-    useRef<{ lastSelectedDay: TimelineDay; mergedDay: TimelineDay } | null>(null);
+  const mobileSelectedDay = useRef<{ lastSelectedDay: TimelineDay; mergedDay: TimelineDay } | null>(
+    null
+  );
 
-  maybeUpdateMobileSelectedDay(data, mobile, selectedDay, setSelectedDay, weeks, mobileSelectedDay);
+  maybeUpdateMobileSelectedDay(
+    origData,
+    mobile,
+    selectedDay,
+    setSelectedDay,
+    weeks,
+    mobileSelectedDay
+  );
 
   return (
-    <div className={`timeline${!data ? ' timeline-loading' : ''}`}>
+    <div className={`timeline${!origData ? ' timeline-loading' : ''}`}>
+      {origData?.events &&
+      origData.events.length > 0 &&
+      origData.events.every((evt) => evt.date === origData.events[0].date) ? (
+        <NoHistoryWarning />
+      ) : null}
+
       <div style={{ display: 'flex', flexDirection: 'row', alignContent: 'flex-start' }}>
         <Tooltip
           tooltip="Shows the first time that tracks and artists were seen by Spotifytrack"

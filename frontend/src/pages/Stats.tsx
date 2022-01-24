@@ -23,6 +23,8 @@ import { colors } from 'src/style';
 import CompareLanding from './CompareLanding';
 import ShareIcons from 'src/components/ShareIcons';
 import { getSentry } from 'src/sentry';
+import '../components/BigButton.scss';
+import musicGalaxyScreenshot from '../../public/music-galaxy.jpg';
 
 type ArtistCardProps = {
   horizontallyScrollable?: boolean;
@@ -82,6 +84,7 @@ export const ArtistCards: React.FC<ArtistCardProps> = ({
 enum StatsDetailsTab {
   Timeline = 'timeline',
   RelatedArtistsGraph = 'relatedArtists',
+  MusicGalaxy = 'musicGalaxy',
   Tracks = 'tracks',
   Artists = 'artists',
   Genres = 'genres',
@@ -94,6 +97,7 @@ const ALL_TABS: { title: string; value: StatsDetailsTab }[] = [
   { title: 'Top Artists', value: StatsDetailsTab.Artists },
   { title: 'Top Tracks', value: StatsDetailsTab.Tracks },
   { title: 'Top Genres', value: StatsDetailsTab.Genres },
+  { title: 'Music Galaxy', value: StatsDetailsTab.MusicGalaxy },
   { title: 'Compare', value: StatsDetailsTab.Compare },
 ];
 
@@ -193,6 +197,58 @@ const StatsDetailsTabs: React.FC<StatsDetailsTabsProps> = ({ selectedTab, setSel
   );
 };
 
+const MusicGalaxyPromo: React.FC = () => {
+  const { username, displayName } = useUsername();
+  const musicGalaxyURL = `https://galaxy.spotifytrack.net/?spotifyID=${username ?? ''}`;
+
+  const handleGalaxyClick = () =>
+    getSentry()?.captureMessage('music galaxy link click', { extra: { username, displayName } });
+
+  return (
+    <div className="music-galaxy-launcher">
+      <h2>Explore the Music Galaxy</h2>
+      <p>
+        Music Galaxy is an interactive 3D visualization of tens of thousands of artists on Spotify.
+      </p>
+      <p>
+        It&apos;s pre-linked with your SpotifyTrack so you can see where your top artists lie in the
+        broader galaxy.
+      </p>
+
+      <a onClick={handleGalaxyClick} target="_blank" href={musicGalaxyURL}>
+        <img
+          alt="A screenshot of the music galaxy showing a zoomed-out view of many artists, some labels, and highlighted user top artists"
+          src={musicGalaxyScreenshot}
+          width={1200}
+          height={627}
+          style={{
+            display: 'block',
+            maxWidth: '100%',
+            maxHeight: 450,
+            height: 'auto',
+            marginTop: 20,
+            marginBottom: 20,
+            objectFit: 'contain',
+          }}
+        />
+      </a>
+
+      <a
+        onClick={handleGalaxyClick}
+        target="_blank"
+        href={musicGalaxyURL}
+        style={{ textDecoration: 'none' }}
+      >
+        <button className="big-button">
+          Launch Music Galaxy
+          <br />
+          <span style={{ fontSize: 20 }}>Opens in a new tab</span>
+        </button>
+      </a>
+    </div>
+  );
+};
+
 const StatsDetailsInner: React.FC<{ stats: UserStats; mobile: boolean }> = ({ stats, mobile }) => {
   const history = useHistory();
   // TODO: Default to different default selected tab if we only have one update for the user
@@ -265,6 +321,9 @@ const StatsDetailsInner: React.FC<{ stats: UserStats; mobile: boolean }> = ({ st
                 <RelatedArtistsGraphForUser username={username} />
               </>
             );
+          }
+          case StatsDetailsTab.MusicGalaxy: {
+            return <MusicGalaxyPromo />;
           }
           case StatsDetailsTab.Tracks: {
             content = (
@@ -378,10 +437,10 @@ const Stats: React.FC<ReactRouterRouteProps> = ({
       actionCreators.userStats.ADD_USER_STATS(username, {
         last_update_time,
         // TODO: Fix this type hackery when you're less lazy and ennui-riddled
-        tracks: mapObj((tracks as any) as { [key: string]: { id: string }[] }, (tracks) =>
+        tracks: mapObj(tracks as any as { [key: string]: { id: string }[] }, (tracks) =>
           tracks.map(R.prop('id'))
         ) as any,
-        artists: mapObj((artists as any) as { [key: string]: { id: string }[] }, (artists) =>
+        artists: mapObj(artists as any as { [key: string]: { id: string }[] }, (artists) =>
           artists.map(R.prop('id'))
         ) as any,
         artistStats: {},

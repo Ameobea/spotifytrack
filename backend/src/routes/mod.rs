@@ -311,11 +311,6 @@ pub(crate) async fn get_timeline(
     let (artists, tracks) = items;
 
     let mut events = Vec::new();
-    events.push(TimelineEvent {
-        event_type: TimelineEventType::FirstUpdate,
-        date: NaiveDate::from_ymd(2020, 4, 20),
-        id: 1000000,
-    });
     let mut event_count = 0;
     events.extend(artist_events.into_iter().zip(artists.into_iter()).map(
         |((_artist_id, first_seen), artist)| {

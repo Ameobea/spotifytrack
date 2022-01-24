@@ -75,7 +75,7 @@ const CopyCompareLink: React.FC = () => {
 
 const CompareLanding: React.FC = () => (
   <div className="compare-landing">
-    <h2>Compare with Someone Else</h2>
+    <h2>Compare your Stats</h2>
     <CopyCompareLink />
   </div>
 );

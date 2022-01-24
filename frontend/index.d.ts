@@ -7,3 +7,6 @@ declare module 'react-lines-ellipsis/lib/html' {
   }> {}
   export = HTMLEllipsis;
 }
+declare module '*.png';
+declare module '*.jpg';
+declare module '*.jpeg';

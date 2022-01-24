@@ -196,3 +196,47 @@ main.stats {
     overflow-y: auto;
   }
 }
+
+.music-galaxy-launcher {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: center;
+  margin-top: 20px;
+  margin-bottom: 20px;
+
+  h2 {
+    margin-top: 0px;
+  }
+
+  p {
+    margin-top: 10px;
+    margin-bottom: 0;
+  }
+
+  .big-button {
+    max-height: 80px;
+    font-size: 30px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    margin-top: 40px;
+    margin-bottom: 40px;
+    padding: 0;
+  }
+}
+
+.no-history-warning {
+  background-color: rgba(251, 246, 90, 0.21);
+  padding: 5px 5px;
+  border-radius: 6px;
+  text-align: center;
+  margin-bottom: 10px;
+
+  p {
+    margin-top: 3px;
+    margin-bottom: 4px;
+  }
+}

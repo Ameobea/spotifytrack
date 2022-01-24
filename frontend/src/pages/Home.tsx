@@ -6,21 +6,22 @@ import 'react-responsive-carousel/lib/styles/carousel.min.css';
 import { ReactRouterRouteProps } from '../types';
 import './Home.scss';
 import '../components/BigButton.scss';
+import { getSentry } from 'src/sentry';
 
 const Home: React.FC<ReactRouterRouteProps> = () => (
   <main className="home">
     <h1>Spotifytrack</h1>
-    <h2>Hub for Spotify Statistics + Musical Taste Analysis</h2>
+    <h2>Hub for Spotify Stats Tracking + Musical Taste Analysis</h2>
 
     <div className="description-container">
       <p className="description">
         Spotifytrack is a tool that allows you to look back on your listening history on Spotify. It
-        keeps track of which tracks you listen to, the first time you find new artists, how your
-        genre preferences change over time, and much more.
+        collects and records your stats, keeping track of which tracks you listen to, the first time
+        you find new artists, how your genre preferences change over time, and more.
       </p>
       <p>
-        It&apos;s 100% free to use, takes seconds to set up, and will automatically update your
-        stats every day. To start, just click &apos;Connect to Spotify&apos;!
+        It&apos;s 100% free to use, takes seconds to set up, and automatically updates your stats
+        every day. To start, just click &apos;Connect to Spotify&apos;!
       </p>
     </div>
 
@@ -34,7 +35,21 @@ const Home: React.FC<ReactRouterRouteProps> = () => (
       </Link>
     </div>
 
-    <Carousel className="example-carousel" showThumbs={false} autoPlay infiniteLoop interval={5338}>
+    <Carousel
+      className="example-carousel"
+      showThumbs={false}
+      autoPlay
+      infiniteLoop
+      interval={5338}
+      onClickThumb={() => getSentry()?.captureMessage('Home page carousel thumb click')}
+    >
+      <div className="example-image">
+        <img
+          src="https://spotifytrack.b-cdn.net/images/timeline2.png"
+          alt="A screenshot of the timeline page of a user's Spotifytrack page showing when their top artists and tracks were seen for the first time"
+          style={{ maxWidth: 1000 }}
+        ></img>
+      </div>
       <div className="example-image">
         <img
           src="https://spotifytrack.b-cdn.net/images/artist_stats.png"

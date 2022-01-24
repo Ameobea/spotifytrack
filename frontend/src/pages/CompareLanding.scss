@@ -33,12 +33,20 @@
       border: 1px solid #283838;
       flex-wrap: wrap;
       gap: 6px;
+      max-width: 100%;
 
       .icons-container {
         display: flex;
         flex-direction: row;
         justify-content: center;
         align-items: center;
+      }
+
+      a {
+        display: block;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        overflow: hidden;
       }
     }
   }
