@@ -1,6 +1,6 @@
 use std::{cmp::Reverse, sync::Arc};
 
-use chrono::{NaiveDate, NaiveDateTime, Utc};
+use chrono::{Duration, NaiveDate, NaiveDateTime, Utc};
 use diesel::{self, prelude::*};
 use fnv::{FnvHashMap as HashMap, FnvHashSet};
 use futures::{stream::FuturesUnordered, TryFutureExt, TryStreamExt};
@@ -674,22 +674,11 @@ async fn validate_api_token(api_token_data: rocket::data::Data<'_>) -> Result<bo
     Ok(api_token == CONF.admin_api_token)
 }
 
-/// This route is internal and hit by the cron job that is called to periodically update the stats
-/// for the least recently updated user.
-#[post("/update_user?<user_id>", data = "<api_token_data>")]
-pub(crate) async fn update_user(
-    conn: DbConn,
-    api_token_data: rocket::data::Data<'_>,
+async fn update_user_inner(
+    conn: &DbConn,
     user_id: Option<String>,
-) -> Result<status::Custom<String>, String> {
+) -> Result<(), status::Custom<String>> {
     use crate::schema::users::dsl::*;
-
-    if !validate_api_token(api_token_data).await? {
-        return Ok(status::Custom(
-            Status::Unauthorized,
-            "Invalid API token supplied".into(),
-        ));
-    }
 
     // Get the least recently updated user
     let mut user: User = match user_id.clone().map(|s| -> Result<String, _> {
@@ -702,7 +691,10 @@ pub(crate) async fn update_user(
         Some(s) => {
             let user_id: String = s.map_err(|_| {
                 error!("Invalid `user_id` param provided to `/update/user`");
-                String::from("Invalid `user_id` param; couldn't decode")
+                status::Custom(
+                    Status::BadRequest,
+                    String::from("Invalid `user_id` param; couldn't decode"),
+                )
             })?;
 
             conn.run(move |conn| users.filter(spotify_id.eq(user_id)).first(conn))
@@ -712,13 +704,19 @@ pub(crate) async fn update_user(
             conn.run(move |conn| users.order_by(last_update_time).first(conn))
                 .await,
     }
-    .map_err(|err| -> String {
+    .map_err(|err| {
         error!("{:?}", err);
-        "Error querying user to update from database".into()
+        status::Custom(
+            Status::InternalServerError,
+            "Error querying user to update from database".into(),
+        )
     })?;
 
-    if let Some(res) = db_util::refresh_user_access_token(&conn, &mut user).await? {
-        return Ok(res);
+    if let Some(res) = db_util::refresh_user_access_token(&conn, &mut user)
+        .await
+        .map_err(|err| status::Custom(Status::InternalServerError, err))?
+    {
+        return Err(res);
     }
 
     // Only update the user if it's been longer than the minimum update interval
@@ -731,26 +729,78 @@ pub(crate) async fn update_user(
             diff
         );
         info!("{}", msg);
-        return Ok(status::Custom(Status::Ok, msg));
+        return Err(status::Custom(Status::Ok, msg));
     }
     info!("{} since last update; proceeding with update.", diff);
 
-    let stats = match crate::spotify_api::fetch_cur_stats(&user).await? {
+    let stats = match crate::spotify_api::fetch_cur_stats(&user)
+        .await
+        .map_err(|err| status::Custom(Status::InternalServerError, err))?
+    {
         Some(stats) => stats,
         None => {
             error!(
                 "Error when fetching stats for user {:?}; no stats returned.",
                 user
             );
-            return Err("No data from Spotify API for that user".into());
+            return Err(status::Custom(
+                Status::InternalServerError,
+                "No data from Spotify API for that user".into(),
+            ));
         },
     };
 
-    crate::spotify_api::store_stats_snapshot(&conn, &user, stats).await?;
+    crate::spotify_api::store_stats_snapshot(&conn, &user, stats)
+        .await
+        .map_err(|err| status::Custom(Status::InternalServerError, err))?;
+
+    info!("Successfully updated user {}", user.spotify_id);
+
+    Ok(())
+}
+
+/// This route is internal and hit by the cron job that is called to periodically update the stats
+/// for the least recently updated user.
+#[post("/update_user?<user_id>&<count>", data = "<api_token_data>")]
+pub(crate) async fn update_user(
+    conn: DbConn,
+    api_token_data: rocket::data::Data<'_>,
+    user_id: Option<String>,
+    count: Option<usize>,
+) -> Result<status::Custom<String>, String> {
+    if !validate_api_token(api_token_data).await? {
+        return Ok(status::Custom(
+            Status::Unauthorized,
+            "Invalid API token supplied".into(),
+        ));
+    }
+
+    if let Some(user_id) = user_id {
+        if let Err(status) = update_user_inner(&conn, Some(user_id)).await {
+            return Ok(status);
+        }
+        return Ok(status::Custom(Status::Ok, "User updated".into()));
+    }
+
+    let count = count.unwrap_or(1);
+    let mut success_count = 0usize;
+    let mut fail_count = 0usize;
+    for _ in 0..count {
+        let success = update_user_inner(&conn, None).await.is_ok();
+        if success {
+            success_count += 1;
+        } else {
+            fail_count += 1;
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
 
     Ok(status::Custom(
         Status::Ok,
-        format!("Successfully updated user {}", user.username),
+        format!(
+            "Successfully updated {} user(s); failed to update {} user(s)",
+            success_count, fail_count
+        ),
     ))
 }
 
