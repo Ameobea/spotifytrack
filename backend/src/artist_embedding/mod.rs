@@ -320,7 +320,7 @@ pub async fn init_artist_embedding_ctx(positions_url: &str) {
     let artist_position_by_id = parse_positions(&raw_positions);
     println!("Successfully parsed artist embedding positions.  Setting into global context.");
 
-    let ctx = box ArtistEmbeddingContext::new(artist_position_by_id);
+    let ctx = Box::new(ArtistEmbeddingContext::new(artist_position_by_id));
     unsafe { ARTIST_EMBEDDING_CTX = Box::into_raw(ctx) };
 }
 

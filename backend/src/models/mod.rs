@@ -31,6 +31,7 @@ pub(crate) struct User {
     pub username: String,
     pub token: String,
     pub refresh_token: String,
+    pub external_data_retrieved: bool,
 }
 
 #[derive(Serialize, Insertable, Associations)]
@@ -51,6 +52,38 @@ pub(crate) struct NewArtistHistoryEntry {
     pub user_id: i64,
     pub mapped_spotify_id: i32,
     pub update_time: NaiveDateTime,
+    pub timeframe: u8,
+    pub ranking: u8,
+}
+
+#[derive(Queryable)]
+pub(crate) struct UserHistoryEntry {
+    pub id: i64,
+    pub user_id: i64,
+    pub update_time: NaiveDateTime,
+    pub mapped_spotify_id: i32,
+    pub timeframe: u8,
+    pub ranking: u8,
+}
+
+#[derive(Clone, Insertable)]
+#[table_name = "track_rank_snapshots"]
+pub(crate) struct TrackHistoryEntry {
+    pub id: i64,
+    pub user_id: i64,
+    pub update_time: NaiveDateTime,
+    pub mapped_spotify_id: i32,
+    pub timeframe: u8,
+    pub ranking: u8,
+}
+
+#[derive(Clone, Insertable)]
+#[table_name = "artist_rank_snapshots"]
+pub(crate) struct ArtistHistoryEntry {
+    pub id: i64,
+    pub user_id: i64,
+    pub update_time: NaiveDateTime,
+    pub mapped_spotify_id: i32,
     pub timeframe: u8,
     pub ranking: u8,
 }

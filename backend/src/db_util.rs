@@ -72,6 +72,10 @@ pub(crate) async fn get_artist_stats(
         spotify_items::{self, dsl::*},
     };
 
+    if !user.external_data_retrieved {
+        retrieve_cold_data_for_user(&conn, user).await;
+    }
+
     let tok = start();
     let query = artist_rank_snapshots
         .filter(user_id.eq(user.id))
@@ -120,12 +124,35 @@ pub(crate) async fn get_artist_stats(
     Ok(Some(fetched_artists))
 }
 
+async fn retrieve_cold_data_for_user(conn: &DbConn, user: &User) {
+    info!(
+        "User {} has data in cold storage; starting retrieval...",
+        user.spotify_id
+    );
+    let tok = start();
+    crate::external_storage::download::retrieve_external_user_data(
+        conn,
+        user.spotify_id.clone(),
+        false,
+    )
+    .await;
+    mark(tok, "get_artist_stats");
+    info!(
+        "Finished retrieving data from cold storage for user {}",
+        user.spotify_id
+    );
+}
+
 pub(crate) async fn get_artist_rank_history_single_artist(
     user: &User,
     conn: DbConn,
     artist_spotify_id: String,
 ) -> Result<Option<Vec<(NaiveDateTime, [Option<u8>; 3])>>, String> {
     use crate::schema::{artist_rank_snapshots::dsl::*, spotify_items::dsl::*};
+
+    if !user.external_data_retrieved {
+        retrieve_cold_data_for_user(&conn, user).await;
+    }
 
     let query = artist_rank_snapshots
         .filter(user_id.eq(user.id))
@@ -278,6 +305,10 @@ pub(crate) async fn get_artist_stats_history(
 > {
     use crate::schema::{artist_rank_snapshots::dsl::*, spotify_items::dsl::*};
 
+    if !user.external_data_retrieved {
+        retrieve_cold_data_for_user(&conn, user).await;
+    }
+
     let query = artist_rank_snapshots.filter(user_id.eq(user.id));
     if let Some(timeframe_id) = restrict_to_timeframe_id {
         let query = query
@@ -360,6 +391,10 @@ pub(crate) async fn get_genre_stats_history(
     //         artist_rank_snapshots::dsl::timeframe,
     //     ));
 
+    if !user.external_data_retrieved {
+        retrieve_cold_data_for_user(&conn, user).await;
+    }
+
     // Using a raw query here because the `STRAIGHT_JOIN` forces the MySQL query optimizer to do
     // something different which makes the query run several times faster.
     let query = diesel::sql_query(
@@ -410,6 +445,10 @@ pub(crate) async fn get_track_stats(
     spotify_access_token: &str,
 ) -> Result<Option<Vec<(u8, Track)>>, String> {
     use crate::schema::{spotify_items::dsl::*, track_rank_snapshots::dsl::*};
+
+    if !user.external_data_retrieved {
+        retrieve_cold_data_for_user(&conn, user).await;
+    }
 
     let query = track_rank_snapshots
         .filter(user_id.eq(user.id))
@@ -476,6 +515,10 @@ pub(crate) async fn get_track_stats_history(
         track_rank_snapshots::{self, dsl::*},
         tracks_artists::{self, dsl::*},
     };
+
+    if !user.external_data_retrieved {
+        retrieve_cold_data_for_user(&conn, user).await;
+    }
 
     let query = spotify_items
         .filter(spotify_items::spotify_id.eq(parent_artist_id.clone()))

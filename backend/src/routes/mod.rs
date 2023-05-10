@@ -1,13 +1,13 @@
 use std::{cmp::Reverse, sync::Arc};
 
-use chrono::{Duration, NaiveDate, NaiveDateTime, Utc};
+use chrono::{NaiveDateTime, Utc};
 use diesel::{self, prelude::*};
 use fnv::{FnvHashMap as HashMap, FnvHashSet};
 use futures::{stream::FuturesUnordered, TryFutureExt, TryStreamExt};
 use redis::Commands;
 use rocket::{
     data::ToByteUnit,
-    http::{ContentType, RawStr, Status},
+    http::{RawStr, Status},
     response::{status, Redirect},
     serde::json::Json,
     State,
@@ -347,13 +347,13 @@ pub(crate) fn authorize(playlist_perms: Option<&str>, state: Option<&str>) -> Re
     };
     let callback_uri = crate::conf::CONF.get_absolute_oauth_cb_uri();
 
-    Redirect::to(dbg!(format!(
+    Redirect::to(format!(
         "https://accounts.spotify.com/authorize?client_id={}&response_type=code&redirect_uri={}&scope={}&state={}",
         CONF.client_id,
         callback_uri,
         scopes,
         RawStr::new(state.unwrap_or("")).percent_encode()
-    )))
+    ))
 }
 
 /// The playlist will be generated on the account of user2
@@ -1856,4 +1856,129 @@ pub(crate) async fn get_top_artists_internal_ids_for_user(
             .map(|(internal_id, _spotify_id)| internal_id)
             .collect(),
     )))
+}
+
+#[post(
+    "/transfer_user_data_to_external_storage/<user_id>",
+    data = "<api_token_data>"
+)]
+pub(crate) async fn transfer_user_data_to_external_storage(
+    api_token_data: rocket::Data<'_>,
+    conn: DbConn,
+    user_id: String,
+) -> Result<status::Custom<String>, String> {
+    if !validate_api_token(api_token_data).await? {
+        return Ok(status::Custom(
+            Status::Unauthorized,
+            "Invalid API token supplied".into(),
+        ));
+    }
+
+    let user = match db_util::get_user_by_spotify_id(&conn, user_id).await? {
+        Some(user) => user,
+        None => {
+            return Err(String::from("User not found"));
+        },
+    };
+
+    if !user.external_data_retrieved {
+        warn!(
+            "User {} already has external user data stored; downloading + merging and re-storing \
+             everything...",
+            user.spotify_id
+        );
+    }
+
+    crate::external_storage::upload::store_external_user_data(&conn, user.spotify_id).await;
+    Ok(status::Custom(Status::Ok, String::new()))
+}
+
+#[post(
+    "/transfer_user_data_from_external_storage/<user_id>",
+    data = "<api_token_data>"
+)]
+pub(crate) async fn transfer_user_data_from_external_storage(
+    api_token_data: rocket::Data<'_>,
+    conn: DbConn,
+    user_id: String,
+) -> Result<status::Custom<String>, String> {
+    if !validate_api_token(api_token_data).await? {
+        return Ok(status::Custom(
+            Status::Unauthorized,
+            "Invalid API token supplied".into(),
+        ));
+    }
+
+    let user = match db_util::get_user_by_spotify_id(&conn, user_id).await? {
+        Some(user) => user,
+        None => {
+            return Err(String::from("User not found"));
+        },
+    };
+
+    if user.external_data_retrieved {
+        warn!(
+            "User {} already has external data retrieved; retrieving anyway...",
+            user.spotify_id
+        );
+    }
+
+    crate::external_storage::download::retrieve_external_user_data(&conn, user.spotify_id, false)
+        .await;
+    Ok(status::Custom(Status::Ok, String::new()))
+}
+
+#[post(
+    "/bulk_transfer_user_data_to_external_storage/<user_count>",
+    data = "<api_token_data>"
+)]
+pub(crate) async fn bulk_transfer_user_data_to_external_storage(
+    api_token_data: rocket::Data<'_>,
+    conn: DbConn,
+    user_count: u32,
+) -> Result<status::Custom<String>, String> {
+    if !validate_api_token(api_token_data).await? {
+        return Ok(status::Custom(
+            Status::Unauthorized,
+            "Invalid API token supplied".into(),
+        ));
+    }
+
+    let users = conn
+        .run(move |conn| {
+            use crate::schema::users;
+            users::table
+                .filter(users::dsl::external_data_retrieved.eq(true))
+                .limit(user_count as i64)
+                .load::<User>(conn)
+        })
+        .await
+        .map_err(|err| {
+            error!("Error getting users from DB for bulk transfer: {:?}", err);
+            String::from("Internal DB error")
+        })?;
+    let usernames = users
+        .iter()
+        .map(|user| user.spotify_id.clone())
+        .collect::<Vec<_>>();
+    info!(
+        "Bulk transferring user data for {user_count} users: {:?}",
+        usernames
+    );
+
+    for user in users {
+        if !user.external_data_retrieved {
+            warn!(
+                "User {} already has external user data stored; downloading + merging and \
+                 re-storing everything...",
+                user.spotify_id
+            );
+        }
+
+        crate::external_storage::upload::store_external_user_data(&conn, user.spotify_id.clone())
+            .await;
+        info!("Done transferring user data for {}", user.spotify_id);
+    }
+
+    Ok(status::Custom(Status::Ok, String::new()))
 }

@@ -3,8 +3,7 @@
     decl_macro,
     box_patterns,
     try_trait_v2,
-    label_break_value,
-    box_syntax
+    result_option_inspect
 )]
 #![allow(clippy::identity_conversion)]
 
@@ -16,7 +15,7 @@ extern crate serde_derive;
 extern crate rocket;
 
 use artist_embedding::{init_artist_embedding_ctx, map_3d::get_packed_3d_artist_coords};
-use rocket_async_compression::Compression;
+// use rocket_async_compression::Compression;
 use tokio::sync::Mutex;
 
 pub mod artist_embedding;
@@ -25,6 +24,7 @@ pub mod cache;
 pub mod conf;
 pub mod cors;
 pub mod db_util;
+pub mod external_storage;
 pub mod models;
 pub mod routes;
 pub mod schema;
@@ -74,7 +74,10 @@ pub async fn main() {
         routes::get_packed_artist_relationships_by_internal_ids,
         routes::get_preview_urls_by_internal_id,
         routes::get_top_artists_internal_ids_for_user,
-        routes::get_artist_relationships_chunk
+        routes::get_artist_relationships_chunk,
+        routes::transfer_user_data_to_external_storage,
+        routes::transfer_user_data_from_external_storage,
+        routes::bulk_transfer_user_data_to_external_storage,
     ];
 
     // Pre-populate the packed 3D artist map embedding to make the first request for it instant
@@ -82,14 +85,14 @@ pub async fn main() {
     //     get_packed_3d_artist_coords().await;
     // });
 
-    let mut builder = rocket::build()
+    let builder = rocket::build()
         .mount("/", all_routes.clone())
         .mount("/api/", all_routes)
         .manage(Mutex::new(SpotifyTokenData::new().await))
         .attach(DbConn::fairing())
         .attach(cors::CorsFairing);
     if !cfg!(debug_assertions) {
-        builder = builder.attach(Compression::fairing());
+        // builder = builder.attach(Compression::fairing());
     }
     builder.launch().await.expect("Error launching Rocket");
     info!("Rocket exited cleanly");
