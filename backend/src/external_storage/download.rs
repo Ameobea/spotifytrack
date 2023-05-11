@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use arrow_array::{RecordBatch, TimestampSecondArray, UInt32Array, UInt64Array, UInt8Array};
 use chrono::NaiveDateTime;
@@ -234,11 +234,25 @@ async fn retrieve_external_user_data_inner(
     conn: &DbConn,
     user_spotify_id: String,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
-    let (artists_reader_opt, tracks_reader_opt) = build_parquet_readers(&user_spotify_id)
+    info!("Building parquet readers...");
+    let (artists_reader_opt, tracks_reader_opt) = loop {
+        match tokio::time::timeout(
+            Duration::from_secs(10),
+            build_parquet_readers(&user_spotify_id),
+        )
         .await
-        .inspect_err(|err| {
-            error!("Error building parquet reader: {}", err);
-        })?;
+        {
+            Err(err) => {
+                error!("Error building parquet readers: {}", err);
+                continue;
+            },
+            Ok(res) => break res,
+        };
+    }
+    .inspect_err(|err| {
+        error!("Error building parquet reader: {}", err);
+    })?;
+    info!("Successfully built parquet readers");
     if let Some(artists_reader) = artists_reader_opt {
         info!(
             "Starting download of artist data for user {}...",

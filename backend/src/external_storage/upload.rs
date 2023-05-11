@@ -1,6 +1,6 @@
 use diesel::prelude::*;
 use rocket::http::hyper::body::Bytes;
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use arrow_array::{
     builder::{TimestampSecondBuilder, UInt32Builder, UInt64Builder, UInt8Builder},
@@ -43,16 +43,38 @@ async fn build_parquet_writer<'a>(
     let location: object_store::path::Path = filename.into();
     // Delete the file if it already exists
     info!("Deleting existing object at {} (if exists)..", location);
-    match object_store.delete(&location).await {
-        Ok(_) => info!("Successfully deleted existing object at {}", location),
-        Err(object_store::Error::NotFound { .. }) => {
-            info!("No existing object at {}", location)
-        },
-        Err(err) => {
-            error!("Error deleting existing object at {}: {}", location, err);
-            return Err(err.into());
-        },
+    let mut last_err: Option<Box<dyn std::error::Error + Send + Sync + 'static>> = None;
+    for _ in 0..16 {
+        match tokio::time::timeout(Duration::from_secs(20), object_store.delete(&location)).await {
+            Err(_) => {
+                error!("Timed out deleting existing object at {}", location);
+                last_err = Some("Timed out deleting existing object".into());
+            },
+            Ok(Ok(_)) => {
+                info!("Successfully deleted existing object at {}", location);
+                last_err = None;
+                break;
+            },
+            Ok(Err(object_store::Error::NotFound { .. })) => {
+                info!("No existing object at {}", location);
+                last_err = None;
+                break;
+            },
+            Ok(Err(err)) => {
+                error!("Error deleting existing object at {}: {}", location, err);
+                last_err = Some(err.into());
+            },
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
     }
+    if let Some(err) = last_err {
+        error!(
+            "Failed to delete existing object at {} after many attempts",
+            location
+        );
+        return Err(err);
+    }
+
     let writer = AsyncArrowWriter::try_new(
         buf,
         Arc::clone(&*schema),
