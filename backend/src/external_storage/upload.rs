@@ -186,12 +186,30 @@ async fn store_external_user_data_inner(
     );
     let object_store = super::build_object_store()?;
     let location: object_store::path::Path = artists_filename.into();
-    object_store
-        .put(&location, Bytes::from(artists_data_buf))
+    let mut upload_attempts = 0usize;
+    loop {
+        match tokio::time::timeout(
+            Duration::from_secs(30),
+            object_store.put(&location, Bytes::from(artists_data_buf.clone())),
+        )
         .await
-        .inspect_err(|err| {
-            error!("Error uploading artist data to external storage: {}", err);
-        })?;
+        {
+            Ok(Ok(())) => break,
+            Err(err) => {
+                error!("Timeout uploading artist data to external storage");
+                if upload_attempts >= 8 {
+                    return Err(err.into());
+                }
+            },
+            Ok(Err(err)) => {
+                error!("Error uploading artist data to external storage: {}", err);
+                if upload_attempts >= 8 {
+                    return Err(err.into());
+                }
+            },
+        }
+        upload_attempts += 1;
+    }
     info!(
         "Successfully uploaded all {artist_entry_count} local track data for user \
          {user_spotify_id}",
@@ -256,12 +274,30 @@ async fn store_external_user_data_inner(
     );
     let object_store = super::build_object_store()?;
     let location: object_store::path::Path = tracks_filename.into();
-    object_store
-        .put(&location, Bytes::from(tracks_data_buf))
+    let mut upload_attempts = 0usize;
+    loop {
+        match tokio::time::timeout(
+            Duration::from_secs(30),
+            object_store.put(&location, Bytes::from(tracks_data_buf.clone())),
+        )
         .await
-        .inspect_err(|err| {
-            error!("Error uploading track data to external storage: {}", err);
-        })?;
+        {
+            Ok(Ok(())) => break,
+            Err(err) => {
+                error!("Timeout uploading track data to external storage");
+                if upload_attempts >= 8 {
+                    return Err(err.into());
+                }
+            },
+            Ok(Err(err)) => {
+                error!("Error uploading track data to external storage: {}", err);
+                if upload_attempts >= 8 {
+                    return Err(err.into());
+                }
+            },
+        }
+        upload_attempts += 1;
+    }
     info!(
         "Successfully uploaded all {track_entry_count} local track data for user {user_spotify_id}",
     );
