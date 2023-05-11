@@ -31,28 +31,25 @@ async fn build_parquet_readers(
     let object_store = Arc::new(build_object_store()?) as Arc<dyn ObjectStore>;
     let object_store_clone = Arc::clone(&object_store);
 
-    let mut objs_stream = object_store_clone.list(None).await?;
-    let (mut artists_obj_meta, mut tracks_artist_meta) = (None, None);
     let (artists_filename, tracks_filename) = build_filenames(user_spotify_id);
-    while let Some(res) = objs_stream.next().await {
-        match res {
-            Ok(obj) => {
-                let filename = obj.location.filename();
-                if filename == Some(artists_filename.as_str()) {
-                    artists_obj_meta = Some(obj);
-                } else if filename == Some(tracks_filename.as_str()) {
-                    tracks_artist_meta = Some(obj);
-                }
-                if artists_obj_meta.is_some() && tracks_artist_meta.is_some() {
-                    break;
-                }
-            },
-            Err(e) => {
-                error!("Error listing objects from external storage: {}", e);
-                return Err(e.into());
-            },
-        }
-    }
+    let artists_location: object_store::path::Path = artists_filename.into();
+    let tracks_location: object_store::path::Path = tracks_filename.into();
+    let artists_obj_meta = match object_store_clone.head(&artists_location).await {
+        Ok(meta) => Some(meta),
+        Err(object_store::Error::NotFound { .. }) => None,
+        Err(err) => {
+            error!("Error getting artists object metadata: {}", err);
+            return Err(err.into());
+        },
+    };
+    let tracks_artist_meta = match object_store_clone.head(&tracks_location).await {
+        Ok(meta) => Some(meta),
+        Err(object_store::Error::NotFound { .. }) => None,
+        Err(err) => {
+            error!("Error getting tracks object metadata: {}", err);
+            return Err(err.into());
+        },
+    };
 
     let artists_reader = artists_obj_meta.map(|artists_obj_meta| {
         ParquetObjectReader::new(Arc::clone(&object_store), artists_obj_meta)
