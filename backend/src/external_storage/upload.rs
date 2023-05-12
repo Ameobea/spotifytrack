@@ -17,14 +17,12 @@ use tokio::io::AsyncWrite;
 use crate::{models::UserHistoryEntry, DbConn};
 
 use super::{
-    build_filenames, build_object_store, download::retrieve_external_user_data,
-    set_data_retrieved_flag_for_user, ARROW_WRITER_BUFFER_SIZE, EXTERNAL_STORAGE_ARROW_SCHEMA,
-    RETRIEVE_LOCKS, WRITE_LOCKS,
+    build_filenames, download::retrieve_external_user_data, set_data_retrieved_flag_for_user,
+    ARROW_WRITER_BUFFER_SIZE, EXTERNAL_STORAGE_ARROW_SCHEMA, RETRIEVE_LOCKS, WRITE_LOCKS,
 };
 
 async fn build_parquet_writer<'a>(
     buf: &'a mut Vec<u8>,
-    filename: &str,
 ) -> Result<
     AsyncArrowWriter<impl AsyncWrite + Send + Unpin + 'a>,
     Box<dyn std::error::Error + Send + Sync + 'static>,
@@ -37,44 +35,6 @@ async fn build_parquet_writer<'a>(
         .build();
 
     let schema = &EXTERNAL_STORAGE_ARROW_SCHEMA;
-    let object_store = Arc::new(build_object_store().inspect_err(|err| {
-        error!("Error building object store: {}", err);
-    })?) as Arc<dyn ObjectStore>;
-    let location: object_store::path::Path = filename.into();
-    // Delete the file if it already exists
-    info!("Deleting existing object at {} (if exists)..", location);
-    let mut last_err: Option<Box<dyn std::error::Error + Send + Sync + 'static>> = None;
-    for _ in 0..16 {
-        match tokio::time::timeout(Duration::from_secs(20), object_store.delete(&location)).await {
-            Err(_) => {
-                error!("Timed out deleting existing object at {}", location);
-                last_err = Some("Timed out deleting existing object".into());
-            },
-            Ok(Ok(_)) => {
-                info!("Successfully deleted existing object at {}", location);
-                last_err = None;
-                break;
-            },
-            Ok(Err(object_store::Error::NotFound { .. })) => {
-                info!("No existing object at {}", location);
-                last_err = None;
-                break;
-            },
-            Ok(Err(err)) => {
-                error!("Error deleting existing object at {}: {}", location, err);
-                last_err = Some(err.into());
-            },
-        }
-        tokio::time::sleep(Duration::from_secs(1)).await;
-    }
-    if let Some(err) = last_err {
-        error!(
-            "Failed to delete existing object at {} after many attempts",
-            location
-        );
-        return Err(err);
-    }
-
     let writer = AsyncArrowWriter::try_new(
         buf,
         Arc::clone(&*schema),
@@ -165,7 +125,7 @@ async fn store_external_user_data_inner(
     );
 
     let mut artists_data_buf = Vec::new();
-    let mut artists_writer = build_parquet_writer(&mut artists_data_buf, &artists_filename)
+    let mut artists_writer = build_parquet_writer(&mut artists_data_buf)
         .await
         .inspect_err(|err| {
             error!("Error building parquet writer: {}", err);
@@ -253,7 +213,7 @@ async fn store_external_user_data_inner(
     );
 
     let mut tracks_data_buf = Vec::new();
-    let mut tracks_writer = build_parquet_writer(&mut tracks_data_buf, &tracks_filename)
+    let mut tracks_writer = build_parquet_writer(&mut tracks_data_buf)
         .await
         .inspect_err(|err| {
             error!("Error building parquet writer: {}", err);
