@@ -1,4 +1,4 @@
-FROM debian:stable AS builder
+FROM debian:bookworm-slim AS builder
 
 RUN apt-get update && apt-get install -y curl libmariadbclient-dev-compat build-essential libssl-dev pkg-config
 RUN update-ca-certificates
@@ -13,7 +13,7 @@ ADD . ./
 
 RUN cargo build --release
 
-FROM debian:stable
+FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y libmariadbclient-dev-compat
 
