@@ -262,10 +262,33 @@ pub(crate) async fn fetch_cur_stats(user: &User) -> Result<Option<StatsSnapshot>
     for _ in 0..6 {
         match rx.recv().await.unwrap() {
             ("tracks", timeframe, res) => {
-                let parsed_res: TopTracksResponse = res?.json().await.map_err(|err| -> String {
-                    error!("Error parsing top tracks response: {:?}", err);
-                    "Error parsing response from Spotify".into()
-                })?;
+                let res = res?;
+                if res.status() != StatusCode::OK {
+                    error!(
+                        "Error fetching top tracks for timeframe {}: got status code {}",
+                        timeframe,
+                        res.status()
+                    );
+                    if cfg!(debug_assertions) {
+                        error!("Headers: {:?}", res.headers());
+                    }
+                }
+
+                let parsed_res: TopTracksResponse = if cfg!(debug_assertions) {
+                    let res_text = res.text().await.map_err(|err| -> String {
+                        error!("Error reading top tracks response: {:?}", err);
+                        "Error reading response from Spotify".into()
+                    })?;
+                    serde_json::from_str(&res_text).map_err(|err| -> String {
+                        error!("Error parsing top tracks response; got: {}", res_text);
+                        format!("Error parsing response from Spotify: {:?}", err)
+                    })?
+                } else {
+                    res.json().await.map_err(|err| -> String {
+                        error!("Error parsing top tracks response: {:?}", err);
+                        "Error parsing response from Spotify".into()
+                    })?
+                };
 
                 for top_track in parsed_res.items.into_iter().filter_map(|x| x) {
                     stats_snapshot.tracks.add_item(timeframe, top_track);
@@ -459,8 +482,9 @@ pub(crate) async fn store_stats_snapshot(
 
     if updated_row_count != 1 {
         error!(
-            "Updated {} rows when setting last update time, but should have updated 1.",
-            updated_row_count
+            "Updated {} rows when setting last update time for user with spotify_id={}, but \
+             should have updated 1.",
+            updated_row_count, user.spotify_id
         );
     }
 

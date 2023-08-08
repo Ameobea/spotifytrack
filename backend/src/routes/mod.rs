@@ -1,6 +1,6 @@
 use std::{cmp::Reverse, sync::Arc};
 
-use chrono::{NaiveDateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use diesel::{self, prelude::*};
 use fnv::{FnvHashMap as HashMap, FnvHashSet};
 use futures::{stream::FuturesUnordered, TryFutureExt, TryStreamExt};
@@ -733,19 +733,47 @@ async fn update_user_inner(
     }
     info!("{} since last update; proceeding with update.", diff);
 
-    let stats = match crate::spotify_api::fetch_cur_stats(&user)
-        .await
-        .map_err(|err| status::Custom(Status::InternalServerError, err))?
-    {
-        Some(stats) => stats,
-        None => {
+    let stats = match crate::spotify_api::fetch_cur_stats(&user).await {
+        Ok(Some(stats)) => stats,
+        Ok(None) => {
             error!(
                 "Error when fetching stats for user {:?}; no stats returned.",
                 user
             );
+            if let Err(err) =
+                crate::db_util::update_user_last_updated(&user, &conn, Utc::now().naive_utc()).await
+            {
+                error!(
+                    "Error updating user {:?} last updated time: {:?}",
+                    user, err
+                );
+                return Err(status::Custom(
+                    Status::InternalServerError,
+                    "Error updating user last updated time after error fetching stats".into(),
+                ));
+            }
             return Err(status::Custom(
                 Status::InternalServerError,
                 "No data from Spotify API for that user".into(),
+            ));
+        },
+        Err(err) => {
+            error!("Error fetching user stats: {:?}", err);
+            if let Err(err) =
+                crate::db_util::update_user_last_updated(&user, &conn, Utc::now().naive_utc()).await
+            {
+                error!(
+                    "Error updating user {:?} last updated time: {:?}",
+                    user, err
+                );
+                return Err(status::Custom(
+                    Status::InternalServerError,
+                    "Error updating user last updated time after error fetching stats".into(),
+                ));
+            }
+            return Err(status::Custom(
+                Status::InternalServerError,
+                "Error fetching user stats".into(),
             ));
         },
     };
