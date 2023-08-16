@@ -1,4 +1,7 @@
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use chrono::Utc;
 use diesel::prelude::*;
@@ -7,7 +10,7 @@ use reqwest::{self, StatusCode};
 use rocket::http::RawStr;
 use serde::{Deserialize, Serialize};
 use tokio::{
-    sync::{mpsc::channel, Mutex},
+    sync::{mpsc::channel, Mutex, RwLock},
     task::block_in_place,
 };
 
@@ -31,6 +34,27 @@ const SPOTIFY_BATCH_TRACKS_URL: &str = "https://api.spotify.com/v1/tracks";
 const SPOTIFY_BATCH_ARTISTS_URL: &str = "https://api.spotify.com/v1/artists";
 const SPOTIFY_APP_TOKEN_URL: &str = "https://accounts.spotify.com/api/token";
 const ENTITY_FETCH_COUNT: usize = 50;
+const REQWEST_CLIENT_LIFETIME_SECS: u64 = 60 * 5;
+
+lazy_static::lazy_static! {
+    static ref REQWEST_CLIENT_CACHE: RwLock<(Instant, reqwest::Client)> = RwLock::new((Instant::now(), reqwest::Client::new()));
+}
+
+pub(crate) async fn get_reqwest_client() -> reqwest::Client {
+    let client_cache = REQWEST_CLIENT_CACHE.read().await;
+    if client_cache.0.elapsed().as_secs() < REQWEST_CLIENT_LIFETIME_SECS {
+        return client_cache.1.clone();
+    }
+
+    drop(client_cache);
+    let mut client_cache = REQWEST_CLIENT_CACHE.write().await;
+    if client_cache.0.elapsed().as_secs() < REQWEST_CLIENT_LIFETIME_SECS {
+        return client_cache.1.clone();
+    }
+
+    *client_cache = (Instant::now(), reqwest::Client::new());
+    client_cache.1.clone()
+}
 
 fn get_top_entities_url(entity_type: &str, timeframe: &str) -> String {
     format!(
@@ -77,7 +101,7 @@ pub(crate) async fn spotify_user_api_request<
     url: &str,
     token: &str,
 ) -> Result<T, String> {
-    let client = reqwest::Client::new();
+    let client = get_reqwest_client().await;
 
     loop {
         let res = client.get(url).bearer_auth(token).send().await;
@@ -102,7 +126,7 @@ pub(crate) async fn spotify_server_api_request<
     url: &str,
     params: HashMap<&str, &str>,
 ) -> Result<T, String> {
-    let client = reqwest::Client::new();
+    let client = get_reqwest_client().await;
 
     loop {
         info!(
@@ -110,7 +134,7 @@ pub(crate) async fn spotify_server_api_request<
             url, params
         );
         let res = client
-            .post(url.clone())
+            .post(url)
             .header("Authorization", CONF.get_authorization_header_content())
             .form(&params)
             .send()
@@ -132,12 +156,12 @@ pub(crate) async fn spotify_server_get_request<
     bearer_token: &str,
     url: &str,
 ) -> Result<T, String> {
-    let client = reqwest::Client::new();
+    let client = get_reqwest_client().await;
 
     loop {
         info!("Hitting Spotify API GET at URL {}", url,);
         let res = client
-            .get(url.clone())
+            .get(url)
             .header("Authorization", format!("Bearer {}", bearer_token))
             .send()
             .await;
@@ -162,7 +186,7 @@ async fn spotify_user_json_api_get_request<
     bearer_token: &str,
     url: String,
 ) -> Result<R, String> {
-    let client = reqwest::Client::new();
+    let client = get_reqwest_client().await;
 
     loop {
         info!("Hitting Spotify API at URL {}", url);
@@ -190,14 +214,14 @@ pub(crate) async fn spotify_user_json_api_request<
     url: &str,
     body: &T,
 ) -> Result<R, String> {
-    let client = reqwest::Client::new();
+    let client = get_reqwest_client().await;
 
     info!(
         "Hitting Spotify API at URL {}, params: {:?}, bearer_token={}",
         url, body, bearer_token
     );
     let res = client
-        .post(url.clone())
+        .post(url)
         .header("Authorization", format!("Bearer {}", bearer_token))
         .json(body)
         .send()
@@ -240,7 +264,7 @@ pub(crate) async fn fetch_cur_stats(user: &User) -> Result<Option<StatsSnapshot>
             let tx = tx.clone();
 
             tokio::task::spawn(async move {
-                let client = reqwest::Client::new();
+                let client = get_reqwest_client().await;
                 let res: Result<reqwest::Response, String> = client
                     .get(&get_top_entities_url(entity_type, timeframe))
                     .bearer_auth(token)
@@ -503,7 +527,7 @@ async fn fetch_batch_entities<'a, T: for<'de> Deserialize<'de>>(
     } else {
         format!("{}?ids={}", base_url, spotify_entity_ids.join(","))
     };
-    let client = reqwest::Client::new();
+    let client = get_reqwest_client().await;
 
     loop {
         let res = client

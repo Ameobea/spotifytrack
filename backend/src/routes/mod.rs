@@ -1,6 +1,6 @@
 use std::{cmp::Reverse, sync::Arc};
 
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{NaiveDateTime, Utc};
 use diesel::{self, prelude::*};
 use fnv::{FnvHashMap as HashMap, FnvHashSet};
 use futures::{stream::FuturesUnordered, TryFutureExt, TryStreamExt};
@@ -37,7 +37,8 @@ use crate::{
         Track, User, UserComparison,
     },
     spotify_api::{
-        fetch_artists, fetch_top_tracks_for_artist, get_multiple_related_artists, search_artists,
+        fetch_artists, fetch_top_tracks_for_artist, get_multiple_related_artists,
+        get_reqwest_client, search_artists,
     },
     DbConn, SpotifyTokenData,
 };
@@ -460,7 +461,7 @@ pub(crate) async fn oauth_cb(
     params.insert("client_id", CONF.client_id.as_str());
     params.insert("client_secret", CONF.client_secret.as_str());
 
-    let client = reqwest::Client::new();
+    let client = get_reqwest_client().await;
     info!("Making request to fetch user token from OAuth CB response...");
     let res = client
         .post(SPOTIFY_TOKEN_FETCH_URL)

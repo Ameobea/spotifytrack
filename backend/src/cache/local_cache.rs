@@ -17,15 +17,6 @@ lazy_static! {
     static ref CACHE_FILE_LOCK: Mutex<()> = Mutex::new(());
 }
 
-pub(crate) async fn get_cached_spotify_ids_by_internal_id(
-    internal_ids: impl Iterator<Item = i32>,
-) -> Vec<Option<String>> {
-    let locked = SPOTIFY_ID_BY_INTERNAL_ID_CACHE.read().await;
-    internal_ids
-        .map(|internal_id| locked.get(&internal_id).cloned())
-        .collect()
-}
-
 pub(crate) async fn get_cached_internal_ids_by_spotify_id(
     spotify_ids: impl Iterator<Item = String>,
 ) -> Vec<Option<i32>> {
