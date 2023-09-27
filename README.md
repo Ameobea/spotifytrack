@@ -2,11 +2,11 @@
 
 **Spotifytrack** is a web application a record of your listening habits on Spotify, allowing you to see how your preferences change over time and remember when you discovered your favorite tracks and artists.
 
-It also includes some other Spotify-related tools like the [Artist Averager](https://TODO_ADD_LINK_HERE).
+It also includes some other Spotify-related tools like the [Artist Averager]([https://TODO_ADD_LINK_HERE](https://spotifytrack.net/artist-averager.html)).
 
 Try it yourself: <https://spotifytrack.net>
 
-![A screenshot of Spotifytrack showing the homepage for a user with a timeline showing recently discovered tracks and artists](https://ameo.link/u/98s.png)
+![A screenshot of Spotifytrack showing the homepage for a user with a timeline showing recently discovered tracks and artists](https://i.ameo.link/98s.png)
 
 ## Directories
 
