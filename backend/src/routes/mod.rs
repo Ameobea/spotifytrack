@@ -1090,7 +1090,19 @@ pub(crate) async fn get_display_name(
     username: String,
 ) -> Result<Option<String>, String> {
     match db_util::get_user_by_spotify_id(&conn, username).await? {
-        Some(user) => Ok(Some(user.username)),
+        Some(user) => {
+            let user_clone = user.clone();
+            tokio::task::spawn(async move {
+                if let Err(err) = db_util::update_user_last_viewed(&user_clone, &conn).await {
+                    error!(
+                        "Error updating user last viewed time for {}: {:?}",
+                        user_clone.username, err
+                    );
+                }
+            });
+
+            Ok(Some(user.username))
+        },
         None => Ok(None),
     }
 }

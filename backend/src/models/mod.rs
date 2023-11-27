@@ -32,6 +32,7 @@ pub(crate) struct User {
     pub token: String,
     pub refresh_token: String,
     pub external_data_retrieved: bool,
+    pub last_viewed: NaiveDateTime,
 }
 
 #[derive(Serialize, Insertable, Associations)]

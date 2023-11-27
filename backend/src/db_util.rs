@@ -371,26 +371,6 @@ pub(crate) async fn get_genre_stats_history(
     )>,
     String,
 > {
-    // use crate::schema::{artist_rank_snapshots, artists_genres, spotify_items};
-    //
-    // let query = artist_rank_snapshots::table
-    //     .filter(artist_rank_snapshots::dsl::user_id.eq(user.id))
-    //     .filter(
-    //         artist_rank_snapshots::dsl::mapped_spotify_id.eq_any(
-    //             artists_genres::table
-    //                 .filter(artists_genres::dsl::genre.eq(target_genre))
-    //                 .inner_join(spotify_items::table)
-    //                 .select(spotify_items::dsl::id),
-    //         ),
-    //     )
-    //     .inner_join(spotify_items::table)
-    //     .select((
-    //         spotify_items::dsl::spotify_id,
-    //         artist_rank_snapshots::dsl::update_time,
-    //         artist_rank_snapshots::dsl::ranking,
-    //         artist_rank_snapshots::dsl::timeframe,
-    //     ));
-
     if !user.external_data_retrieved {
         retrieve_cold_data_for_user(&conn, user).await;
     }
@@ -1029,6 +1009,16 @@ pub(crate) async fn insert_related_artists(
         })
     })
     .await?;
+
+    Ok(())
+}
+
+pub(crate) async fn update_user_last_viewed(user: &User, conn: &DbConn) -> QueryResult<()> {
+    use crate::schema::users;
+
+    let query = diesel::update(users::table.filter(users::dsl::id.eq(user.id)))
+        .set(users::dsl::last_viewed.eq(diesel::dsl::now));
+    conn.run(move |conn| query.execute(conn)).await?;
 
     Ok(())
 }

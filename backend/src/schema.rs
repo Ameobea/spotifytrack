@@ -97,6 +97,7 @@ diesel::table! {
         token -> Text,
         refresh_token -> Text,
         external_data_retrieved -> Bool,
+        last_viewed -> Timestamp,
     }
 }
 
