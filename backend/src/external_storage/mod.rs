@@ -93,10 +93,20 @@ async fn set_data_retrieved_flag_for_user(
         use crate::schema::users;
 
         for _ in 0..20 {
-            let res = diesel::update(users::table)
-                .filter(users::dsl::spotify_id.eq(user_spotify_id.clone()))
-                .set(users::dsl::external_data_retrieved.eq(is_now_retrieved))
-                .execute(conn);
+            let query = diesel::update(users::table)
+                .filter(users::dsl::spotify_id.eq(user_spotify_id.clone()));
+            let res = if !is_now_retrieved {
+                query
+                    .set((
+                        users::dsl::external_data_retrieved.eq(is_now_retrieved),
+                        users::dsl::last_external_data_store.eq(diesel::dsl::now),
+                    ))
+                    .execute(conn)
+            } else {
+                query
+                    .set(users::dsl::external_data_retrieved.eq(is_now_retrieved))
+                    .execute(conn)
+            };
             match res {
                 Ok(_) => {
                     info!(

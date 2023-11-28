@@ -1970,13 +1970,14 @@ pub(crate) async fn transfer_user_data_from_external_storage(
 }
 
 #[post(
-    "/bulk_transfer_user_data_to_external_storage/<user_count>",
+    "/bulk_transfer_user_data_to_external_storage/<user_count>?<only_already_stored>",
     data = "<api_token_data>"
 )]
 pub(crate) async fn bulk_transfer_user_data_to_external_storage(
     api_token_data: rocket::Data<'_>,
     conn: DbConn,
     user_count: u32,
+    only_already_stored: Option<bool>,
 ) -> Result<status::Custom<String>, String> {
     if !validate_api_token(api_token_data).await? {
         return Ok(status::Custom(
@@ -1989,7 +1990,13 @@ pub(crate) async fn bulk_transfer_user_data_to_external_storage(
         .run(move |conn| {
             use crate::schema::users;
             users::table
-                .filter(users::dsl::external_data_retrieved.eq(true))
+                .filter(
+                    users::dsl::external_data_retrieved.eq(match only_already_stored {
+                        Some(true) => false,
+                        _ => true,
+                    }),
+                )
+                .order_by(users::dsl::last_external_data_store.asc())
                 .limit(user_count as i64)
                 .load::<User>(conn)
         })
