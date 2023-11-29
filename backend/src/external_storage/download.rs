@@ -227,6 +227,101 @@ async fn consume_and_insert_artist_record_batches(
     Ok(())
 }
 
+/// Loads external user data from cloud storage and returns the record batches directly.  Does NOT
+/// load into the database.
+pub(crate) async fn load_external_user_data(
+    user_spotify_id: String,
+) -> Result<
+    (Vec<ArtistHistoryEntry>, Vec<TrackHistoryEntry>),
+    Box<dyn std::error::Error + Send + Sync + 'static>,
+> {
+    info!("Building parquet readers...");
+    let (artists_reader_opt, tracks_reader_opt) = loop {
+        match tokio::time::timeout(
+            Duration::from_secs(10),
+            build_parquet_readers(&user_spotify_id),
+        )
+        .await
+        {
+            Err(err) => {
+                error!("Error building parquet readers: {}", err);
+                continue;
+            },
+            Ok(res) => break res,
+        };
+    }
+    .inspect_err(|err| {
+        error!("Error building parquet reader: {}", err);
+    })?;
+
+    let mut artist_entries: Vec<ArtistHistoryEntry> = Vec::new();
+    let mut track_entries: Vec<TrackHistoryEntry> = Vec::new();
+
+    if let Some(artists_reader) = artists_reader_opt {
+        let mut artists_record_batch_reader = build_record_batch_reader(artists_reader).await?;
+
+        while let Some(res) = artists_record_batch_reader.next().await {
+            let record_batch = match res {
+                Ok(record_batch) => record_batch,
+                Err(err) => {
+                    error!("Error reading parquet record batch: {}", err);
+                    return Err(err.into());
+                },
+            };
+
+            let artist_history_chunk = record_batch_to_history_entries(record_batch);
+            artist_entries.extend(artist_history_chunk);
+        }
+    }
+
+    if let Some(tracks_reader) = tracks_reader_opt {
+        let mut tracks_record_batch_reader = build_record_batch_reader(tracks_reader).await?;
+
+        while let Some(res) = tracks_record_batch_reader.next().await {
+            let record_batch = match res {
+                Ok(record_batch) => record_batch,
+                Err(err) => {
+                    error!("Error reading parquet record batch: {}", err);
+                    return Err(err.into());
+                },
+            };
+
+            let track_history_chunk = record_batch_to_history_entries(record_batch);
+            // ;)
+            let track_history_chunk: Vec<TrackHistoryEntry> =
+                unsafe { std::mem::transmute(track_history_chunk) };
+
+            track_entries.extend(track_history_chunk);
+        }
+    }
+
+    Ok((artist_entries, track_entries))
+}
+
+async fn build_record_batch_reader(
+    reader: ParquetObjectReader,
+) -> Result<
+    ParquetRecordBatchStream<ParquetObjectReader>,
+    Box<dyn std::error::Error + Send + Sync + 'static>,
+> {
+    let record_batch_reader_builder = ParquetRecordBatchStreamBuilder::new(reader)
+        .await
+        .inspect_err(|err| {
+            error!(
+                "Error building parquet record batch stream builder: {}",
+                err
+            );
+        })?;
+    let record_batch_reader = record_batch_reader_builder
+        .with_batch_size(BATCH_SIZE)
+        .build()
+        .inspect_err(|err| {
+            error!("Error building parquet record batch stream: {}", err);
+        })?;
+    Ok(record_batch_reader)
+}
+
+/// Loads external user data from cloud storage into the local database.
 async fn retrieve_external_user_data_inner(
     conn: &DbConn,
     user_spotify_id: String,
@@ -255,21 +350,8 @@ async fn retrieve_external_user_data_inner(
             "Starting download of artist data for user {}...",
             user_spotify_id
         );
-        let artists_record_batch_reader_builder =
-            ParquetRecordBatchStreamBuilder::new(artists_reader)
-                .await
-                .inspect_err(|err| {
-                    error!(
-                        "Error building parquet record batch stream builder: {}",
-                        err
-                    );
-                })?;
-        let artists_record_batch_reader = artists_record_batch_reader_builder
-            .with_batch_size(BATCH_SIZE)
-            .build()
-            .inspect_err(|err| {
-                error!("Error building parquet record batch stream: {}", err);
-            })?;
+
+        let artists_record_batch_reader = build_record_batch_reader(artists_reader).await?;
 
         consume_and_insert_artist_record_batches(
             artists_record_batch_reader,
@@ -299,21 +381,8 @@ async fn retrieve_external_user_data_inner(
             "Starting download of track data for user {}...",
             user_spotify_id
         );
-        let tracks_record_batch_reader_builder =
-            ParquetRecordBatchStreamBuilder::new(tracks_reader)
-                .await
-                .inspect_err(|err| {
-                    error!(
-                        "Error building parquet record batch stream builder: {}",
-                        err
-                    );
-                })?;
-        let tracks_record_batch_reader = tracks_record_batch_reader_builder
-            .with_batch_size(BATCH_SIZE)
-            .build()
-            .inspect_err(|err| {
-                error!("Error building parquet record batch stream: {}", err);
-            })?;
+
+        let tracks_record_batch_reader = build_record_batch_reader(tracks_reader).await?;
 
         consume_and_insert_track_record_batches(tracks_record_batch_reader, conn, &user_spotify_id)
             .await

@@ -90,6 +90,32 @@ pub(crate) struct ArtistHistoryEntry {
     pub ranking: u8,
 }
 
+impl From<ArtistHistoryEntry> for UserHistoryEntry {
+    fn from(entry: ArtistHistoryEntry) -> Self {
+        UserHistoryEntry {
+            id: entry.id,
+            user_id: entry.user_id,
+            update_time: entry.update_time,
+            mapped_spotify_id: entry.mapped_spotify_id,
+            timeframe: entry.timeframe,
+            ranking: entry.ranking,
+        }
+    }
+}
+
+impl From<TrackHistoryEntry> for UserHistoryEntry {
+    fn from(entry: TrackHistoryEntry) -> Self {
+        UserHistoryEntry {
+            id: entry.id,
+            user_id: entry.user_id,
+            update_time: entry.update_time,
+            mapped_spotify_id: entry.mapped_spotify_id,
+            timeframe: entry.timeframe,
+            ranking: entry.ranking,
+        }
+    }
+}
+
 #[derive(Serialize, Associations, Debug, Queryable)]
 #[table_name = "spotify_items"]
 pub(crate) struct SpotifyIdMapping {

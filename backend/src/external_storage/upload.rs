@@ -14,11 +14,15 @@ use parquet::{
 };
 use tokio::io::AsyncWrite;
 
-use crate::{models::UserHistoryEntry, DbConn};
+use crate::{
+    external_storage::download::load_external_user_data,
+    models::{ArtistHistoryEntry, TrackHistoryEntry, UserHistoryEntry},
+    DbConn,
+};
 
 use super::{
-    build_filenames, download::retrieve_external_user_data, set_data_retrieved_flag_for_user,
-    ARROW_WRITER_BUFFER_SIZE, EXTERNAL_STORAGE_ARROW_SCHEMA, RETRIEVE_LOCKS, WRITE_LOCKS,
+    build_filenames, set_data_retrieved_flag_for_user, ARROW_WRITER_BUFFER_SIZE,
+    EXTERNAL_STORAGE_ARROW_SCHEMA, RETRIEVE_LOCKS, WRITE_LOCKS,
 };
 
 async fn build_parquet_writer<'a>(
@@ -84,6 +88,8 @@ fn build_record_batch(items: Vec<UserHistoryEntry>) -> RecordBatch {
 async fn store_external_user_data_inner(
     conn: &DbConn,
     user_spotify_id: String,
+    extra_artist_entries: Vec<ArtistHistoryEntry>,
+    extra_track_entries: Vec<TrackHistoryEntry>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
     let (artists_filename, tracks_filename) = build_filenames(&user_spotify_id);
 
@@ -92,7 +98,7 @@ async fn store_external_user_data_inner(
         user_spotify_id
     );
     let user_spotify_id_clone = user_spotify_id.clone();
-    let artist_stats_for_user: Vec<UserHistoryEntry> = conn
+    let mut artist_stats_for_user: Vec<UserHistoryEntry> = conn
         .run(move |conn| {
             use crate::schema::{artist_rank_snapshots, users};
 
@@ -117,7 +123,9 @@ async fn store_external_user_data_inner(
             Err(err)
         })
         .await?;
-    let artist_entry_count = artist_stats_for_user.len();
+    let local_artist_entry_count = artist_stats_for_user.len();
+    let extra_artist_entry_count = extra_artist_entries.len();
+    artist_stats_for_user.extend(extra_artist_entries.into_iter().map(Into::into));
     info!(
         "Successfully fetched all local artist data for user {}. Starting upload to external \
          storage...",
@@ -141,8 +149,9 @@ async fn store_external_user_data_inner(
         error!("Error closing parquet writer: {}", err);
     })?;
     info!(
-        "Successfully encoded all {artist_entry_count} local track data for user \
-         {user_spotify_id}. Starting upload to external storage at {artists_filename}...",
+        "Successfully encoded all {local_artist_entry_count} local + {extra_artist_entry_count} \
+         extra track data for user {user_spotify_id}. Starting upload to external storage at \
+         {artists_filename}...",
     );
     let object_store = super::build_object_store()?;
     let location: object_store::path::Path = artists_filename.into();
@@ -171,8 +180,8 @@ async fn store_external_user_data_inner(
         upload_attempts += 1;
     }
     info!(
-        "Successfully uploaded all {artist_entry_count} local track data for user \
-         {user_spotify_id}",
+        "Successfully uploaded all {local_artist_entry_count} local + {extra_artist_entry_count} \
+         extra artist data for user {user_spotify_id}",
     );
 
     info!(
@@ -180,7 +189,7 @@ async fn store_external_user_data_inner(
         user_spotify_id
     );
     let user_spotify_id_clone = user_spotify_id.clone();
-    let track_stats_for_user: Vec<UserHistoryEntry> = conn
+    let mut track_stats_for_user: Vec<UserHistoryEntry> = conn
         .run(move |conn| {
             use crate::schema::{track_rank_snapshots, users};
 
@@ -205,11 +214,12 @@ async fn store_external_user_data_inner(
             Err(err)
         })
         .await?;
-    let track_entry_count = track_stats_for_user.len();
+    let local_track_entry_count = track_stats_for_user.len();
+    let extra_track_entry_count = extra_track_entries.len();
+    track_stats_for_user.extend(extra_track_entries.into_iter().map(Into::into));
     info!(
-        "Successfully fetched all local track data for user {}; Starting upload to external \
-         storage...",
-        user_spotify_id
+        "Successfully fetched all local track data for user {user_spotify_id}; Starting upload to \
+         external storage...",
     );
 
     let mut tracks_data_buf = Vec::new();
@@ -229,8 +239,9 @@ async fn store_external_user_data_inner(
         error!("Error closing parquet writer: {}", err);
     })?;
     info!(
-        "Successfully encoded all {track_entry_count} local track data for user \
-         {user_spotify_id}. Starting upload to external storage at {tracks_filename}...",
+        "Successfully encoded all {local_track_entry_count} local + {extra_track_entry_count} \
+         extra track data for user {user_spotify_id}. Starting upload to external storage at \
+         {tracks_filename}...",
     );
     let object_store = super::build_object_store()?;
     let location: object_store::path::Path = tracks_filename.into();
@@ -259,12 +270,14 @@ async fn store_external_user_data_inner(
         upload_attempts += 1;
     }
     info!(
-        "Successfully uploaded all {track_entry_count} local track data for user {user_spotify_id}",
+        "Successfully uploaded all {local_track_entry_count} local + {extra_track_entry_count} \
+         extra track data for user {user_spotify_id}",
     );
 
     info!(
-        "Successfully uploaded all {artist_entry_count} local artist data and all \
-         {track_entry_count} local track data for user {user_spotify_id}",
+        "Successfully uploaded all {} artist data and all {} track data for user {user_spotify_id}",
+        local_artist_entry_count + extra_artist_entry_count,
+        local_track_entry_count + extra_track_entry_count,
     );
 
     Ok(())
@@ -290,24 +303,44 @@ pub(crate) async fn store_external_user_data(conn: &DbConn, user_spotify_id: Str
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     }
 
-    // To start, we first do a full retrieve for the user so that _all_ their data is available in
-    // one place in the local DB.
+    // To start, we first do a full retrieve for the user so that we can merge any existing external
+    // data with the local data before writing it out.
     //
     // We're already holding the write lock, so no other reads or writes can happen for this user
     info!(
         "Starting full retrieval for user {} before writing...",
         user_spotify_id
     );
-    retrieve_external_user_data(conn, user_spotify_id.clone(), true).await;
+
+    let (existing_external_artist_entries, existing_external_track_entries) =
+        match load_external_user_data(user_spotify_id.clone()).await {
+            Ok((artists, tracks)) => (artists, tracks),
+            Err(err) => {
+                error!(
+                    "Error loading existing external data for user {}: {}",
+                    user_spotify_id, err
+                );
+                return;
+            },
+        };
     info!(
-        "Finished full retrieval for user {} before writing.",
-        user_spotify_id
+        "Finished full retrieval for user {} before writing; pulled {} external artist entries \
+         and {} external track entries",
+        user_spotify_id,
+        existing_external_artist_entries.len(),
+        existing_external_track_entries.len()
     );
 
     info!("Starting external data upload for user {}", user_spotify_id);
     for _ in 0..10 {
         let user_spotify_id = user_spotify_id.clone();
-        let res = store_external_user_data_inner(conn, user_spotify_id.clone()).await;
+        let res = store_external_user_data_inner(
+            conn,
+            user_spotify_id.clone(),
+            existing_external_artist_entries.clone(),
+            existing_external_track_entries.clone(),
+        )
+        .await;
         match res {
             Ok(()) => {
                 info!("Finished external data upload for user {}", user_spotify_id);
