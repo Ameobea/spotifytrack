@@ -31,10 +31,10 @@ pub(crate) fn get_top_genres_by_artists(
             let artist_count = artist_ids.len();
 
             for (i, artist_id) in artist_ids.into_iter().enumerate() {
-                let artist = artists_by_id
-                    .get(&*artist_id)
-                    .expect(&format!("Artist with id {} not found in corpus", artist_id));
-                if let Some(genres) = &artist.genres {
+                let artist = artists_by_id.get(&*artist_id);
+                if let Some(genres) =
+                    artist.and_then(|artist| artist.genres.as_ref().map(|v| v.as_slice()))
+                {
                     for genre in genres {
                         all_genres.insert(genre.clone());
                         let count = genre_counts.entry(genre.clone()).or_insert(0);
