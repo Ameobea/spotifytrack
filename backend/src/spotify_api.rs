@@ -325,6 +325,20 @@ pub(crate) async fn fetch_cur_stats(user: &User) -> Result<Option<StatsSnapshot>
                         "Error parsing response from Spotify".into()
                     })?;
 
+                if parsed_res
+                    .items
+                    .iter()
+                    .all(|item| item.id == "7ab5IU6f9rBvhgS4kuQjSh")
+                {
+                    let now_pacific = Utc::now().naive_local();
+                    let now_pacific = now_pacific.format("%Y-%m-%d %H:%M:%S").to_string();
+                    error!(
+                        "Found the weird buggy artist ID (7ab5IU6f9rBvhgS4kuQjSh) in the top \
+                         tracks response for timeframe {timeframe}; user={user:?}; now={}",
+                        now_pacific
+                    );
+                }
+
                 for top_artist in parsed_res.items.into_iter() {
                     stats_snapshot.artists.add_item(timeframe, top_artist);
                 }
@@ -805,8 +819,10 @@ pub(crate) async fn get_multiple_related_artists(
                 };
 
                 let related_artists_res = get_related_artists(&bearer_token, &artist_id).await;
-                tx.send((artist_id, related_artists_res))
-                    .expect("Failed to send related artist over channel");
+                if let Err(_) = tx.send((artist_id, related_artists_res)) {
+                    warn!("Receiver dropped; exiting related artists fetch worker");
+                    break;
+                }
             }
         });
     }

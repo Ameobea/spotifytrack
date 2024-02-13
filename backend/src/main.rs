@@ -1,10 +1,4 @@
-#![feature(
-    proc_macro_hygiene,
-    decl_macro,
-    box_patterns,
-    try_trait_v2,
-    result_option_inspect
-)]
+#![feature(proc_macro_hygiene, decl_macro, box_patterns, try_trait_v2)]
 #![allow(clippy::identity_conversion)]
 
 #[macro_use]

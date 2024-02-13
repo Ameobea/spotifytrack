@@ -5,7 +5,7 @@ RUN update-ca-certificates
 
 # Install rust
 RUN curl https://sh.rustup.rs/ -sSf | \
-  sh -s -- -y --default-toolchain nightly-2023-07-29
+  sh -s -- -y --default-toolchain nightly-2024-02-03
 
 ENV PATH="/root/.cargo/bin:${PATH}"
 
