@@ -29,6 +29,9 @@ tokio = { version = "1.6.1", features = ["rt", "rt-multi-thread", "macros", "par
 
 lazy_static = "1.4.0"
 
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemallocator = "0.5"
+
 rand = "0.8"
 
 r2d2_redis = "0.14"

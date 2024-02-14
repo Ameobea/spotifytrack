@@ -12,6 +12,13 @@ use artist_embedding::{init_artist_embedding_ctx, map_3d::get_packed_3d_artist_c
 // use rocket_async_compression::Compression;
 use tokio::sync::Mutex;
 
+#[cfg(not(target_env = "msvc"))]
+use tikv_jemallocator::Jemalloc;
+
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
+
 pub mod artist_embedding;
 pub mod benchmarking;
 pub mod cache;
