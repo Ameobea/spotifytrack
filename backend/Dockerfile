@@ -11,7 +11,7 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 
 ADD . ./
 
-RUN cargo build --release
+RUN RUSTFLAGS="--cfg tokio_unstable --cfg foundations_unstable" cargo build --release
 
 FROM debian:bookworm-slim
 

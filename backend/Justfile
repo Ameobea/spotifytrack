@@ -22,4 +22,4 @@ docker-start:
     ${DOCKER_IMAGE}:latest
 
 run:
-  cargo run
+  RUST_LOG=info ROCKET_LOG=info RUST_BACKTRACE=1 RUSTFLAGS="--cfg tokio_unstable --cfg foundations_unstable" cargo run

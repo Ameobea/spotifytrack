@@ -1,3 +1,5 @@
 {
-  "rust-client.channel": "nightly"
+  "rust-analyzer.cargo.extraEnv": {
+    "RUSTFLAGS": "--cfg tokio_unstable --cfg foundations_unstable"
+  }
 }

@@ -30,6 +30,7 @@ use crate::{
         self, get_all_top_artists_for_user, get_artist_spotify_ids_by_internal_id,
         get_internal_ids_by_spotify_id, insert_related_artists,
     },
+    metrics::{user_updates_failure_total, user_updates_success_total},
     models::{
         Artist, ArtistSearchResult, AverageArtistItem, AverageArtistsResponse, CompareToRequest,
         CreateSharedPlaylistRequest, NewRelatedArtistEntry, NewUser, OAuthTokenResponse, Playlist,
@@ -806,8 +807,10 @@ pub(crate) async fn update_user(
 
     if let Some(user_id) = user_id {
         if let Err(status) = update_user_inner(&conn, Some(user_id)).await {
+            user_updates_failure_total().inc();
             return Ok(status);
         }
+        user_updates_success_total().inc();
         return Ok(status::Custom(Status::Ok, "User updated".into()));
     }
 
@@ -817,8 +820,10 @@ pub(crate) async fn update_user(
     for _ in 0..count {
         let success = update_user_inner(&conn, None).await.is_ok();
         if success {
+            user_updates_success_total().inc();
             success_count += 1;
         } else {
+            user_updates_failure_total().inc();
             fail_count += 1;
         }
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;

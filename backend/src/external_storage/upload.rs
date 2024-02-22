@@ -1,6 +1,9 @@
 use diesel::prelude::*;
 use rocket::http::hyper::body::Bytes;
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use arrow_array::{
     builder::{TimestampSecondBuilder, UInt32Builder, UInt64Builder, UInt8Builder},
@@ -16,6 +19,10 @@ use tokio::io::AsyncWrite;
 
 use crate::{
     external_storage::download::load_external_user_data,
+    metrics::{
+        external_user_data_export_failure_total, external_user_data_export_success_total,
+        external_user_data_export_time,
+    },
     models::{ArtistHistoryEntry, TrackHistoryEntry, UserHistoryEntry},
     DbConn,
 };
@@ -312,6 +319,7 @@ pub(crate) async fn store_external_user_data(conn: &DbConn, user_spotify_id: Str
         user_spotify_id
     );
 
+    let mut start = Instant::now();
     let (existing_external_artist_entries, existing_external_track_entries) =
         match load_external_user_data(user_spotify_id.clone()).await {
             Ok((artists, tracks)) => (artists, tracks),
@@ -343,7 +351,10 @@ pub(crate) async fn store_external_user_data(conn: &DbConn, user_spotify_id: Str
         .await;
         match res {
             Ok(()) => {
+                external_user_data_export_success_total().inc();
+                external_user_data_export_time().observe(start.elapsed().as_nanos() as u64);
                 info!("Finished external data upload for user {}", user_spotify_id);
+
                 // Update users table to indicate that upload is complete
                 set_data_retrieved_flag_for_user(conn, user_spotify_id.clone(), false).await;
 
@@ -357,7 +368,11 @@ pub(crate) async fn store_external_user_data(conn: &DbConn, user_spotify_id: Str
 
                 break;
             },
-            Err(e) => error!("Error storing data for user {}: {}", user_spotify_id, e),
+            Err(e) => {
+                external_user_data_export_failure_total().inc();
+                error!("Error storing data for user {}: {}", user_spotify_id, e);
+                start = Instant::now();
+            },
         }
     }
 

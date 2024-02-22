@@ -15,6 +15,7 @@ pub(crate) struct Conf {
     // Scraper config
     pub min_update_interval: Duration,
     pub admin_api_token: String,
+    pub telemetry_server_port: u16,
 }
 
 impl Conf {
@@ -44,6 +45,10 @@ impl Conf {
             ),
             admin_api_token: env::var("ADMIN_API_TOKEN")
                 .expect("The `ADMIN_API_TOKEN` environment variable must be set"),
+            telemetry_server_port: env::var("TELEMETRY_SERVER_PORT")
+                .unwrap_or_else(|_| -> String { "4101".to_string() })
+                .parse()
+                .expect("Invalid value provided for `TELEMETRY_SERVER_PORT`; must be a u16"),
         }
     }
 
@@ -54,7 +59,10 @@ impl Conf {
     pub(crate) fn get_authorization_header_content(&self) -> String {
         format!(
             "Basic {}",
-            base64::encode(&format!("{}:{}", self.client_id, self.client_secret))
+            base64::Engine::encode(
+                &base64::engine::general_purpose::STANDARD,
+                &format!("{}:{}", self.client_id, self.client_secret)
+            )
         )
     }
 }

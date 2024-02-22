@@ -17,6 +17,10 @@ use tokio::{
 use crate::{
     conf::CONF,
     db_util::get_internal_ids_by_spotify_id,
+    metrics::{
+        spotify_api_requests_failure_total, spotify_api_requests_rate_limited_total,
+        spotify_api_requests_success_total, spotify_api_requests_total, spotify_api_response_time,
+    },
     models::{
         AccessTokenResponse, Artist, ArtistGenrePair, ArtistSearchResult, CreatePlaylistRequest,
         GetRelatedArtistsResponse, NewArtistHistoryEntry, NewTrackHistoryEntry, Playlist,
@@ -100,24 +104,36 @@ pub(crate) async fn spotify_user_api_request<
 >(
     url: &str,
     token: &str,
+    endpoint_name: &'static str,
 ) -> Result<T, String> {
+    spotify_api_requests_total(endpoint_name).inc();
     let client = get_reqwest_client().await;
 
+    let mut start = Instant::now();
     loop {
         let res = client.get(url).bearer_auth(token).send().await;
 
         match process_spotify_res(&url, res).await {
-            Ok(res) => return Ok(res),
-            Err(err) if err.contains("Rate Limited") => {
-                tokio::time::sleep(Duration::from_secs(5)).await;
+            Ok(res) => {
+                spotify_api_requests_success_total(endpoint_name).inc();
+                spotify_api_response_time(endpoint_name).observe(start.elapsed().as_nanos() as u64);
+                return Ok(res);
             },
-            Err(err) => return Err(err),
+            Err(err) if err.contains("Rate Limited") => {
+                spotify_api_requests_rate_limited_total(endpoint_name).inc();
+                tokio::time::sleep(Duration::from_secs(5)).await;
+                start = Instant::now();
+            },
+            Err(err) => {
+                spotify_api_requests_failure_total(endpoint_name).inc();
+                return Err(err);
+            },
         }
     }
 }
 
 pub(crate) async fn get_user_profile_info(token: &str) -> Result<UserProfile, String> {
-    spotify_user_api_request(SPOTIFY_USER_PROFILE_INFO_URL, token).await
+    spotify_user_api_request(SPOTIFY_USER_PROFILE_INFO_URL, token, "user_profile_info").await
 }
 
 pub(crate) async fn spotify_server_api_request<
@@ -125,9 +141,11 @@ pub(crate) async fn spotify_server_api_request<
 >(
     url: &str,
     params: HashMap<&str, &str>,
+    endpoint_name: &'static str,
 ) -> Result<T, String> {
     let client = get_reqwest_client().await;
 
+    let mut start = Instant::now();
     loop {
         info!(
             "Hitting Spotify API POST at URL {}, params: {:?}",
@@ -141,11 +159,20 @@ pub(crate) async fn spotify_server_api_request<
             .await;
 
         match process_spotify_res(&url, res).await {
-            Ok(res) => return Ok(res),
-            Err(err) if err.contains("Rate Limited") => {
-                tokio::time::sleep(Duration::from_secs(5)).await;
+            Ok(res) => {
+                spotify_api_requests_success_total(endpoint_name).inc();
+                spotify_api_response_time(endpoint_name).observe(start.elapsed().as_nanos() as u64);
+                return Ok(res);
             },
-            Err(err) => return Err(err),
+            Err(err) if err.contains("Rate Limited") => {
+                spotify_api_requests_rate_limited_total(endpoint_name).inc();
+                tokio::time::sleep(Duration::from_secs(5)).await;
+                start = Instant::now();
+            },
+            Err(err) => {
+                spotify_api_requests_failure_total(endpoint_name).inc();
+                return Err(err);
+            },
         }
     }
 }
@@ -155,9 +182,11 @@ pub(crate) async fn spotify_server_get_request<
 >(
     bearer_token: &str,
     url: &str,
+    endpoint_name: &'static str,
 ) -> Result<T, String> {
     let client = get_reqwest_client().await;
 
+    let mut start = Instant::now();
     loop {
         info!("Hitting Spotify API GET at URL {}", url,);
         let res = client
@@ -167,15 +196,24 @@ pub(crate) async fn spotify_server_get_request<
             .await;
 
         match process_spotify_res(&url, res).await {
-            Ok(res) => return Ok(res),
+            Ok(res) => {
+                spotify_api_requests_success_total(endpoint_name).inc();
+                spotify_api_response_time(endpoint_name).observe(start.elapsed().as_nanos() as u64);
+                return Ok(res);
+            },
             Err(err) if err.contains("Rate Limited") => {
                 warn!(
                     "Rate limited when hitting url={}, waiting 5 seconds before retrying...",
                     url
                 );
+                spotify_api_requests_rate_limited_total(endpoint_name).inc();
                 tokio::time::sleep(Duration::from_secs(5)).await;
+                start = Instant::now();
             },
-            Err(err) => return Err(err),
+            Err(err) => {
+                spotify_api_requests_failure_total(endpoint_name).inc();
+                return Err(err);
+            },
         }
     }
 }
@@ -185,23 +223,34 @@ async fn spotify_user_json_api_get_request<
 >(
     bearer_token: &str,
     url: String,
+    endpoint_name: &'static str,
 ) -> Result<R, String> {
     let client = get_reqwest_client().await;
 
+    let mut start = Instant::now();
     loop {
         info!("Hitting Spotify API at URL {}", url);
 
         let res = client.get(&url).bearer_auth(bearer_token).send().await;
         match process_spotify_res(&url, res).await {
-            Ok(res) => return Ok(res),
+            Ok(res) => {
+                spotify_api_requests_success_total(endpoint_name).inc();
+                spotify_api_response_time(endpoint_name).observe(start.elapsed().as_nanos() as u64);
+                return Ok(res);
+            },
             Err(err) if err.contains("Rate Limited") => {
                 warn!(
                     "Rate limited when hitting url={}, waiting 5 seconds before retrying...",
                     url
                 );
+                spotify_api_requests_rate_limited_total(endpoint_name).inc();
                 tokio::time::sleep(Duration::from_secs(5)).await;
+                start = Instant::now();
             },
-            Err(err) => return Err(err),
+            Err(err) => {
+                spotify_api_requests_failure_total(endpoint_name).inc();
+                return Err(err);
+            },
         }
     }
 }
@@ -213,6 +262,7 @@ pub(crate) async fn spotify_user_json_api_request<
     bearer_token: &str,
     url: &str,
     body: &T,
+    endpoint_name: &'static str,
 ) -> Result<R, String> {
     let client = get_reqwest_client().await;
 
@@ -220,12 +270,31 @@ pub(crate) async fn spotify_user_json_api_request<
         "Hitting Spotify API at URL {}, params: {:?}, bearer_token={}",
         url, body, bearer_token
     );
+    let start = Instant::now();
     let res = client
         .post(url)
         .header("Authorization", format!("Bearer {}", bearer_token))
         .json(body)
         .send()
         .await;
+    match &res {
+        Ok(res) if res.status().is_success() => {
+            spotify_api_requests_success_total(endpoint_name).inc();
+            spotify_api_response_time(endpoint_name).observe(start.elapsed().as_nanos() as u64);
+        },
+        Ok(res) =>
+            if res.status() == StatusCode::TOO_MANY_REQUESTS {
+                error!("Rate limited when hitting URL={url}");
+                spotify_api_requests_rate_limited_total(endpoint_name).inc();
+            } else {
+                spotify_api_requests_failure_total(endpoint_name).inc();
+            },
+        Err(err) => {
+            spotify_api_requests_failure_total(endpoint_name).inc();
+            error!("Error communicating with Spotify API: {:?}", err);
+            return Err("Error communicating with from the Spotify API".into());
+        },
+    }
 
     process_spotify_res(url, res).await
 }
@@ -234,7 +303,7 @@ pub(crate) async fn fetch_auth_token() -> Result<AccessTokenResponse, String> {
     let mut params = HashMap::default();
     params.insert("grant_type", "client_credentials");
 
-    spotify_server_api_request(SPOTIFY_APP_TOKEN_URL, params).await
+    spotify_server_api_request(SPOTIFY_APP_TOKEN_URL, params, "fetch_auth_token").await
 }
 
 pub(crate) async fn refresh_user_token(refresh_token: &str) -> Result<String, String> {
@@ -243,7 +312,7 @@ pub(crate) async fn refresh_user_token(refresh_token: &str) -> Result<String, St
     params.insert("refresh_token", refresh_token);
 
     let res: AccessTokenResponse =
-        spotify_server_api_request(SPOTIFY_APP_TOKEN_URL, params).await?;
+        spotify_server_api_request(SPOTIFY_APP_TOKEN_URL, params, "refresh_user_token").await?;
     Ok(res.access_token)
 }
 
@@ -258,12 +327,20 @@ pub(crate) async fn fetch_cur_stats(user: &User) -> Result<Option<StatsSnapshot>
     // Create tasks for each of the inner requests (we have to make 6; one for each of the three
     // timeframes, and then that multiplied by each of the two entities (tracks and artists)).
     info!("Kicking off 6 API requests on separate tokio tasks...");
-    for entity_type in &["tracks", "artists"] {
-        for timeframe in &["short", "medium", "long"] {
+    for entity_type in ["tracks", "artists"] {
+        for timeframe in ["short", "medium", "long"] {
             let token = user.token.clone();
             let tx = tx.clone();
 
             tokio::task::spawn(async move {
+                let start = Instant::now();
+                let endpoint_name = match entity_type {
+                    "tracks" => "top_tracks",
+                    "artists" => "top_artists",
+                    _ => unreachable!(),
+                };
+                spotify_api_requests_total(endpoint_name).inc();
+
                 let client = get_reqwest_client().await;
                 let res: Result<reqwest::Response, String> = client
                     .get(&get_top_entities_url(entity_type, timeframe))
@@ -273,6 +350,17 @@ pub(crate) async fn fetch_cur_stats(user: &User) -> Result<Option<StatsSnapshot>
                     .map_err(|_err| -> String {
                         "Error requesting latest user stats from the Spotify API".into()
                     });
+                match &res {
+                    Ok(_) => {
+                        spotify_api_requests_success_total(endpoint_name).inc();
+                        spotify_api_response_time(endpoint_name)
+                            .observe(start.elapsed().as_nanos() as u64);
+                    },
+                    Err(err) => {
+                        spotify_api_requests_failure_total(endpoint_name).inc();
+                        error!("Error fetching top {entity_type} for timeframe {timeframe}: {err}");
+                    },
+                }
 
                 let _ = tx.send((entity_type, timeframe, res)).await;
             });
@@ -535,6 +623,7 @@ async fn fetch_batch_entities<'a, T: for<'de> Deserialize<'de>>(
     base_url: &str,
     token: &str,
     spotify_entity_ids: &[&str],
+    endpoint_name: &'static str,
 ) -> Result<T, String> {
     let url = if base_url.contains('?') {
         base_url.into()
@@ -544,6 +633,8 @@ async fn fetch_batch_entities<'a, T: for<'de> Deserialize<'de>>(
     let client = get_reqwest_client().await;
 
     loop {
+        let start = Instant::now();
+        spotify_api_requests_total(endpoint_name).inc();
         let res = client
             .get(&url)
             .bearer_auth(token)
@@ -556,8 +647,22 @@ async fn fetch_batch_entities<'a, T: for<'de> Deserialize<'de>>(
 
         if res.status() == StatusCode::TOO_MANY_REQUESTS {
             warn!("Rate limited when hitting URL={}", url);
+            spotify_api_requests_rate_limited_total(endpoint_name).inc();
             tokio::time::sleep(Duration::from_secs(5)).await;
             continue;
+        }
+
+        if res.status().is_success() {
+            spotify_api_requests_success_total(endpoint_name).inc();
+            spotify_api_response_time(endpoint_name).observe(start.elapsed().as_nanos() as u64);
+        } else {
+            error!(
+                "Got bad status code of {} from Spotify API: {:?}",
+                res.status(),
+                res.text().await
+            );
+            spotify_api_requests_failure_total(endpoint_name).inc();
+            return Err("Got bad response from Spotify API".into());
         }
 
         if cfg!(debug_assertions) {
@@ -590,6 +695,7 @@ async fn fetch_with_cache<
 >(
     cache_key: &str,
     api_url: &str,
+    endpoint_name: &'static str,
     spotify_access_token: &str,
     spotify_ids: &[&str],
     map_response_to_items: fn(ResponseType) -> Result<Vec<T>, String>,
@@ -620,7 +726,8 @@ async fn fetch_with_cache<
     let mut fetched_entities = Vec::with_capacity(missing_indices.len());
     for (chunk_ix, chunk) in missing_ids.chunks(MAX_BATCH_ENTITY_COUNT).enumerate() {
         info!("Fetching chunk {}...", chunk_ix);
-        let res: ResponseType = fetch_batch_entities(api_url, spotify_access_token, chunk).await?;
+        let res: ResponseType =
+            fetch_batch_entities(api_url, spotify_access_token, chunk, endpoint_name).await?;
         let fetched_artist_data = map_response_to_items(res)?;
 
         for i in 0..chunk.len() {
@@ -669,6 +776,7 @@ pub(crate) async fn fetch_artists(
     let mut entities = fetch_with_cache::<SpotifyBatchArtistsResponse, _>(
         &CONF.artists_cache_hash_name,
         SPOTIFY_BATCH_ARTISTS_URL,
+        "fetch_artists",
         spotify_access_token,
         spotify_ids,
         |res: SpotifyBatchArtistsResponse| Ok(res.artists),
@@ -693,6 +801,7 @@ pub(crate) async fn fetch_tracks(
     let mut entities = fetch_with_cache::<SpotifyBatchTracksResponse, _>(
         &CONF.tracks_cache_hash_name,
         SPOTIFY_BATCH_TRACKS_URL,
+        "fetch_tracks",
         spotify_access_token,
         spotify_ids,
         |res: SpotifyBatchTracksResponse| Ok(res.tracks),
@@ -727,7 +836,7 @@ pub(crate) async fn create_playlist(
     };
 
     let mut created_playlist: Playlist =
-        spotify_user_json_api_request(bearer_token, &url, &body).await?;
+        spotify_user_json_api_request(bearer_token, &url, &body, "create_playlist").await?;
     info!(
         "Successfully created playlist with id={:?}",
         created_playlist.id
@@ -747,7 +856,7 @@ pub(crate) async fn create_playlist(
             created_playlist.id
         );
         let UpdatePlaylistResponse { snapshot_id } =
-            spotify_user_json_api_request(bearer_token, &url, &body).await?;
+            spotify_user_json_api_request(bearer_token, &url, &body, "update_playlist").await?;
         info!(
             "Successfully added {} items to playlist id {}",
             track_spotify_ids.len(),
@@ -769,7 +878,7 @@ pub(crate) async fn get_related_artists(
         artist_id
     );
     let res: GetRelatedArtistsResponse =
-        spotify_user_json_api_get_request(bearer_token, url).await?;
+        spotify_user_json_api_get_request(bearer_token, url, "get_related_artists").await?;
     Ok(res.artists)
 }
 
@@ -906,6 +1015,7 @@ pub(crate) async fn fetch_top_tracks_for_artist(
     Ok(fetch_with_cache::<FetchTopTracksForArtistResponse, _>(
         "top-tracks",
         &url,
+        "fetch_top_tracks_for_artist",
         spotify_access_token,
         &[artist_spotify_id],
         |res| Ok(vec![res.tracks]),
@@ -937,8 +1047,12 @@ pub(crate) async fn search_artists(
         "https://api.spotify.com/v1/search?q={}&type=artist",
         RawStr::new(query).percent_encode()
     );
-    let res =
-        spotify_server_get_request::<SpotifyArtistsSearchResponse>(&bearer_token, &url).await?;
+    let res = spotify_server_get_request::<SpotifyArtistsSearchResponse>(
+        &bearer_token,
+        &url,
+        "search_artists",
+    )
+    .await?;
 
     let all_spotify_ids = res.artists.items.iter().map(|artist| &artist.id);
     let internal_ids_by_spotify_id = get_internal_ids_by_spotify_id(conn, all_spotify_ids).await?;

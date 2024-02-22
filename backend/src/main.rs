@@ -8,16 +8,15 @@ extern crate serde_derive;
 #[macro_use]
 extern crate rocket;
 
+use std::time::Duration;
+
 use artist_embedding::{init_artist_embedding_ctx, map_3d::get_packed_3d_artist_coords};
+use foundations::telemetry::{
+    settings::{MetricsSettings, ServiceNameFormat, TelemetryServerSettings, TelemetrySettings},
+    tokio_runtime_metrics::record_runtime_metrics_sample,
+};
 // use rocket_async_compression::Compression;
 use tokio::sync::Mutex;
-
-#[cfg(not(target_env = "msvc"))]
-use tikv_jemallocator::Jemalloc;
-
-#[cfg(not(target_env = "msvc"))]
-#[global_allocator]
-static GLOBAL: Jemalloc = Jemalloc;
 
 pub mod artist_embedding;
 pub mod benchmarking;
@@ -26,6 +25,7 @@ pub mod conf;
 pub mod cors;
 pub mod db_util;
 pub mod external_storage;
+pub mod metrics;
 pub mod models;
 pub mod routes;
 pub mod schema;
@@ -34,7 +34,7 @@ pub mod spotify_api;
 pub mod spotify_token;
 pub mod stats;
 
-use crate::cache::local_cache::init_spotify_id_map_cache;
+use crate::{cache::local_cache::init_spotify_id_map_cache, conf::CONF};
 
 use self::spotify_token::SpotifyTokenData;
 
@@ -44,6 +44,40 @@ pub struct DbConn(diesel::MysqlConnection);
 #[rocket::main]
 pub async fn main() {
     dotenv::dotenv().expect("dotenv file parsing failed");
+
+    let handle = tokio::runtime::Handle::current();
+    foundations::telemetry::tokio_runtime_metrics::register_runtime(None, None, &handle);
+    println!("Registered tokio runtime metrics");
+
+    tokio::task::spawn(async move {
+        loop {
+            record_runtime_metrics_sample();
+
+            // record metrics roughly twice a second
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+    });
+
+    let tele_serv_fut = foundations::telemetry::init_with_server(
+        &foundations::service_info!(),
+        &TelemetrySettings {
+            metrics: MetricsSettings {
+                service_name_format: ServiceNameFormat::default(),
+                report_optional: true,
+            },
+            server: TelemetryServerSettings {
+                enabled: true,
+                addr: format!("0.0.0.0:{}", CONF.telemetry_server_port)
+                    .parse()
+                    .unwrap(),
+            },
+        },
+        Vec::new(),
+    )
+    .expect("Failed to initialize telemetry server");
+    let tele_serv_addr = tele_serv_fut.server_addr().unwrap();
+    println!("Telemetry server is listening on http://{}", tele_serv_addr);
+    tokio::task::spawn(tele_serv_fut);
 
     tokio::task::spawn(init_spotify_id_map_cache());
     init_artist_embedding_ctx("https://ameo.dev/artist_embedding_8d.w2v").await;
@@ -92,9 +126,7 @@ pub async fn main() {
         .manage(Mutex::new(SpotifyTokenData::new().await))
         .attach(DbConn::fairing())
         .attach(cors::CorsFairing);
-    if !cfg!(debug_assertions) {
-        // builder = builder.attach(Compression::fairing());
-    }
+
     builder.launch().await.expect("Error launching Rocket");
     info!("Rocket exited cleanly");
 }

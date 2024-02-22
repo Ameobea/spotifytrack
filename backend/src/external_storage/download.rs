@@ -1,4 +1,7 @@
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use arrow_array::{RecordBatch, TimestampSecondArray, UInt32Array, UInt64Array, UInt8Array};
 use chrono::NaiveDateTime;
@@ -12,6 +15,10 @@ use parquet::arrow::{
 use tokio::sync::watch;
 
 use crate::{
+    metrics::{
+        external_user_data_retrieval_failure_total, external_user_data_retrieval_success_total,
+        external_user_data_retrieval_time,
+    },
     models::{ArtistHistoryEntry, TrackHistoryEntry},
     DbConn,
 };
@@ -446,15 +453,21 @@ pub(crate) async fn retrieve_external_user_data(
         info!("Starting retrieval for user {}", user_spotify_id);
         for _ in 0..10 {
             let user_spotify_id = user_spotify_id.clone();
+            let start = Instant::now();
             let res = retrieve_external_user_data_inner(conn, user_spotify_id.clone()).await;
             match res {
                 Ok(()) => {
+                    external_user_data_retrieval_success_total().inc();
+                    external_user_data_retrieval_time().observe(start.elapsed().as_nanos() as u64);
                     info!("Finished retrieval for user {}", user_spotify_id);
                     // Update users table to indicate that retrieval is complete
                     set_data_retrieved_flag_for_user(conn, user_spotify_id, true).await;
                     break;
                 },
-                Err(e) => error!("Error retrieving data for user {}: {}", user_spotify_id, e),
+                Err(e) => {
+                    external_user_data_retrieval_failure_total().inc();
+                    error!("Error retrieving data for user {}: {}", user_spotify_id, e);
+                },
             }
         }
         tx.send(()).unwrap();
