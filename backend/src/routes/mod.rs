@@ -3,7 +3,7 @@ use std::{cmp::Reverse, sync::Arc};
 use chrono::{NaiveDateTime, Utc};
 use diesel::{self, prelude::*};
 use fnv::{FnvHashMap as HashMap, FnvHashSet};
-use futures::{stream::FuturesUnordered, TryFutureExt, TryStreamExt};
+use futures::{stream::FuturesUnordered, StreamExt, TryFutureExt, TryStreamExt};
 use redis::Commands;
 use rocket::{
     data::ToByteUnit,
@@ -1964,14 +1964,19 @@ pub(crate) async fn transfer_user_data_from_external_storage(
 }
 
 #[post(
-    "/bulk_transfer_user_data_to_external_storage/<user_count>?<only_already_stored>",
+    "/bulk_transfer_user_data_to_external_storage/<user_count>?<only_already_stored>&<concurrency>",
     data = "<api_token_data>"
 )]
 pub(crate) async fn bulk_transfer_user_data_to_external_storage(
     api_token_data: rocket::Data<'_>,
-    conn: DbConn,
+    conn0: DbConn,
+    conn1: DbConn,
+    conn2: DbConn,
+    conn3: DbConn,
+    conn4: DbConn,
     user_count: u32,
     only_already_stored: Option<bool>,
+    concurrency: Option<usize>,
 ) -> Result<status::Custom<String>, String> {
     if !validate_api_token(api_token_data).await? {
         return Ok(status::Custom(
@@ -1980,16 +1985,20 @@ pub(crate) async fn bulk_transfer_user_data_to_external_storage(
         ));
     }
 
-    let users = conn
+    // Only transfer data for users that haven't viewed their profile in the past 4 months
+    let cutoff_time: NaiveDateTime = Utc::now().naive_utc() - chrono::Duration::days(120);
+
+    let users = conn0
         .run(move |conn| {
             use crate::schema::users;
-            users::table
-                .filter(
-                    users::dsl::external_data_retrieved.eq(match only_already_stored {
-                        Some(true) => false,
-                        _ => true,
-                    }),
-                )
+            let mut query = users::table
+                .filter(users::dsl::last_viewed.lt(cutoff_time))
+                .into_boxed();
+            if only_already_stored == Some(true) {
+                query = query.filter(users::dsl::external_data_retrieved.eq(true));
+            }
+
+            query
                 .order_by(users::dsl::last_external_data_store.asc())
                 .limit(user_count as i64)
                 .load::<User>(conn)
@@ -2008,19 +2017,39 @@ pub(crate) async fn bulk_transfer_user_data_to_external_storage(
         usernames
     );
 
-    for user in users {
-        if !user.external_data_retrieved {
-            warn!(
-                "User {} already has external user data stored; downloading + merging and \
-                 re-storing everything...",
-                user.spotify_id
-            );
-        }
+    let concurrency = concurrency.unwrap_or(1).clamp(1, 5);
+    let conns = Arc::new(Mutex::new(vec![conn0, conn1, conn2, conn3, conn4]));
+    futures::stream::iter(users)
+        .for_each_concurrent(Some(concurrency), |user| {
+            let conns = Arc::clone(&conns);
+            async move {
+                if !user.external_data_retrieved {
+                    warn!(
+                        "User {} already has external user data stored; downloading + merging and \
+                         re-storing everything...",
+                        user.spotify_id
+                    );
+                }
 
-        crate::external_storage::upload::store_external_user_data(&conn, user.spotify_id.clone())
-            .await;
-        info!("Done transferring user data for {}", user.spotify_id);
-    }
+                let conn = match conns.lock().await.pop() {
+                    Some(conn) => conn,
+                    None => {
+                        error!("Shouldn't be possible; ran out of connections");
+                        return;
+                    },
+                };
+
+                crate::external_storage::upload::store_external_user_data(
+                    &conn,
+                    user.spotify_id.clone(),
+                )
+                .await;
+                info!("Done transferring user data for {}", user.spotify_id);
+
+                conns.lock().await.push(conn);
+            }
+        })
+        .await;
 
     Ok(status::Custom(Status::Ok, String::new()))
 }
