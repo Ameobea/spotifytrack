@@ -45,19 +45,6 @@ pub struct DbConn(diesel::MysqlConnection);
 pub async fn main() {
     dotenv::dotenv().expect("dotenv file parsing failed");
 
-    let handle = tokio::runtime::Handle::current();
-    foundations::telemetry::tokio_runtime_metrics::register_runtime(None, None, &handle);
-    println!("Registered tokio runtime metrics");
-
-    tokio::task::spawn(async move {
-        loop {
-            record_runtime_metrics_sample();
-
-            // record metrics roughly twice a second
-            tokio::time::sleep(Duration::from_millis(500)).await;
-        }
-    });
-
     let tele_serv_fut = foundations::telemetry::init_with_server(
         &foundations::service_info!(),
         &TelemetrySettings {
@@ -78,6 +65,19 @@ pub async fn main() {
     let tele_serv_addr = tele_serv_fut.server_addr().unwrap();
     println!("Telemetry server is listening on http://{}", tele_serv_addr);
     tokio::task::spawn(tele_serv_fut);
+
+    let handle = tokio::runtime::Handle::current();
+    foundations::telemetry::tokio_runtime_metrics::register_runtime(None, None, &handle);
+    println!("Registered tokio runtime metrics");
+
+    tokio::task::spawn(async move {
+        loop {
+            record_runtime_metrics_sample();
+
+            // record metrics roughly twice a second
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+    });
 
     tokio::task::spawn(init_spotify_id_map_cache());
     init_artist_embedding_ctx("https://ameo.dev/artist_embedding_8d.w2v").await;
