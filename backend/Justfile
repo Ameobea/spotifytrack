@@ -22,10 +22,13 @@ docker-start:
     ${DOCKER_IMAGE}:latest
 
 run:
-  RUST_LOG=info ROCKET_LOG=info RUST_BACKTRACE=1 RUSTFLAGS="--cfg tokio_unstable --cfg foundations_unstable" cargo run
+  RUST_LOG=info ROCKET_LOG_LEVEL=normal RUST_BACKTRACE=1 RUSTFLAGS="--cfg tokio_unstable --cfg foundations_unstable" cargo run
+
+release:
+  RUST_LOG=info ROCKET_LOG_LEVEL=normal RUST_BACKTRACE=1 RUSTFLAGS="--cfg tokio_unstable --cfg foundations_unstable" cargo run --release
 
 check:
-  RUST_LOG=info ROCKET_LOG=info RUST_BACKTRACE=1 RUSTFLAGS="--cfg tokio_unstable --cfg foundations_unstable" cargo check
+  RUST_LOG=info ROCKET_LOG_LEVEL=normal RUST_BACKTRACE=1 RUSTFLAGS="--cfg tokio_unstable --cfg foundations_unstable" cargo check
 
 build-and-deploy:
   #!/bin/bash
@@ -33,4 +36,4 @@ build-and-deploy:
   just docker-build
   docker save $DOCKER_IMAGE:latest | bzip2 > /tmp/spotifytrack-server.tar.bz2
   scp /tmp/spotifytrack-server.tar.bz2 debian@ameo.dev:/tmp/spotifytrack-server.tar.bz2
-  ssh debian@ameo.dev -t "cat /tmp/spotifytrack-server.tar.bz2 | bunzip2 | docker load && docker kill spotifytrack-server && docker container rm spotifytrack-server && docker run -d --name spotifytrack-server --net host --restart always -e ROCKET_DATABASES='{ spotify_homepage = { url = \"$DATABASE_URL\" } }' -e PORT=4100 -e SPOTIFY_CLIENT_ID='$SPOTIFY_CLIENT_ID' -e SPOTIFY_CLIENT_SECRET='$SPOTIFY_CLIENT_SECRET' -e API_SERVER_URL='https://spotifytrack.net/api' -e WEBSITE_URL='https://spotifytrack.net' -e REDIS_URL='$REDIS_URL' -e TELEMETRY_SERVER_PORT=4103 -e ADMIN_API_TOKEN='$ADMIN_API_TOKEN' -e RUST_LOG=info -e ROCKET_LOG=info -e ROCKET_LOG_level=normal $DOCKER_IMAGE:latest && rm /tmp/spotifytrack-server.tar.bz2" && rm /tmp/spotifytrack-server.tar.bz2
+  ssh debian@ameo.dev -t "cat /tmp/spotifytrack-server.tar.bz2 | bunzip2 | docker load && docker kill spotifytrack-server && docker container rm spotifytrack-server && docker run -d --name spotifytrack-server --net host --restart always -e ROCKET_DATABASES='{ spotify_homepage = { url = \"$DATABASE_URL\" } }' -e PORT=4100 -e SPOTIFY_CLIENT_ID='$SPOTIFY_CLIENT_ID' -e SPOTIFY_CLIENT_SECRET='$SPOTIFY_CLIENT_SECRET' -e API_SERVER_URL='https://spotifytrack.net/api' -e WEBSITE_URL='https://spotifytrack.net' -e REDIS_URL='$REDIS_URL' -e TELEMETRY_SERVER_PORT=4103 -e ADMIN_API_TOKEN='$ADMIN_API_TOKEN' -e RUST_LOG=info -e ROCKET_LOG_level=normal -e AWS_ACCESS_KEY_ID='$AWS_ACCESS_KEY_ID' -e AWS_SECRET_ACCESS_KEY='$AWS_SECRET_ACCESS_KEY' -e AWS_S3_ENDPOINT='$AWS_S3_ENDPOINT' -e RUST_BACKTRACE=1 $DOCKER_IMAGE:latest && rm /tmp/spotifytrack-server.tar.bz2" && rm /tmp/spotifytrack-server.tar.bz2
