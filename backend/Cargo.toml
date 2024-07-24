@@ -49,6 +49,6 @@ serde_derive = "1.0"
 parquet = { version = "39.0", default-features = false, features = ["arrow", "async", "flate2", "object_store"] }
 arrow-schema = { version = "39.0", default-features = false, features = [] }
 arrow-array = { version = "39.0", default-features = false, features = [] }
-object_store = { version = "0.5.6", features = ["aws"] }
+object_store = { version = "0.10.2", features = ["aws"] }
 
 dashmap = "5.4"
