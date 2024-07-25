@@ -1,5 +1,4 @@
 use diesel::prelude::*;
-use rocket::http::hyper::body::Bytes;
 use std::{
     sync::Arc,
     time::{Duration, Instant},
@@ -28,8 +27,8 @@ use crate::{
 };
 
 use super::{
-    build_filenames, set_data_retrieved_flag_for_user, ARROW_WRITER_BUFFER_SIZE,
-    EXTERNAL_STORAGE_ARROW_SCHEMA, RETRIEVE_LOCKS, WRITE_LOCKS,
+    build_filenames, set_data_retrieved_flag_for_user, EXTERNAL_STORAGE_ARROW_SCHEMA,
+    RETRIEVE_LOCKS, WRITE_LOCKS,
 };
 
 async fn build_parquet_writer<'a>(
@@ -46,12 +45,7 @@ async fn build_parquet_writer<'a>(
         .build();
 
     let schema = &EXTERNAL_STORAGE_ARROW_SCHEMA;
-    let writer = AsyncArrowWriter::try_new(
-        buf,
-        Arc::clone(&*schema),
-        ARROW_WRITER_BUFFER_SIZE,
-        Some(props),
-    )?;
+    let writer = AsyncArrowWriter::try_new(buf, Arc::clone(&*schema), Some(props))?;
 
     Ok(writer)
 }
@@ -67,7 +61,7 @@ fn build_record_batch(items: Vec<UserHistoryEntry>) -> RecordBatch {
     for item in items {
         id_array_builder.append_value(item.id as u64);
         user_id_array_builder.append_value(item.user_id as u64);
-        update_time_array_builder.append_value(item.update_time.timestamp());
+        update_time_array_builder.append_value(item.update_time.and_utc().timestamp());
         mapped_spotify_id_array_builder.append_value(item.mapped_spotify_id as u32);
         timeframe_array_builder.append_value(item.timeframe as u8);
         ranking_array_builder.append_value(item.ranking as u8);
@@ -166,11 +160,11 @@ async fn store_external_user_data_inner(
     loop {
         match tokio::time::timeout(
             Duration::from_secs(30),
-            object_store.put(&location, Bytes::from(artists_data_buf.clone())),
+            object_store.put(&location, artists_data_buf.clone().into()),
         )
         .await
         {
-            Ok(Ok(())) => break,
+            Ok(Ok(_)) => break,
             Err(err) => {
                 error!("Timeout uploading artist data to external storage");
                 if upload_attempts >= 8 {
@@ -256,11 +250,11 @@ async fn store_external_user_data_inner(
     loop {
         match tokio::time::timeout(
             Duration::from_secs(30),
-            object_store.put(&location, Bytes::from(tracks_data_buf.clone())),
+            object_store.put(&location, tracks_data_buf.clone().into()),
         )
         .await
         {
-            Ok(Ok(())) => break,
+            Ok(Ok(_)) => break,
             Err(err) => {
                 error!("Timeout uploading track data to external storage");
                 if upload_attempts >= 8 {

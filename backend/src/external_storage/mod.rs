@@ -18,7 +18,7 @@ use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use dashmap::DashMap;
 use diesel::prelude::*;
 use lazy_static::lazy_static;
-use object_store::aws::{AmazonS3, AmazonS3Builder, AmazonS3ConfigKey};
+use object_store::aws::{AmazonS3, AmazonS3Builder};
 
 use tokio::sync::watch;
 
@@ -28,7 +28,6 @@ pub(crate) mod download;
 pub(crate) mod upload;
 
 const EXTERNAL_STORAGE_BUCKET_NAME: &'static str = "spotifytrack-cold-storage";
-const ARROW_WRITER_BUFFER_SIZE: usize = 1024 * 1024 * 10;
 const BATCH_SIZE: usize = 5000;
 
 lazy_static! {
@@ -49,26 +48,15 @@ lazy_static! {
 }
 
 fn build_object_store() -> Result<AmazonS3, object_store::Error> {
-    let options = vec![
-        (
-            AmazonS3ConfigKey::AccessKeyId,
-            std::env::var("AWS_ACCESS_KEY_ID").expect("AWS_ACCESS_KEY_ID not set"),
-        ),
-        (
-            AmazonS3ConfigKey::SecretAccessKey,
+    AmazonS3Builder::new()
+        .with_access_key_id(std::env::var("AWS_ACCESS_KEY_ID").expect("AWS_ACCESS_KEY_ID not set"))
+        .with_secret_access_key(
             std::env::var("AWS_SECRET_ACCESS_KEY").expect("AWS_SECRET_ACCESS_KEY not set"),
-        ),
-        (
-            AmazonS3ConfigKey::Endpoint,
-            std::env::var("AWS_S3_ENDPOINT").expect("AWS_S3_ENDPOINT not set"),
-        ),
-        (AmazonS3ConfigKey::Region, String::from("auto")),
-        (
-            AmazonS3ConfigKey::Bucket,
-            EXTERNAL_STORAGE_BUCKET_NAME.to_string(),
-        ),
-    ];
-    AmazonS3Builder::new().try_with_options(options)?.build()
+        )
+        .with_endpoint(std::env::var("AWS_S3_ENDPOINT").expect("AWS_S3_ENDPOINT not set"))
+        .with_region("auto")
+        .with_bucket_name(EXTERNAL_STORAGE_BUCKET_NAME.to_string())
+        .build()
 }
 
 fn build_filenames(user_spotify_id: &str) -> (String, String) {

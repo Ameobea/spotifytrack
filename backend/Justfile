@@ -24,6 +24,9 @@ docker-start:
 run:
   RUST_LOG=info ROCKET_LOG_LEVEL=normal RUST_BACKTRACE=1 RUSTFLAGS="--cfg tokio_unstable --cfg foundations_unstable" cargo run
 
+run-no-rustflags:
+  RUST_LOG=info ROCKET_LOG_LEVEL=normal RUST_BACKTRACE=1 cargo run
+
 release:
   RUST_LOG=info ROCKET_LOG_LEVEL=normal RUST_BACKTRACE=1 RUSTFLAGS="--cfg tokio_unstable --cfg foundations_unstable" cargo run --release
 
