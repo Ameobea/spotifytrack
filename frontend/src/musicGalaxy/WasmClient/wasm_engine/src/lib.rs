@@ -1,4 +1,3 @@
-#![feature(box_syntax, new_uninit)]
 #![allow(invalid_value)]
 
 #[macro_use]
@@ -401,7 +400,7 @@ fn maybe_init() {
 
         let seed: u64 = unsafe { std::mem::transmute(js_random()) };
         unsafe {
-            RNG = Box::into_raw(box pcg::Pcg::from_seed(seed.into()));
+            RNG = Box::into_raw(Box::new(pcg::Pcg::from_seed(seed.into())));
         }
     })
 }
@@ -456,7 +455,7 @@ pub fn should_render_label(
 pub fn create_artist_map_ctx() -> *mut ArtistMapCtx {
     maybe_init();
 
-    Box::into_raw(box ArtistMapCtx::default())
+    Box::into_raw(Box::new(ArtistMapCtx::default()))
 }
 
 /// Returns total number of artists in the embedding
