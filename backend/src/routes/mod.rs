@@ -1201,25 +1201,25 @@ pub(crate) async fn crawl_related_artists(
 
     let mut all_related_artists: Vec<String> = Vec::new();
 
-    for artist_id in artist_ids {
-        let related_artists_json: String = block_in_place(|| {
-            redis_conn
-                .hget("related_artists", artist_id)
-                .map_err(|err| {
-                    error!("Error getting related artist from Redis: {:?}", err);
-                    String::from("Redis error")
-                })
-        })?;
+    let related_artists_jsons: Vec<String> = block_in_place(|| {
+        redis_conn
+            .hget("related_artists", artist_ids)
+            .map_err(|err| {
+                error!("Error getting related artist from Redis: {:?}", err);
+                String::from("Redis error")
+            })
+    })?;
 
-        let related_artist_ids: Vec<String> =
-            serde_json::from_str(&related_artists_json).map_err(|_err| {
-                error!(
-                    "Invalid entry in related artists Redis; can't parse into array of strings; \
-                     found={}",
-                    related_artists_json
-                );
-                String::from("Internal error")
-            })?;
+    for related_artists_json in related_artists_jsons {
+        let Ok(related_artist_ids) = serde_json::from_str::<Vec<String>>(&related_artists_json)
+        else {
+            error!(
+                "Invalid entry in related artists Redis; can't parse into array of strings; \
+                 found={}",
+                related_artists_json
+            );
+            continue;
+        };
 
         all_related_artists.extend(related_artist_ids.into_iter());
     }

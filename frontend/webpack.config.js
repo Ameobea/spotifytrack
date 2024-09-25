@@ -155,7 +155,7 @@ const buildConfig = () => ({
   ],
   devServer: {
     historyApiFallback: true,
-    port: 9000,
+    port: 9050,
     allowedHosts: 'all',
   },
 });

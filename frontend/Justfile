@@ -5,7 +5,7 @@ build-wasm-client:
 
 run:
   just build-wasm-client
-  REACT_APP_API_BASE_URL=http://localhost:8000 REACT_APP_SITE_URL=http://localhost:9000 yarn start --host 0.0.0.0
+  REACT_APP_API_BASE_URL=http://localhost:8000 REACT_APP_SITE_URL=http://localhost:9050 yarn start --host 0.0.0.0 --port 9050
 
 build:
   just build-wasm-client
