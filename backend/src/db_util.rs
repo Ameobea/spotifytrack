@@ -125,10 +125,6 @@ pub(crate) async fn get_artist_stats(
 }
 
 async fn retrieve_cold_data_for_user(conn: &DbConn, user: &User) {
-    info!(
-        "User {} has data in cold storage; starting retrieval...",
-        user.spotify_id
-    );
     let tok = start();
     crate::external_storage::download::retrieve_external_user_data(
         conn,
@@ -137,10 +133,6 @@ async fn retrieve_cold_data_for_user(conn: &DbConn, user: &User) {
     )
     .await;
     mark(tok, "get_artist_stats");
-    info!(
-        "Finished retrieving data from cold storage for user {}",
-        user.spotify_id
-    );
 }
 
 pub(crate) async fn get_artist_rank_history_single_artist(
@@ -154,6 +146,7 @@ pub(crate) async fn get_artist_rank_history_single_artist(
         retrieve_cold_data_for_user(&conn, user).await;
     }
 
+    let tok = start();
     let query = artist_rank_snapshots
         .filter(user_id.eq(user.id))
         .inner_join(spotify_items)
@@ -164,6 +157,7 @@ pub(crate) async fn get_artist_rank_history_single_artist(
         "{:?}",
         diesel::debug_query::<diesel::mysql::Mysql, _>(&query)
     );
+
     let res = match conn
         .run(move |conn| diesel_not_found_to_none(query.load::<ArtistRankHistoryResItem>(conn)))
         .await?
@@ -190,6 +184,7 @@ pub(crate) async fn get_artist_rank_history_single_artist(
         cur_update.1[update.timeframe as usize] = Some(update.ranking);
     }
     output.push(cur_update);
+    mark(tok, "get_artist_rank_history_single_artist");
 
     Ok(Some(output))
 }
@@ -490,42 +485,37 @@ pub(crate) async fn get_track_stats_history(
     )>,
     String,
 > {
-    use crate::schema::{
-        spotify_items::{self, dsl::*},
-        track_rank_snapshots::{self, dsl::*},
-        tracks_artists::{self, dsl::*},
-    };
-
     if !user.external_data_retrieved {
         retrieve_cold_data_for_user(&conn, user).await;
     }
 
-    let query = spotify_items
-        .filter(spotify_items::spotify_id.eq(parent_artist_id.clone()))
-        .select(spotify_items::id);
-    let artist_inner_id: i32 =
-        conn.run(move |conn| query.first(conn))
-            .await
-            .map_err(|err| -> String {
-                error!(
-                    "Error querying inner id of artist with spotify id {:?}: {:?}",
-                    parent_artist_id, err
-                );
-                "Error looking up parent artist".into()
-            })?;
+    let tok = start();
 
-    let query = tracks_artists
-        .filter(tracks_artists::artist_id.eq(artist_inner_id))
-        .inner_join(
-            track_rank_snapshots
-                .on(track_rank_snapshots::mapped_spotify_id.eq(tracks_artists::track_id)),
-        )
-        .filter(user_id.eq(user.id))
-        .inner_join(spotify_items.on(tracks_artists::track_id.eq(spotify_items::id)))
-        .order_by(update_time)
-        .select((spotify_id, update_time, ranking, timeframe));
+    // Using a raw query here because the `STRAIGHT_JOIN` forces the MySQL query optimizer to do
+    // something different which makes the query run several times faster.
+    let raw_query = r#"
+    WITH artist_tracks AS (
+        SELECT `track_id`
+        FROM `tracks_artists`
+        WHERE `artist_id` = (SELECT `id` FROM `spotify_items` WHERE `spotify_id` = ?)
+    ),
+    filtered_snapshots AS (
+        SELECT `mapped_spotify_id`, `update_time`, `ranking`, `timeframe`
+        FROM `track_rank_snapshots`
+        WHERE `user_id` = ?
+        AND `mapped_spotify_id` IN (SELECT `track_id` FROM artist_tracks)
+    )
+    SELECT `spotify_items`.`spotify_id`, `filtered_snapshots`.`update_time`, `filtered_snapshots`.`ranking`, `filtered_snapshots`.`timeframe`
+    FROM `filtered_snapshots`
+    STRAIGHT_JOIN `spotify_items` ON `filtered_snapshots`.`mapped_spotify_id` = `spotify_items`.`id`
+    ORDER BY `filtered_snapshots`.`update_time`;
+    "#;
 
-    get_entity_stats_history(
+    let query = diesel::sql_query(raw_query)
+        .bind::<diesel::sql_types::Text, _>(parent_artist_id)
+        .bind::<diesel::sql_types::BigInt, _>(user.id);
+
+    let res = get_entity_stats_history(
         conn,
         query,
         spotify_access_token,
@@ -537,7 +527,10 @@ pub(crate) async fn get_track_stats_history(
         },
         |update: &StatsHistoryQueryResItem| update.spotify_id.clone(),
     )
-    .await
+    .await?;
+
+    mark(tok, "get_track_stats_history");
+    Ok(res)
 }
 
 /// Retrieves a list of the internal mapped Spotify ID for each of the provided spotify IDs,

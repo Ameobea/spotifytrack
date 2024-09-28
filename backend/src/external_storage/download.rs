@@ -15,6 +15,7 @@ use parquet::arrow::{
 use tokio::sync::watch;
 
 use crate::{
+    db_util::get_user_by_spotify_id,
     metrics::{
         external_user_data_retrieval_failure_total, external_user_data_retrieval_success_total,
         external_user_data_retrieval_time,
@@ -438,7 +439,8 @@ pub(crate) async fn retrieve_external_user_data(
         .clone();
 
     // If we're super unlucky and there's currently a write operation ongoing for this user, wait
-    // for it to finish first.  We'll hold the read lock while we wait.
+    // for it to finish first.  We'll hold the read lock while we wait so no other reads or writes
+    // can start while we're sleeping.
     if !ignore_write_lock {
         while WRITE_LOCKS.contains_key(&user_spotify_id) {
             warn!(
@@ -450,7 +452,42 @@ pub(crate) async fn retrieve_external_user_data(
     }
 
     if let Some(tx) = tx_opt {
-        info!("Starting retrieval for user {}", user_spotify_id);
+        // double check that the user actually needs data retrieval.  Sometimes multiple retrieval
+        // requests get kicked off at the same time, and we only want to do the retrieval once.
+        let user = match get_user_by_spotify_id(conn, user_spotify_id.clone()).await {
+            Ok(Some(user)) => user,
+            Ok(None) => {
+                error!(
+                    "User with spotify id {user_spotify_id} not found in database while checking \
+                     if data retrieval is needed",
+                );
+                let _ = tx.send(());
+                RETRIEVE_LOCKS.remove(&user_spotify_id);
+                external_user_data_retrieval_failure_total().inc();
+                return;
+            },
+            Err(err) => {
+                error!(
+                    "Error getting user by spotify id {user_spotify_id} while checking if data \
+                     retrieval is needed: {err}",
+                );
+                let _ = tx.send(());
+                RETRIEVE_LOCKS.remove(&user_spotify_id);
+                external_user_data_retrieval_failure_total().inc();
+                return;
+            },
+        };
+
+        if user.external_data_retrieved {
+            info!(
+                "User {user_spotify_id} already has data in local storage; skipping retrieval...",
+            );
+            let _ = tx.send(());
+            RETRIEVE_LOCKS.remove(&user_spotify_id);
+            return;
+        }
+
+        info!("User {user_spotify_id} has data in cold storage; starting retrieval...",);
         for _ in 0..10 {
             let user_spotify_id = user_spotify_id.clone();
             let start = Instant::now();
@@ -459,20 +496,22 @@ pub(crate) async fn retrieve_external_user_data(
                 Ok(()) => {
                     external_user_data_retrieval_success_total().inc();
                     external_user_data_retrieval_time().observe(start.elapsed().as_nanos() as u64);
-                    info!("Finished retrieval for user {}", user_spotify_id);
+                    info!("Finished retrieval for user {user_spotify_id}");
                     // Update users table to indicate that retrieval is complete
                     set_data_retrieved_flag_for_user(conn, user_spotify_id, true).await;
                     break;
                 },
-                Err(e) => {
+                Err(err) => {
                     external_user_data_retrieval_failure_total().inc();
-                    error!("Error retrieving data for user {}: {}", user_spotify_id, e);
+                    error!("Error retrieving data for user {user_spotify_id}: {err}");
                 },
             }
         }
-        tx.send(()).unwrap();
+        let _ = tx.send(());
 
         RETRIEVE_LOCKS.remove(&user_spotify_id);
+
+        info!("Finished retrieving data from cold storage for user {user_spotify_id}",);
 
         return;
     }
