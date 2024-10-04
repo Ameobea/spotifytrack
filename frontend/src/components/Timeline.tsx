@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useQuery } from 'react-query';
 import dayjs, { Dayjs } from 'dayjs';
 import { UnimplementedError } from 'ameo-utils';
@@ -216,36 +216,27 @@ const MobileTimeline: React.FC<InnerTimelineProps> = ({ weeks, selectedDay, setS
 
 const InnerTimeline = withMobileOrDesktop({ maxDeviceWidth: 800 })(MobileTimeline, DesktopTimeline);
 
-const maybeUpdateMobileSelectedDay = (
+interface MobileSelectedDay {
+  lastSelectedDay: TimelineDay;
+  mergedDay: TimelineDay;
+}
+
+const getMobileSelectedDay = (
   data: TimelineData | undefined | null,
   mobile: boolean,
   selectedDay: TimelineDay | null,
   setSelectedDay: (newSelectedDay: TimelineDay | null) => void,
-  weeks: TimelineDay[][],
-  mobileSelectedDay: React.MutableRefObject<{
-    lastSelectedDay: TimelineDay;
-    mergedDay: TimelineDay;
-  } | null>
-) => {
-  if (!mobile || !data) {
-    return;
-  }
-
-  // If user hasn't changed their selected day/week, nothing needs to be done
-  if (selectedDay === mobileSelectedDay.current?.lastSelectedDay) {
-    return;
-  }
-
-  if (!selectedDay) {
-    mobileSelectedDay.current = null;
-    return;
+  weeks: TimelineDay[][]
+): MobileSelectedDay | null => {
+  if (!mobile || !data || !selectedDay) {
+    return null;
   }
 
   const targetWeek = weeks.find((week) => week[0] === selectedDay);
   if (!targetWeek) {
     // User probably switched between mobile and desktop modes
     setSelectedDay(null);
-    return;
+    return null;
   }
 
   const [firstDay, ...days] = targetWeek;
@@ -254,7 +245,7 @@ const maybeUpdateMobileSelectedDay = (
     return acc;
   }, firstDay);
 
-  mobileSelectedDay.current = { lastSelectedDay: selectedDay, mergedDay };
+  return { lastSelectedDay: selectedDay, mergedDay };
 };
 
 const NoHistoryWarning: React.FC = () => (
@@ -346,17 +337,9 @@ const Timeline: React.FC<{ mobile: boolean }> = ({ mobile }) => {
     return weeks;
   }, [origData, curMonth]);
   const [selectedDay, setSelectedDay] = useState<TimelineDay | null>(null);
-  const mobileSelectedDay = useRef<{ lastSelectedDay: TimelineDay; mergedDay: TimelineDay } | null>(
-    null
-  );
-
-  maybeUpdateMobileSelectedDay(
-    origData,
-    mobile,
-    selectedDay,
-    setSelectedDay,
-    weeks,
-    mobileSelectedDay
+  const mobileSelectedDay = useMemo(
+    () => getMobileSelectedDay(origData, mobile, selectedDay, setSelectedDay, weeks),
+    [origData, mobile, selectedDay, weeks]
   );
 
   return (
@@ -406,17 +389,21 @@ const Timeline: React.FC<{ mobile: boolean }> = ({ mobile }) => {
 
       <InnerTimeline weeks={weeks} selectedDay={selectedDay} setSelectedDay={setSelectedDay} />
 
-      {selectedDay ? (
-        mobile ? (
-          <DayStats day={mobileSelectedDay.current!.mergedDay} isWeek />
-        ) : (
-          <DayStats day={selectedDay} />
-        )
-      ) : mobile ? (
-        'Select a week above to display details'
-      ) : (
-        'Click a day on the calendar above to display details'
-      )}
+      {(() => {
+        if (mobile) {
+          if (mobileSelectedDay) {
+            return <DayStats day={mobileSelectedDay.mergedDay} isWeek />;
+          } else {
+            return 'Select a week above to display details';
+          }
+        } else {
+          if (selectedDay) {
+            return <DayStats day={selectedDay} />;
+          } else {
+            return 'Click a day on the calendar above to display details';
+          }
+        }
+      })()}
     </div>
   );
 };
