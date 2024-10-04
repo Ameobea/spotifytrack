@@ -277,9 +277,17 @@ impl ArtistMapCtx {
     pub fn add_highlighted_artist_orbit_labels(&mut self, draw_commands: &mut Vec<u32>) {
         let mut rendered_label_positions: Vec<[f32; 3]> = ORBIT_LABEL_ARTIST_IDS
             .iter()
-            .map(|id| {
-                let artist_ix = self.artists_indices_by_id.get(id).unwrap();
-                self.all_artists[*artist_ix].1.position
+            .filter_map(|id| {
+                let artist_ix = match self.artists_indices_by_id.get(id) {
+                    Some(ix) => ix,
+                    None => {
+                        error!(
+                            "Artist ID in ORBIT_LABEL_ARTIST_IDS not in embedding; artist_id={id}",
+                        );
+                        return None;
+                    },
+                };
+                Some(self.all_artists[*artist_ix].1.position)
             })
             .collect();
 
