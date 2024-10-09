@@ -23,7 +23,7 @@ diesel::table! {
 
 diesel::table! {
     artists_genres (id) {
-        id -> Integer,
+        id -> Bigint,
         artist_id -> Integer,
         genre -> Varchar,
     }

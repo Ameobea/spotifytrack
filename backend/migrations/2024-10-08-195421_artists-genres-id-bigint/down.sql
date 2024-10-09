@@ -1,0 +1,2 @@
+DELETE FROM `artists_genres` WHERE id > 2147483647;
+ALTER TABLE `artists_genres` CHANGE `id` `id` INT NOT NULL AUTO_INCREMENT;
