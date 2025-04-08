@@ -16,7 +16,7 @@ base64 = "0.22"
 
 chrono = { version = "0.4", features = ["serde"] }
 
-diesel = { version = "1.4", features = ["chrono", "mysql"] }
+diesel = { version = "2.2", features = ["chrono", "mysql"] }
 
 dotenv = "0.15.0"
 
