@@ -6,13 +6,13 @@ use std::{
 use arrow_array::{RecordBatch, TimestampSecondArray, UInt32Array, UInt64Array, UInt8Array};
 use chrono::NaiveDateTime;
 use diesel::{prelude::*, QueryResult};
-use futures::StreamExt;
+use futures::{FutureExt, StreamExt, TryFutureExt};
 use object_store::ObjectStore;
 use parquet::arrow::{
     async_reader::{ParquetObjectReader, ParquetRecordBatchStream},
     ParquetRecordBatchStreamBuilder,
 };
-use tokio::sync::watch;
+use tokio::{sync::watch, try_join};
 
 use crate::{
     db_util::get_user_by_spotify_id,
@@ -36,28 +36,29 @@ async fn build_parquet_readers(
     (Option<ParquetObjectReader>, Option<ParquetObjectReader>),
     Box<dyn std::error::Error + Send + Sync + 'static>,
 > {
-    let object_store = Arc::new(build_object_store()?) as Arc<dyn ObjectStore>;
-    let object_store_clone = Arc::clone(&object_store);
+    let object_store = Arc::new(build_object_store().await?) as Arc<dyn ObjectStore>;
 
     let (artists_filename, tracks_filename) = build_filenames(user_spotify_id);
     let artists_location: object_store::path::Path = artists_filename.into();
     let tracks_location: object_store::path::Path = tracks_filename.into();
-    let artists_obj_meta = match object_store_clone.head(&artists_location).await {
-        Ok(meta) => Some(meta),
-        Err(object_store::Error::NotFound { .. }) => None,
-        Err(err) => {
-            error!("Error getting artists object metadata: {}", err);
-            return Err(err.into());
-        },
+
+    let maybe_recover_err = |err: object_store::Error| async move {
+        if let object_store::Error::NotFound { .. } = err {
+            return Ok(None);
+        }
+        Err(err)
     };
-    let tracks_artist_meta = match object_store_clone.head(&tracks_location).await {
-        Ok(meta) => Some(meta),
-        Err(object_store::Error::NotFound { .. }) => None,
-        Err(err) => {
-            error!("Error getting tracks object metadata: {}", err);
-            return Err(err.into());
-        },
-    };
+
+    let artists_meta_fut = object_store
+        .head(&artists_location)
+        .map_ok(Some)
+        .or_else(maybe_recover_err);
+    let tracks_meta_fut = object_store
+        .head(&tracks_location)
+        .map_ok(Some)
+        .or_else(maybe_recover_err);
+    let (artists_obj_meta, tracks_artist_meta) = try_join!(artists_meta_fut, tracks_meta_fut)
+        .inspect_err(|err| error!("Error getting object metadata: {err}"))?;
 
     let artists_reader = artists_obj_meta.map(|artists_obj_meta| {
         ParquetObjectReader::new(Arc::clone(&object_store), artists_obj_meta)

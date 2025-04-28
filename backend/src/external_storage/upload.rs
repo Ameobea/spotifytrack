@@ -154,7 +154,7 @@ async fn store_external_user_data_inner(
          extra track data for user {user_spotify_id}. Starting upload to external storage at \
          {artists_filename}...",
     );
-    let object_store = super::build_object_store()?;
+    let object_store = super::build_object_store().await?;
     let location: object_store::path::Path = artists_filename.into();
     let mut upload_attempts = 0usize;
     loop {
@@ -244,7 +244,7 @@ async fn store_external_user_data_inner(
          extra track data for user {user_spotify_id}. Starting upload to external storage at \
          {tracks_filename}...",
     );
-    let object_store = super::build_object_store()?;
+    let object_store = super::build_object_store().await?;
     let location: object_store::path::Path = tracks_filename.into();
     let mut upload_attempts = 0usize;
     loop {

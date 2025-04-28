@@ -12,15 +12,18 @@
 //! The external storage is a S3-compatible bucket hosted on Cloudflare R2.   The file format is
 //! gzip-compressed parquet.
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use dashmap::DashMap;
 use diesel::prelude::*;
 use lazy_static::lazy_static;
-use object_store::aws::{AmazonS3, AmazonS3Builder};
+use object_store::{aws::AmazonS3Builder, ObjectStore};
 
-use tokio::sync::watch;
+use tokio::{
+    sync::{watch, Mutex},
+    task::block_in_place,
+};
 
 use crate::DbConn;
 
@@ -47,16 +50,42 @@ lazy_static! {
     static ref WRITE_LOCKS: DashMap<String, ()> = DashMap::new();
 }
 
-fn build_object_store() -> Result<AmazonS3, object_store::Error> {
-    AmazonS3Builder::new()
-        .with_access_key_id(std::env::var("AWS_ACCESS_KEY_ID").expect("AWS_ACCESS_KEY_ID not set"))
-        .with_secret_access_key(
-            std::env::var("AWS_SECRET_ACCESS_KEY").expect("AWS_SECRET_ACCESS_KEY not set"),
-        )
-        .with_endpoint(std::env::var("AWS_S3_ENDPOINT").expect("AWS_S3_ENDPOINT not set"))
-        .with_region("auto")
-        .with_bucket_name(EXTERNAL_STORAGE_BUCKET_NAME.to_string())
-        .build()
+struct CachedObjectStore {
+    pub store: Arc<dyn ObjectStore>,
+    pub cached_at: Instant,
+}
+
+lazy_static::lazy_static! {
+    static ref CACHED_OBJECT_STORE: Mutex<Option<CachedObjectStore>> = Mutex::new(None);
+}
+
+async fn build_object_store() -> Result<Arc<dyn ObjectStore>, object_store::Error> {
+    let mut cached_object_store = CACHED_OBJECT_STORE.lock().await;
+    if let Some(object_store) = cached_object_store.as_ref() {
+        if object_store.cached_at.elapsed().as_secs() < 60 {
+            return Ok(object_store.store.clone());
+        }
+    }
+
+    let object_store = block_in_place(|| {
+        AmazonS3Builder::new()
+            .with_access_key_id(
+                std::env::var("AWS_ACCESS_KEY_ID").expect("AWS_ACCESS_KEY_ID not set"),
+            )
+            .with_secret_access_key(
+                std::env::var("AWS_SECRET_ACCESS_KEY").expect("AWS_SECRET_ACCESS_KEY not set"),
+            )
+            .with_endpoint(std::env::var("AWS_S3_ENDPOINT").expect("AWS_S3_ENDPOINT not set"))
+            .with_region("auto")
+            .with_bucket_name(EXTERNAL_STORAGE_BUCKET_NAME.to_string())
+            .build()
+            .map(|s3| Arc::new(s3) as Arc<dyn ObjectStore + 'static>)
+    })?;
+    *cached_object_store = Some(CachedObjectStore {
+        store: object_store.clone(),
+        cached_at: Instant::now(),
+    });
+    Ok(object_store)
 }
 
 fn build_filenames(user_spotify_id: &str) -> (String, String) {
