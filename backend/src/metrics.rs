@@ -51,6 +51,12 @@ pub(crate) mod metrics {
         buckets: &[0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 15.0, 20.0, 30.0, 60.0, 120.0, 300.0, 600.0],
     }]
     pub fn external_user_data_export_time() -> TimeHistogram;
+
+    /// Distribution of endpoint response times
+    #[ctor = HistogramBuilder {
+        buckets: &[0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.75, 1.0, 2.5, 5.0, 10.0, 15.0, 20.0, 30.0, 45.0, 60.0, 120.0, 300.0],
+    }]
+    pub fn endpoint_response_time(query_name: &'static str) -> TimeHistogram;
 }
 
 pub use metrics::*;

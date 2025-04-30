@@ -6,7 +6,7 @@ use std::{
 use arrow_array::{RecordBatch, TimestampSecondArray, UInt32Array, UInt64Array, UInt8Array};
 use chrono::NaiveDateTime;
 use diesel::{prelude::*, QueryResult};
-use futures::{FutureExt, StreamExt, TryFutureExt};
+use futures::{StreamExt, TryFutureExt};
 use object_store::ObjectStore;
 use parquet::arrow::{
     async_reader::{ParquetObjectReader, ParquetRecordBatchStream},

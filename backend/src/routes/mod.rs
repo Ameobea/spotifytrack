@@ -1,4 +1,4 @@
-use std::{cmp::Reverse, sync::Arc};
+use std::{cmp::Reverse, sync::Arc, time::Instant};
 
 use chrono::{NaiveDateTime, Utc};
 use diesel::{self, prelude::*};
@@ -30,7 +30,7 @@ use crate::{
         self, get_all_top_artists_for_user, get_artist_spotify_ids_by_internal_id,
         get_internal_ids_by_spotify_id, insert_related_artists,
     },
-    metrics::{user_updates_failure_total, user_updates_success_total},
+    metrics::{endpoint_response_time, user_updates_failure_total, user_updates_success_total},
     models::{
         Artist, ArtistSearchResult, AverageArtistItem, AverageArtistsResponse, CompareToRequest,
         CreateSharedPlaylistRequest, NewRelatedArtistEntry, NewUser, OAuthTokenResponse, Playlist,
@@ -57,14 +57,14 @@ pub(crate) async fn get_current_stats(
     username: String,
     token_data: &State<Mutex<SpotifyTokenData>>,
 ) -> Result<Option<Json<StatsSnapshot>>, String> {
-    let tok = start();
+    let start_tok = start();
     let user = match db_util::get_user_by_spotify_id(&conn, username).await? {
         Some(user) => user,
         None => {
             return Ok(None);
         },
     };
-    mark(tok, "Finished getting spotify user by id");
+    mark(start_tok, "Finished getting spotify user by id");
 
     let spotify_access_token = {
         let token_data = &mut *(&*token_data).lock().await;
@@ -92,6 +92,8 @@ pub(crate) async fn get_current_stats(
         snapshot.tracks.add_item_by_id(timeframe_id, track);
     }
 
+    endpoint_response_time("get_current_stats").observe(start_tok.elapsed().as_nanos() as u64);
+
     Ok(Some(Json(snapshot)))
 }
 
@@ -111,14 +113,14 @@ pub(crate) async fn get_artist_stats(
     username: String,
     artist_id: String,
 ) -> Result<Option<Json<ArtistStats>>, String> {
-    let tok = start();
+    let start_tok = start();
     let user = match db_util::get_user_by_spotify_id(&conn, username).await? {
         Some(user) => user,
         None => {
             return Ok(None);
         },
     };
-    mark(tok, "Finished getting spotify user by id");
+    mark(start_tok, "Finished getting spotify user by id");
 
     let spotify_access_token = {
         let token_data = &mut *(&*token_data).lock().await;
@@ -171,6 +173,7 @@ pub(crate) async fn get_artist_stats(
         popularity_history: artist_popularity_history,
         top_tracks: top_track_scores,
     };
+    endpoint_response_time("get_artists_stats").observe(start_tok.elapsed().as_nanos() as u64);
     Ok(Some(Json(stats)))
 }
 
@@ -186,6 +189,7 @@ pub(crate) async fn get_genre_history(
     token_data: &State<Mutex<SpotifyTokenData>>,
     username: String,
 ) -> Result<Option<Json<GenresHistory>>, String> {
+    let start = Instant::now();
     let user = match db_util::get_user_by_spotify_id(&conn, username).await? {
         Some(user) => user,
         None => {
@@ -207,6 +211,7 @@ pub(crate) async fn get_genre_history(
 
     let (timestamps, history_by_genre) =
         crate::stats::get_top_genres_by_artists(&artists_by_id, &artist_stats_history, true);
+    endpoint_response_time("get_genre_history").observe(start.elapsed().as_nanos() as u64);
     Ok(Some(Json(GenresHistory {
         timestamps,
         history_by_genre,
@@ -228,6 +233,7 @@ pub(crate) async fn get_genre_stats(
     username: String,
     genre: String,
 ) -> Result<Option<Json<GenreStats>>, String> {
+    let start = Instant::now();
     let user = match db_util::get_user_by_spotify_id(&conn, username).await? {
         Some(user) => user,
         None => {
@@ -248,6 +254,7 @@ pub(crate) async fn get_genre_stats(
     // Compute ranking scores for each of the update items
     let (timestamps, ranking_by_artist_spotify_id_by_timeframe, popularity_history) =
         crate::stats::compute_genre_ranking_history(genre_stats_history);
+    endpoint_response_time("get_genre_stats").observe(start.elapsed().as_nanos() as u64);
 
     Ok(Some(Json(GenreStats {
         artists_by_id,
@@ -266,6 +273,7 @@ pub(crate) async fn get_timeline(
     start_day_id: String,
     end_day_id: String,
 ) -> Result<Option<Json<Timeline>>, String> {
+    let start = Instant::now();
     let start_day = NaiveDateTime::parse_from_str(
         &format!("{}T08:00:00+08:00", start_day_id),
         "%Y-%m-%dT%H:%M:%S%z",
@@ -336,6 +344,7 @@ pub(crate) async fn get_timeline(
     ));
 
     events.sort_unstable_by_key(|evt| evt.date);
+    endpoint_response_time("get_timeline").observe(start.elapsed().as_nanos() as u64);
 
     Ok(Some(Json(Timeline { events })))
 }
@@ -369,6 +378,7 @@ async fn generate_shared_playlist(
     user1: &str,
     user2: &str,
 ) -> Result<Option<Playlist>, String> {
+    let start = Instant::now();
     let (user1_res, user2_res) = tokio::join!(
         async move {
             db_util::get_user_by_spotify_id(&conn1, user1.to_owned())
@@ -428,6 +438,7 @@ async fn generate_shared_playlist(
     )
     .await?;
 
+    endpoint_response_time("generate_shared_playlist").observe(start.elapsed().as_nanos() as u64);
     Ok(Some(created_playlist))
 }
 
@@ -446,6 +457,8 @@ pub(crate) async fn oauth_cb(
     state: Option<&str>,
 ) -> Result<Redirect, String> {
     use crate::schema::users;
+
+    let start = Instant::now();
 
     if error.is_some() {
         error!("Error during Oauth authorization process: {:?}", error);
@@ -657,6 +670,8 @@ pub(crate) async fn oauth_cb(
         Some(s) if s.starts_with("/") => format!("{}{}", CONF.website_url, s),
         _ => format!("{}/stats/{}", CONF.website_url, user_spotify_id),
     };
+
+    endpoint_response_time("oauth_cb").observe(start.elapsed().as_nanos() as u64);
 
     // Redirect the user to their stats page
     Ok(Redirect::to(redirect_url))
@@ -974,9 +989,12 @@ pub(crate) async fn compare_users(
     user1: String,
     user2: String,
 ) -> Result<Option<Json<UserComparison>>, String> {
-    compute_comparison(user1, user2, conn1, conn2, conn3, conn4, token_data)
+    let start = Instant::now();
+    let res = compute_comparison(user1, user2, conn1, conn2, conn3, conn4, token_data)
         .await
-        .map(|res| res.map(Json))
+        .map(|res| res.map(Json))?;
+    endpoint_response_time("compare_users").observe(start.elapsed().as_nanos() as u64);
+    Ok(res)
 }
 
 async fn build_related_artists_graph(
@@ -1022,6 +1040,7 @@ pub(crate) async fn get_related_artists_graph(
     user_id: String,
     token_data: &State<Mutex<SpotifyTokenData>>,
 ) -> Result<Option<Json<RelatedArtistsGraph>>, String> {
+    let start = Instant::now();
     let User { id: user_id, .. } = match db_util::get_user_by_spotify_id(&conn, user_id).await? {
         Some(user) => user,
         None => {
@@ -1047,6 +1066,7 @@ pub(crate) async fn get_related_artists_graph(
         .collect();
 
     let out = build_related_artists_graph(spotify_access_token, &all_artist_ids_for_user).await?;
+    endpoint_response_time("get_related_artists_graph").observe(start.elapsed().as_nanos() as u64);
     Ok(Some(Json(out)))
 }
 
@@ -1055,6 +1075,7 @@ pub(crate) async fn get_related_artists(
     artist_id: String,
     token_data: &State<Mutex<SpotifyTokenData>>,
 ) -> Result<Option<Json<RelatedArtistsGraph>>, String> {
+    let start = Instant::now();
     let spotify_access_token = {
         let token_data = &mut *(&*token_data).lock().await;
         token_data.get().await
@@ -1075,6 +1096,7 @@ pub(crate) async fn get_related_artists(
         .collect::<Vec<_>>();
 
     let out = build_related_artists_graph(spotify_access_token, &related_artist_ids).await?;
+    endpoint_response_time("get_related_artists").observe(start.elapsed().as_nanos() as u64);
     Ok(Some(Json(out)))
 }
 
@@ -1083,6 +1105,7 @@ pub(crate) async fn get_display_name(
     conn: DbConn,
     username: String,
 ) -> Result<Option<String>, String> {
+    let start = Instant::now();
     match db_util::get_user_by_spotify_id(&conn, username).await? {
         Some(user) => {
             let user_clone = user.clone();
@@ -1095,6 +1118,8 @@ pub(crate) async fn get_display_name(
                 }
             });
 
+            endpoint_response_time("get_display_name").observe(start.elapsed().as_nanos() as u64);
+
             Ok(Some(user.username))
         },
         None => Ok(None),
@@ -1106,6 +1131,8 @@ pub(crate) async fn dump_redis_related_artists_to_database(
     conn: DbConn,
     api_token_data: rocket::Data<'_>,
 ) -> Result<status::Custom<String>, String> {
+    let start = Instant::now();
+
     if !validate_api_token(api_token_data).await? {
         return Ok(status::Custom(
             Status::Unauthorized,
@@ -1161,6 +1188,9 @@ pub(crate) async fn dump_redis_related_artists_to_database(
             })?;
     }
 
+    endpoint_response_time("dump_redis_related_artists_to_database")
+        .observe(start.elapsed().as_nanos() as u64);
+
     Ok(status::Custom(
         Status::Ok,
         String::from("Successfully dumped all related artists from Redis to MySQL"),
@@ -1172,6 +1202,8 @@ pub(crate) async fn crawl_related_artists(
     api_token_data: rocket::Data<'_>,
     token_data: &State<Mutex<SpotifyTokenData>>,
 ) -> Result<status::Custom<String>, String> {
+    let start = Instant::now();
+
     if !validate_api_token(api_token_data).await? {
         return Ok(status::Custom(
             Status::Unauthorized,
@@ -1232,6 +1264,7 @@ pub(crate) async fn crawl_related_artists(
 
     let fetched =
         get_multiple_related_artists(spotify_access_token.clone(), &all_related_artists).await?;
+    endpoint_response_time("crawl_related_artists").observe(start.elapsed().as_nanos() as u64);
     Ok(status::Custom(
         Status::Ok,
         format!(
@@ -1247,6 +1280,7 @@ pub(crate) async fn search_artist(
     token_data: &State<Mutex<SpotifyTokenData>>,
     q: String,
 ) -> Result<Json<Vec<ArtistSearchResult>>, String> {
+    let start = Instant::now();
     let spotify_access_token = {
         let token_data = &mut *(&*token_data).lock().await;
         token_data.get().await
@@ -1280,6 +1314,8 @@ pub(crate) async fn search_artist(
         q
     );
 
+    endpoint_response_time("search_artist").observe(start.elapsed().as_nanos() as u64);
+
     Ok(Json(search_results))
 }
 
@@ -1296,6 +1332,8 @@ pub(crate) async fn get_average_artists_route(
     artist_2_bias: Option<f32>,
     token_data: &State<Mutex<SpotifyTokenData>>,
 ) -> Result<Json<AverageArtistsResponse>, String> {
+    let start = Instant::now();
+
     // Look up internal IDs for provided spotify IDs
     let internal_ids_by_spotify_id = get_internal_ids_by_spotify_id(
         &conn,
@@ -1463,6 +1501,9 @@ pub(crate) async fn get_average_artists_route(
     out_artists.sort_unstable_by_key(|item| Reverse(item.score()));
 
     let ctx = get_artist_embedding_ctx();
+
+    endpoint_response_time("get_average_artists").observe(start.elapsed().as_nanos() as u64);
+
     Ok(Json(AverageArtistsResponse {
         artists: out_artists,
         distance: ctx
@@ -1479,6 +1520,8 @@ pub(crate) async fn get_artist_image_url(
     artist_spotify_id: String,
     token_data: &State<Mutex<SpotifyTokenData>>,
 ) -> Result<String, String> {
+    let start = Instant::now();
+
     let spotify_access_token = {
         let token_data = &mut *(&*token_data).lock().await;
         token_data.get().await
@@ -1494,6 +1537,7 @@ pub(crate) async fn get_artist_image_url(
         Some(image) => image,
         None => return Err(String::from("Not found")),
     };
+    endpoint_response_time("get_artist_image_url").observe(start.elapsed().as_nanos() as u64);
     Ok(image.url)
 }
 
@@ -1506,6 +1550,7 @@ pub(crate) async fn refetch_cached_artists_missing_popularity(
     token_data: &State<Mutex<SpotifyTokenData>>,
     count: Option<usize>,
 ) -> Result<status::Custom<String>, String> {
+    let start = Instant::now();
     if !validate_api_token(api_token_data).await? {
         return Ok(status::Custom(
             Status::Unauthorized,
@@ -1575,6 +1620,9 @@ pub(crate) async fn refetch_cached_artists_missing_popularity(
         .collect();
     fetch_artists(&spotify_access_token, &artist_ids_needing_refetch).await?;
 
+    endpoint_response_time("refetch_cached_artists_missing_popularity")
+        .observe(start.elapsed().as_nanos() as u64);
+
     Ok(status::Custom(
         Status::Ok,
         format!(
@@ -1614,6 +1662,8 @@ pub(crate) async fn get_artists_by_internal_ids(
     token_data: &State<Mutex<SpotifyTokenData>>,
     artist_internal_ids: Json<Vec<i32>>,
 ) -> Result<Json<Vec<Option<String>>>, String> {
+    let start = Instant::now();
+
     let spotify_access_token = {
         let token_data = &mut *(&*token_data).lock().await;
         token_data.get().await
@@ -1640,19 +1690,21 @@ pub(crate) async fn get_artists_by_internal_ids(
         .collect::<Vec<_>>();
 
     let artists = fetch_artists(&spotify_access_token, &artist_spotify_ids).await?;
+    let res = artist_internal_ids
+        .into_iter()
+        .map(|internal_id| {
+            let spotify_id = artist_spotify_ids_by_internal_id.get(&internal_id)?;
+            artists
+                .iter()
+                .find(|artist| artist.id == *spotify_id)
+                .map(|artist| artist.name.clone())
+        })
+        .collect();
 
-    Ok(Json(
-        artist_internal_ids
-            .into_iter()
-            .map(|internal_id| {
-                let spotify_id = artist_spotify_ids_by_internal_id.get(&internal_id)?;
-                artists
-                    .iter()
-                    .find(|artist| artist.id == *spotify_id)
-                    .map(|artist| artist.name.clone())
-            })
-            .collect(),
-    ))
+    endpoint_response_time("get_artists_by_internal_ids")
+        .observe(start.elapsed().as_nanos() as u64);
+
+    Ok(Json(res))
 }
 
 fn pack_artist_relationships(artist_relationships: Vec<Vec<i32>>) -> Vec<u8> {
@@ -1757,6 +1809,8 @@ pub(crate) async fn get_packed_artist_relationships_by_internal_ids(
     token_data: &State<Mutex<SpotifyTokenData>>,
     artist_internal_ids: Json<Vec<i32>>,
 ) -> Result<JSONMimeTypeSetterResponder, String> {
+    let start = Instant::now();
+
     let spotify_access_token = {
         let token_data = &mut *(&*token_data).lock().await;
         token_data.get().await
@@ -1769,6 +1823,8 @@ pub(crate) async fn get_packed_artist_relationships_by_internal_ids(
         artist_internal_ids,
     )
     .await?;
+    endpoint_response_time("get_packed_artist_relationships_by_internal_ids")
+        .observe(start.elapsed().as_nanos() as u64);
     Ok(JSONMimeTypeSetterResponder { inner: packed })
 }
 
@@ -1785,6 +1841,8 @@ pub(crate) async fn get_artist_relationships_chunk(
     chunk_size: u32,
     chunk_ix: u32,
 ) -> Result<JSONMimeTypeSetterResponder, String> {
+    let start = Instant::now();
+
     let spotify_access_token = {
         let token_data = &mut *(&*token_data).lock().await;
         token_data.get().await
@@ -1824,6 +1882,9 @@ pub(crate) async fn get_artist_relationships_chunk(
         cache.insert(cache_key, packed.clone());
     }
 
+    endpoint_response_time("get_artist_relationships_chunk")
+        .observe(start.elapsed().as_nanos() as u64);
+
     Ok(JSONMimeTypeSetterResponder { inner: packed })
 }
 
@@ -1833,6 +1894,8 @@ pub(crate) async fn get_preview_urls_by_internal_id(
     token_data: &State<Mutex<SpotifyTokenData>>,
     artist_internal_id: i32,
 ) -> Result<Json<Option<Vec<String>>>, String> {
+    let start = Instant::now();
+
     let spotify_access_token = {
         let token_data = &mut *(&*token_data).lock().await;
         token_data.get().await
@@ -1855,6 +1918,10 @@ pub(crate) async fn get_preview_urls_by_internal_id(
     };
 
     let top_tracks = fetch_top_tracks_for_artist(&spotify_access_token, &spotify_id).await?;
+
+    endpoint_response_time("get_preview_urls_by_internal_id")
+        .observe(start.elapsed().as_nanos() as u64);
+
     if top_tracks.is_empty() {
         return Ok(Json(None));
     }
@@ -1872,6 +1939,8 @@ pub(crate) async fn get_top_artists_internal_ids_for_user(
     conn: DbConn,
     user_id: String,
 ) -> Result<Option<Json<Vec<i32>>>, String> {
+    let start = Instant::now();
+
     let user = match db_util::get_user_by_spotify_id(&conn, user_id).await? {
         Some(user) => user,
         None => {
@@ -1885,6 +1954,10 @@ pub(crate) async fn get_top_artists_internal_ids_for_user(
             error!("Error getting top artists for user: {:?}", err);
             String::from("Internal DB error")
         })?;
+
+    endpoint_response_time("get_top_artists_internal_ids_for_user")
+        .observe(start.elapsed().as_nanos() as u64);
+
     Ok(Some(Json(
         top_artists
             .into_iter()
