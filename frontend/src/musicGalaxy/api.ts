@@ -1,37 +1,6 @@
-import { UnreachableException } from 'ameo-utils';
-
 import { API_BASE_URL } from 'src/conf';
 import { getSentry } from 'src/sentry';
-import { delay } from 'src/util2';
-
-async function retryRequest(req: () => Promise<Response>, retries = 18, delayMs = 300) {
-  for (let i = 0; i < retries; i++) {
-    try {
-      const res = await req();
-      if (res.ok || res.status === 404) {
-        return res;
-      }
-
-      console.error(`Request failed: ${res.status} ${res.statusText}, attempt=${i + 1}`);
-      getSentry()?.captureException(
-        new Error(`Request failed: ${res.status} ${res.statusText}, attempt=${i + 1}, ${res.url}`)
-      );
-      if (i === retries - 1) {
-        throw new Error('Failed to fetch after multiple attempts; status code=' + res.status);
-      }
-    } catch (e) {
-      console.error('Bad response when making API request: ', e);
-      if (i === retries - 1) {
-        getSentry()?.captureException(e);
-        throw e;
-      }
-    }
-
-    await delay(delayMs * i);
-  }
-
-  throw new UnreachableException();
-}
+import { delay, retryRequest } from 'src/util2';
 
 export const getArtistDataByInternalIDs = (internalIDs: number[]): Promise<(string | null)[]> =>
   retryRequest(() =>

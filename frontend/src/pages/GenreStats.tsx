@@ -13,6 +13,7 @@ import ArtistCard from 'src/Cards/ArtistCard';
 import { actionCreators } from 'src/store';
 import './GenreStats.scss';
 import { colors } from 'src/style';
+import { makeRetryable } from 'src/util2';
 
 interface GenreStats {
   artists_by_id: { [artistId: string]: Artist };
@@ -26,8 +27,9 @@ interface GenreStats {
 //   return <ANewTab to={to} text={genre} style={{ color: 'white', fontSize: 11 }} />;
 // };
 
-const fetchGenreStats = async (username: string, genre: string) =>
-  getJsonEndpoint<GenreStats>(getUrl(`/stats/${username}/genre/${genre}`));
+const fetchGenreStats = makeRetryable(async (username: string, genre: string) =>
+  getJsonEndpoint<GenreStats>(getUrl(`/stats/${username}/genre/${genre}`))
+);
 
 interface GenreStatsProps {
   username: string;

@@ -346,6 +346,23 @@ pub(crate) struct Track {
      * pub uri: String, */
 }
 
+impl Track {
+    pub fn new_unknown() -> Self {
+        Track {
+            album: Album {
+                artists: Vec::new(),
+                id: String::new(),
+                images: Vec::new(),
+                name: "Unknown Album".to_owned(),
+            },
+            artists: Vec::new(),
+            id: String::new(),
+            name: "Unknown Track".to_owned(),
+            preview_url: None,
+        }
+    }
+}
+
 #[derive(Clone, Deserialize, Debug)]
 pub(crate) struct TopArtistsResponse {
     pub items: Vec<Artist>,
@@ -458,7 +475,7 @@ impl<T: for<'de> Deserialize<'de> + std::fmt::Debug + Clone> std::ops::Try for S
 
 #[derive(Deserialize, Clone, Debug)]
 pub(crate) struct SpotifyBatchTracksResponse {
-    pub tracks: Vec<Track>,
+    pub tracks: Vec<Option<Track>>,
 }
 
 #[derive(Deserialize, Clone, Debug)]

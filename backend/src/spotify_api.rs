@@ -22,11 +22,11 @@ use crate::{
         spotify_api_requests_success_total, spotify_api_requests_total, spotify_api_response_time,
     },
     models::{
-        AccessTokenResponse, Artist, ArtistGenrePair, ArtistSearchResult, CreatePlaylistRequest,
-        GetRelatedArtistsResponse, NewArtistHistoryEntry, NewTrackHistoryEntry, Playlist,
-        SpotifyBatchArtistsResponse, SpotifyBatchTracksResponse, SpotifyResponse, StatsSnapshot,
-        TopArtistsResponse, TopTracksResponse, Track, TrackArtistPair, UpdatePlaylistResponse,
-        User, UserProfile,
+        AccessTokenResponse, Album, Artist, ArtistGenrePair, ArtistSearchResult,
+        CreatePlaylistRequest, GetRelatedArtistsResponse, NewArtistHistoryEntry,
+        NewTrackHistoryEntry, Playlist, SpotifyBatchArtistsResponse, SpotifyBatchTracksResponse,
+        SpotifyResponse, StatsSnapshot, TopArtistsResponse, TopTracksResponse, Track,
+        TrackArtistPair, UpdatePlaylistResponse, User, UserProfile,
     },
     DbConn,
 };
@@ -804,7 +804,13 @@ pub(crate) async fn fetch_tracks(
         "fetch_tracks",
         spotify_access_token,
         spotify_ids,
-        |res: SpotifyBatchTracksResponse| Ok(res.tracks),
+        |res: SpotifyBatchTracksResponse| {
+            Ok(res
+                .tracks
+                .into_iter()
+                .map(|o| o.unwrap_or_else(Track::new_unknown))
+                .collect())
+        },
     )
     .await?;
 

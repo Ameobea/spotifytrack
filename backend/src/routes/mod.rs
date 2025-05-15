@@ -1,4 +1,4 @@
-use std::{cmp::Reverse, sync::Arc, time::Instant};
+use std::{cmp::Reverse, convert::Infallible, sync::Arc, time::Instant};
 
 use chrono::{NaiveDateTime, Utc};
 use diesel::{self, prelude::*};
@@ -8,6 +8,7 @@ use redis::Commands;
 use rocket::{
     data::ToByteUnit,
     http::{RawStr, Status},
+    request::Outcome,
     response::{status, Redirect},
     serde::json::Json,
     State,
@@ -1274,11 +1275,29 @@ pub(crate) async fn crawl_related_artists(
     ))
 }
 
+pub(crate) struct UserAgent(String);
+
+#[async_trait]
+impl<'a, 'r> rocket::request::FromRequest<'r> for UserAgent {
+    type Error = Infallible;
+
+    async fn from_request(
+        req: &'r rocket::request::Request<'_>,
+    ) -> rocket::request::Outcome<Self, Self::Error> {
+        let token = req.headers().get_one("user-agent");
+        match token {
+            Some(token) => Outcome::Success(UserAgent(token.to_string())),
+            None => Outcome::Success(UserAgent(String::new())),
+        }
+    }
+}
+
 #[get("/search_artist?<q>")]
 pub(crate) async fn search_artist(
     conn: DbConn,
     token_data: &State<Mutex<SpotifyTokenData>>,
     q: String,
+    user_agent: UserAgent,
 ) -> Result<Json<Vec<ArtistSearchResult>>, String> {
     let start = Instant::now();
     let spotify_access_token = {
@@ -1300,6 +1319,14 @@ pub(crate) async fn search_artist(
     if let Some(cached_item) = cached_item {
         info!("Found hit in cache for artist search query={}", q);
         return Ok(Json(cached_item));
+    }
+
+    if user_agent.0.to_ascii_lowercase().starts_with("python") {
+        warn!(
+            "Returning empty response for artist search query from Python user agent: ({}): {q}",
+            user_agent.0
+        );
+        return Ok(Json(Vec::new()));
     }
 
     // Hit the Spotify API and store in the cache

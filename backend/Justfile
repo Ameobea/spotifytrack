@@ -21,6 +21,9 @@ docker-start:
     -e ADMIN_API_TOKEN="$ADMIN_API_TOKEN" \
     ${DOCKER_IMAGE}:latest
 
+code:
+  RUST_LOG=info ROCKET_LOG_LEVEL=normal RUST_BACKTRACE=1 RUSTFLAGS="--cfg tokio_unstable --cfg foundations_unstable" code .
+
 run:
   RUST_LOG=info ROCKET_LOG_LEVEL=normal RUST_BACKTRACE=1 RUSTFLAGS="--cfg tokio_unstable --cfg foundations_unstable" cargo run
 
