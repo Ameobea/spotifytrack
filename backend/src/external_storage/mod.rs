@@ -90,14 +90,8 @@ async fn build_object_store() -> Result<Arc<dyn ObjectStore>, object_store::Erro
 
 fn build_filenames(user_spotify_id: &str) -> (String, String) {
     (
-        format!(
-            "{}--SPOTIFYTRACK_INTERNAL_SEPARATOR--artists.parquet",
-            user_spotify_id
-        ),
-        format!(
-            "{}--SPOTIFYTRACK_INTERNAL_SEPARATOR--tracks.parquet",
-            user_spotify_id
-        ),
+        format!("{user_spotify_id}--SPOTIFYTRACK_INTERNAL_SEPARATOR--artists.parquet"),
+        format!("{user_spotify_id}--SPOTIFYTRACK_INTERNAL_SEPARATOR--tracks.parquet"),
     )
 }
 
@@ -128,21 +122,19 @@ async fn set_data_retrieved_flag_for_user(
                 Ok(_) => {
                     info!(
                         "Successfully updated users table to indicate that retrieval is complete \
-                         for user {}",
-                        user_spotify_id
+                         for user {user_spotify_id}"
                     );
                     return;
                 },
-                Err(e) => {
-                    error!("Error updating users table: {}", e);
+                Err(err) => {
+                    error!("Error updating users table: {err}");
                     std::thread::sleep(std::time::Duration::from_secs(1));
                 },
             }
         }
         error!(
-            "Failed to update users table to indicate that retrieval is complete for user {} \
-             after many retries; it's genuinely over.",
-            user_spotify_id
+            "Failed to update users table to indicate that retrieval is complete for user \
+             {user_spotify_id} after many retries; it's genuinely over."
         );
     })
     .await;

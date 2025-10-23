@@ -94,10 +94,7 @@ async fn store_external_user_data_inner(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
     let (artists_filename, tracks_filename) = build_filenames(&user_spotify_id);
 
-    info!(
-        "Fetching all local artist data for user {}...",
-        user_spotify_id
-    );
+    info!("Fetching all local artist data for user {user_spotify_id}...");
     let user_spotify_id_clone = user_spotify_id.clone();
     let mut artist_stats_for_user: Vec<UserHistoryEntry> = conn
         .run(move |conn| {
@@ -128,9 +125,8 @@ async fn store_external_user_data_inner(
     let extra_artist_entry_count = extra_artist_entries.len();
     artist_stats_for_user.extend(extra_artist_entries.into_iter().map(Into::into));
     info!(
-        "Successfully fetched all local artist data for user {}. Starting upload to external \
-         storage...",
-        user_spotify_id
+        "Successfully fetched all local artist data for user {user_spotify_id}. Starting upload \
+         to external storage..."
     );
 
     let mut artists_data_buf = Vec::new();
@@ -172,7 +168,7 @@ async fn store_external_user_data_inner(
                 }
             },
             Ok(Err(err)) => {
-                error!("Error uploading artist data to external storage: {}", err);
+                error!("Error uploading artist data to external storage: {err}");
                 if upload_attempts >= 8 {
                     return Err(err.into());
                 }
@@ -185,10 +181,7 @@ async fn store_external_user_data_inner(
          extra artist data for user {user_spotify_id}",
     );
 
-    info!(
-        "Fetching all local track data for user {}...",
-        user_spotify_id
-    );
+    info!("Fetching all local track data for user {user_spotify_id}...");
     let user_spotify_id_clone = user_spotify_id.clone();
     let mut track_stats_for_user: Vec<UserHistoryEntry> = conn
         .run(move |conn| {
@@ -204,14 +197,14 @@ async fn store_external_user_data_inner(
                 {
                     Ok(rows) => return Ok(rows),
                     Err(err) => {
-                        error!("Error loading track rank snapshots: {}", err);
+                        error!("Error loading track rank snapshots: {err}");
                         last_err = Some(err);
                         std::thread::sleep(std::time::Duration::from_secs(1));
                     },
                 }
             }
             let err = last_err.unwrap();
-            error!("Error loading track rank snapshots after retries: {}", err);
+            error!("Error loading track rank snapshots after retries: {err}");
             Err(err)
         })
         .await?;
@@ -227,17 +220,17 @@ async fn store_external_user_data_inner(
     let mut tracks_writer = build_parquet_writer(&mut tracks_data_buf)
         .await
         .inspect_err(|err| {
-            error!("Error building parquet writer: {}", err);
+            error!("Error building parquet writer: {err}");
         })?;
     let tracks_record_batch = build_record_batch(track_stats_for_user);
     tracks_writer
         .write(&tracks_record_batch)
         .await
         .inspect_err(|err| {
-            error!("Error writing track data to parquet: {}", err);
+            error!("Error writing track data to parquet: {err}");
         })?;
     tracks_writer.close().await.inspect_err(|err| {
-        error!("Error closing parquet writer: {}", err);
+        error!("Error closing parquet writer: {err}");
     })?;
     info!(
         "Successfully encoded all {local_track_entry_count} local + {extra_track_entry_count} \
@@ -284,23 +277,23 @@ async fn store_external_user_data_inner(
     Ok(())
 }
 
-pub(crate) async fn store_external_user_data(conn: &DbConn, user_spotify_id: String) {
-    let lock_exists = WRITE_LOCKS.insert(user_spotify_id.clone(), ()).is_some();
-    if lock_exists {
-        warn!(
-            "Write lock already exists for user {}, skipping...",
-            user_spotify_id
-        );
-        return;
-    }
-
+async fn store_external_user_data_critical_section(
+    user_spotify_id: String,
+    conn: &DbConn,
+) -> Result<(), String> {
     // If we're super unlucky and there's currently a read operation ongoing for this user, wait
     // for it to finish first.  We'll hold the write lock while we wait.
+    let mut attempts = 0usize;
     while RETRIEVE_LOCKS.contains_key(&user_spotify_id) {
-        warn!(
-            "Waiting for read lock to be released for user {} before writing...",
-            user_spotify_id
-        );
+        if attempts > 1_000 {
+            error!("Giving up waiting for read lock to be released for user {user_spotify_id}");
+            return Err(format!(
+                "Giving up waiting for read lock to be released for user {user_spotify_id}"
+            ));
+        }
+        attempts += 1;
+
+        warn!("Waiting for read lock to be released for user {user_spotify_id} before writing...");
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     }
 
@@ -308,32 +301,39 @@ pub(crate) async fn store_external_user_data(conn: &DbConn, user_spotify_id: Str
     // data with the local data before writing it out.
     //
     // We're already holding the write lock, so no other reads or writes can happen for this user
-    info!(
-        "Starting full retrieval for user {} before writing...",
-        user_spotify_id
-    );
+    info!("Starting full retrieval for user {user_spotify_id} before writing...");
 
     let mut start = Instant::now();
-    let (existing_external_artist_entries, existing_external_track_entries) =
-        match load_external_user_data(user_spotify_id.clone()).await {
-            Ok((artists, tracks)) => (artists, tracks),
-            Err(err) => {
+    let (existing_external_artist_entries, existing_external_track_entries) = {
+        let retrieve_fut = load_external_user_data(user_spotify_id.clone());
+        match tokio::time::timeout(Duration::from_secs(300), retrieve_fut).await {
+            Err(_) => {
                 error!(
-                    "Error loading existing external data for user {}: {}",
-                    user_spotify_id, err
+                    "Timeout occurred while loading existing external data for user \
+                     {user_spotify_id}"
                 );
-                return;
+                return Err(format!(
+                    "Timeout occurred while loading existing external data for user \
+                     {user_spotify_id}"
+                ));
             },
-        };
+            Ok(Ok((artists, tracks))) => (artists, tracks),
+            Ok(Err(err)) => {
+                error!("Error loading existing external data for user {user_spotify_id}: {err}");
+                return Err(format!(
+                    "Error loading existing external data for user {user_spotify_id}: {err}"
+                ));
+            },
+        }
+    };
     info!(
-        "Finished full retrieval for user {} before writing; pulled {} external artist entries \
-         and {} external track entries",
-        user_spotify_id,
+        "Finished full retrieval for user {user_spotify_id} before writing; pulled {} external \
+         artist entries and {} external track entries",
         existing_external_artist_entries.len(),
         existing_external_track_entries.len()
     );
 
-    info!("Starting external data upload for user {}", user_spotify_id);
+    info!("Starting external data upload for user {user_spotify_id}");
     for _ in 0..10 {
         let user_spotify_id = user_spotify_id.clone();
         let res = store_external_user_data_inner(
@@ -347,30 +347,46 @@ pub(crate) async fn store_external_user_data(conn: &DbConn, user_spotify_id: Str
             Ok(()) => {
                 external_user_data_export_success_total().inc();
                 external_user_data_export_time().observe(start.elapsed().as_nanos() as u64);
-                info!("Finished external data upload for user {}", user_spotify_id);
+                info!("Finished external data upload for user {user_spotify_id}");
 
                 // Update users table to indicate that upload is complete
                 set_data_retrieved_flag_for_user(conn, user_spotify_id.clone(), false).await;
 
                 // Actually delete the local data
                 if let Err(err) = delete_local_user_data(conn, user_spotify_id.clone()).await {
-                    error!(
-                        "Error deleting local data for user {}: {}",
-                        user_spotify_id, err
-                    );
+                    error!("Error deleting local data for user {user_spotify_id}: {err}");
                 }
 
-                break;
+                return Ok(());
             },
-            Err(e) => {
+            Err(err) => {
                 external_user_data_export_failure_total().inc();
-                error!("Error storing data for user {}: {}", user_spotify_id, e);
+                error!("Error storing data for user {user_spotify_id}: {err}");
                 start = Instant::now();
             },
         }
     }
 
+    Err(format!(
+        "Failed to upload external data for user {user_spotify_id} after multiple attempts"
+    ))
+}
+
+pub(crate) async fn store_external_user_data(
+    conn: &DbConn,
+    user_spotify_id: String,
+) -> Result<(), String> {
+    let lock_exists = WRITE_LOCKS.insert(user_spotify_id.clone(), ()).is_some();
+    if lock_exists {
+        warn!("Write lock already exists for user {user_spotify_id}, skipping...");
+        return Ok(());
+    }
+
+    let res = store_external_user_data_critical_section(user_spotify_id.clone(), conn).await;
+
     WRITE_LOCKS.remove(&user_spotify_id);
+
+    res
 }
 
 async fn delete_local_user_data(conn: &DbConn, user_spotify_id: String) -> QueryResult<()> {
@@ -406,15 +422,14 @@ async fn delete_local_user_data(conn: &DbConn, user_spotify_id: String) -> Query
                 Ok(deleted_artist_entry_count) =>
                     total_deleted_artist_entry_count += deleted_artist_entry_count,
                 Err(err) => error!(
-                    "Error deleting local artist data for user {} after upload to cold storage: {}",
-                    user_spotify_id, err
+                    "Error deleting local artist data for user {user_spotify_id} after upload to \
+                     cold storage: {err}"
                 ),
             }
         }
         info!(
-            "Deleted {total_deleted_artist_entry_count} local artist data entries for user {} \
-             after upload to cold storage",
-            user_spotify_id
+            "Deleted {total_deleted_artist_entry_count} local artist data entries for user \
+             {user_spotify_id} after upload to cold storage"
         );
 
         let mut total_deleted_track_entry_count = 0usize;
@@ -439,15 +454,14 @@ async fn delete_local_user_data(conn: &DbConn, user_spotify_id: String) -> Query
                 Ok(deleted_track_entry_count) =>
                     total_deleted_track_entry_count += deleted_track_entry_count,
                 Err(err) => error!(
-                    "Error deleting local track data for user {} after upload to cold storage: {}",
-                    user_spotify_id, err
+                    "Error deleting local track data for user {user_spotify_id} after upload to \
+                     cold storage: {err}",
                 ),
             }
         }
         info!(
-            "Deleted {total_deleted_track_entry_count} local track data entries for user {} after \
-             upload to cold storage",
-            user_spotify_id
+            "Deleted {total_deleted_track_entry_count} local track data entries for user \
+             {user_spotify_id} after upload to cold storage"
         );
 
         Ok(())
@@ -459,9 +473,8 @@ async fn delete_local_user_data(conn: &DbConn, user_spotify_id: String) -> Query
         .await
         .map_err(move |_| {
             error!(
-                "Timed out after 10 minutes while deleting local data for user {} after upload to \
-                 cold storage",
-                user_spotify_id_clone
+                "Timed out after 10 minutes while deleting local data for user \
+                 {user_spotify_id_clone} after upload to cold storage"
             );
             diesel::result::Error::QueryBuilderError(
                 "Timed out after 10 minutes while deleting local data after upload to cold storage"

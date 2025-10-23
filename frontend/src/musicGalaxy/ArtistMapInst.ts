@@ -120,15 +120,16 @@ export const initArtistMapInst = async (canvas: HTMLCanvasElement): Promise<Arti
   const allArtistData = await wasmClient.getAllArtistData();
 
   const inst = new ArtistMapInst(THREE, THREE_EXTRA, canvas, allArtistData, artistColorsByID);
-  dataFetchClient.fetchArtistRelationships(0);
 
   // Set highlighted artists.
   const userSpotifyID = getUserSpotifyID();
   if (userSpotifyID) {
-    getAllTopArtistInternalIDsForUser(userSpotifyID).then((artistIDs) =>
-      inst.setHighlightedArtistIDs(artistIDs)
+    inst.highlightedArtistIDsReady = getAllTopArtistInternalIDsForUser(userSpotifyID).then(
+      (artistIDs) => inst.setHighlightedArtistIDs(artistIDs)
     );
   }
+
+  dataFetchClient.fetchArtistRelationships(0);
 
   return inst;
 };
@@ -231,6 +232,7 @@ export class ArtistMapInst {
   };
 
   private musicManager: MusicManager;
+  public highlightedArtistIDsReady: Promise<void> | null;
 
   public getLabelPosition(labelID: string | number) {
     if (typeof labelID === 'string') {
@@ -906,6 +908,10 @@ export class ArtistMapInst {
   private async handleArtistRelationships(relationshipData: ArtistRelationshipData) {
     // Empty chunk; all chunks are fetched
     if (relationshipData.res.byteLength === 4) {
+      if (this.highlightedArtistIDsReady) {
+        await this.highlightedArtistIDsReady;
+      }
+
       // Render connections between highlighted artists
       if (this.highlightedArtistIDs.size > 0) {
         const { intra, inter } = await wasmClient.getHighlightedConnectionsBackbone(

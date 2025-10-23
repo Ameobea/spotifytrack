@@ -252,15 +252,15 @@ pub(crate) async fn load_external_user_data(
         )
         .await
         {
-            Err(err) => {
-                error!("Error building parquet readers: {}", err);
+            Err(_) => {
+                error!("Timeout building parquet readers for external user data retrieval");
                 continue;
             },
             Ok(res) => break res,
         };
     }
     .inspect_err(|err| {
-        error!("Error building parquet reader: {}", err);
+        error!("Error building parquet reader: {err}");
     })?;
 
     let mut artist_entries: Vec<ArtistHistoryEntry> = Vec::new();
@@ -316,16 +316,13 @@ async fn build_record_batch_reader(
     let record_batch_reader_builder = ParquetRecordBatchStreamBuilder::new(reader)
         .await
         .inspect_err(|err| {
-            error!(
-                "Error building parquet record batch stream builder: {}",
-                err
-            );
+            error!("Error building parquet record batch stream builder: {err}");
         })?;
     let record_batch_reader = record_batch_reader_builder
         .with_batch_size(BATCH_SIZE)
         .build()
         .inspect_err(|err| {
-            error!("Error building parquet record batch stream: {}", err);
+            error!("Error building parquet record batch stream: {err}");
         })?;
     Ok(record_batch_reader)
 }
@@ -343,22 +340,19 @@ async fn retrieve_external_user_data_inner(
         )
         .await
         {
-            Err(err) => {
-                error!("Error building parquet readers: {}", err);
+            Err(_) => {
+                error!("Timeout building parquet readers for external user data retrieval");
                 continue;
             },
             Ok(res) => break res,
         };
     }
     .inspect_err(|err| {
-        error!("Error building parquet reader: {}", err);
+        error!("Error building parquet reader: {err}");
     })?;
     info!("Successfully built parquet readers");
     if let Some(artists_reader) = artists_reader_opt {
-        info!(
-            "Starting download of artist data for user {}...",
-            user_spotify_id
-        );
+        info!("Starting download of artist data for user {user_spotify_id}...");
 
         let artists_record_batch_reader = build_record_batch_reader(artists_reader).await?;
 
@@ -369,53 +363,35 @@ async fn retrieve_external_user_data_inner(
         )
         .await
         .inspect_err(|err| {
-            error!(
-                "Error consuming and inserting artist record batches: {}",
-                err
-            );
+            error!("Error consuming and inserting artist record batches: {err}");
         })?;
         info!(
-            "Successfully downloaded artist data for user {} and inserted into db",
-            user_spotify_id
+            "Successfully downloaded artist data for user {user_spotify_id} and inserted into db"
         );
     } else {
-        warn!(
-            "No artist data found for user {}; skipping artist data download",
-            user_spotify_id
-        );
+        warn!("No artist data found for user {user_spotify_id}; skipping artist data download");
     }
 
     if let Some(tracks_reader) = tracks_reader_opt {
-        info!(
-            "Starting download of track data for user {}...",
-            user_spotify_id
-        );
+        info!("Starting download of track data for user {user_spotify_id}...");
 
         let tracks_record_batch_reader = build_record_batch_reader(tracks_reader).await?;
 
         consume_and_insert_track_record_batches(tracks_record_batch_reader, conn, &user_spotify_id)
             .await
             .inspect_err(|err| {
-                error!(
-                    "Error consuming and inserting track record batches: {}",
-                    err
-                );
+                error!("Error consuming and inserting track record batches: {err}");
             })?;
         info!(
-            "Successfully downloaded + loaded track data for user {} into local DB",
-            user_spotify_id
+            "Successfully downloaded + loaded track data for user {user_spotify_id} into local DB"
         );
     } else {
-        warn!(
-            "No track data found for user {}; skipping track data download",
-            user_spotify_id
-        );
+        warn!("No track data found for user {user_spotify_id}; skipping track data download");
     }
 
     info!(
-        "Successfully downloaded all data for user {} from external storage and loaded into local \
-         DB",
-        user_spotify_id
+        "Successfully downloaded all data for user {user_spotify_id} from external storage and \
+         loaded into local DB"
     );
 
     Ok(())
@@ -445,8 +421,8 @@ pub(crate) async fn retrieve_external_user_data(
     if !ignore_write_lock {
         while WRITE_LOCKS.contains_key(&user_spotify_id) {
             warn!(
-                "Waiting for write lock to be released for user {} before reading...",
-                user_spotify_id
+                "Waiting for write lock to be released for user {user_spotify_id} before \
+                 reading..."
             );
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         }

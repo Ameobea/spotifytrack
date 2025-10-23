@@ -2024,7 +2024,11 @@ pub(crate) async fn transfer_user_data_to_external_storage(
         );
     }
 
-    crate::external_storage::upload::store_external_user_data(&conn, user.spotify_id).await;
+    if let Err(err) =
+        crate::external_storage::upload::store_external_user_data(&conn, user.spotify_id).await
+    {
+        error!("Error storing external user data: {err}");
+    }
     Ok(status::Custom(Status::Ok, String::new()))
 }
 
@@ -2105,17 +2109,14 @@ pub(crate) async fn bulk_transfer_user_data_to_external_storage(
         })
         .await
         .map_err(|err| {
-            error!("Error getting users from DB for bulk transfer: {:?}", err);
+            error!("Error getting users from DB for bulk transfer: {err:?}");
             String::from("Internal DB error")
         })?;
     let usernames = users
         .iter()
         .map(|user| user.spotify_id.clone())
         .collect::<Vec<_>>();
-    info!(
-        "Bulk transferring user data for {user_count} users: {:?}",
-        usernames
-    );
+    info!("Bulk transferring user data for {user_count} users: {usernames:?}");
 
     let concurrency = concurrency.unwrap_or(1).clamp(1, 5);
     let conns = Arc::new(Mutex::new(vec![conn0, conn1, conn2, conn3, conn4]));
@@ -2139,12 +2140,18 @@ pub(crate) async fn bulk_transfer_user_data_to_external_storage(
                     },
                 };
 
-                crate::external_storage::upload::store_external_user_data(
+                match crate::external_storage::upload::store_external_user_data(
                     &conn,
                     user.spotify_id.clone(),
                 )
-                .await;
-                info!("Done transferring user data for {}", user.spotify_id);
+                .await
+                {
+                    Ok(()) => info!("Successfully transferred user data for {}", user.spotify_id),
+                    Err(err) => error!(
+                        "Error transferring user data for {}: {err}",
+                        user.spotify_id
+                    ),
+                }
 
                 conns.lock().await.push(conn);
             }
