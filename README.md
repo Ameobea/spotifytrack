@@ -1,4 +1,5 @@
-# Spotifytrackoij
+# Spotifytrack
+# Spotifytrack
 
 **Spotifytrack** is a web application a record of your listening habits on Spotify, allowing you to see how your preferences change over time and remember when you discovered your favorite tracks and artists.
 
