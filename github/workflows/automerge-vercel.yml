@@ -1,0 +1,47 @@
+name: Auto PR & Merge vercel-config -> main
+
+on:
+  push:
+    branches:
+      - vercel-config
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  # This runs fully automated: it will create the PR and merge it.
+  AUTO_MERGE: "true"
+
+jobs:
+  create-and-merge-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create or update PR
+        id: create_pr
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.REPO_AUTOMATION_TOKEN || secrets.GITHUB_TOKEN }}
+          commit-message: "Automated: prepare vercel-config → main PR"
+          branch: vercel-config
+          base: main
+          title: "Vercel: configurable publicPath; Vercel build config and package.json build script"
+          body: |
+            Replace hardcoded CDN publicPath with configurable REACT_APP_SITE_URL (fallback '/').
+            Make build script Vercel-friendly (remove hardcoded env vars; add vercel-build alias).
+            Add vercel.json so Vercel runs the frontend build and publishes frontend/dist.
+
+            Required Vercel environment variables:
+            - REACT_APP_API_BASE_URL
+            - REACT_APP_SITE_URL (optional; leave blank to use '/')
+
+      - name: Merge PR (if present and AUTO_MERGE=true)
+        if: ${{ env.AUTO_MERGE == 'true' }}
+        uses: peter-evans/merge-pull-request@v4
+        with:
+          token: ${{ secrets.REPO_AUTOMATION_TOKEN || secrets.GITHUB_TOKEN }}
+          pull-request-number: ${{ steps.create_pr.outputs.pull-request-number }}
+          merge-method: merge
