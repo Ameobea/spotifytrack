@@ -29,13 +29,13 @@ tokio = { version = "1.43.1", features = ["rt", "rt-multi-thread", "macros", "pa
 
 lazy_static = "1.4.0"
 
-foundations = { version = "3.2", default-features = false, features = ["metrics", "jemalloc", "telemetry-server", "tokio-runtime-metrics"] }
+foundations = { version = "3.4", default-features = false, features = ["metrics", "jemalloc", "telemetry-server", "tokio-runtime-metrics"] }
 
 rand = "0.8"
 
 r2d2_redis = "0.14"
 
-redis = { version = "0.20" }
+redis = "0.20"
 
 reqwest = { version = "0.12", features = ["json", "gzip", "brotli", "deflate", "zstd"] }
 
@@ -46,9 +46,9 @@ serde_json = "1.0"
 serde = "1.0"
 serde_derive = "1.0"
 
-parquet = { version = "52.0", default-features = false, features = ["arrow", "async", "flate2", "object_store"] }
-arrow-schema = { version = "52.0", default-features = false, features = [] }
-arrow-array = { version = "52.0", default-features = false, features = [] }
-object_store = { version = "0.10", features = ["aws"] }
+parquet = { version = "57.3", default-features = false, features = ["arrow", "async", "flate2", "flate2-rust_backened", "object_store"] }
+arrow-schema = { version = "57.3", default-features = false, features = [] }
+arrow-array = { version = "57.3", default-features = false, features = [] }
+object_store = { version = "0.12", features = ["aws"] }
 
 dashmap = "6.0"
