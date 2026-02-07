@@ -12,7 +12,7 @@ use crate::schema::{
 };
 
 #[derive(Insertable)]
-#[table_name = "users"]
+#[diesel(table_name = users)]
 pub(crate) struct NewUser {
     pub creation_time: NaiveDateTime,
     pub last_update_time: NaiveDateTime,
@@ -37,8 +37,8 @@ pub(crate) struct User {
 }
 
 #[derive(Serialize, Insertable, Associations)]
-#[belongs_to(User)]
-#[table_name = "track_rank_snapshots"]
+#[diesel(belongs_to(User))]
+#[diesel(table_name = track_rank_snapshots)]
 pub(crate) struct NewTrackHistoryEntry {
     pub user_id: i64,
     pub mapped_spotify_id: i32,
@@ -48,8 +48,8 @@ pub(crate) struct NewTrackHistoryEntry {
 }
 
 #[derive(Serialize, Insertable, Associations)]
-#[belongs_to(User)]
-#[table_name = "artist_rank_snapshots"]
+#[diesel(belongs_to(User))]
+#[diesel(table_name = artist_rank_snapshots)]
 pub(crate) struct NewArtistHistoryEntry {
     pub user_id: i64,
     pub mapped_spotify_id: i32,
@@ -69,7 +69,7 @@ pub(crate) struct UserHistoryEntry {
 }
 
 #[derive(Clone, Insertable)]
-#[table_name = "track_rank_snapshots"]
+#[diesel(table_name = track_rank_snapshots)]
 pub(crate) struct TrackHistoryEntry {
     pub id: i64,
     pub user_id: i64,
@@ -80,7 +80,7 @@ pub(crate) struct TrackHistoryEntry {
 }
 
 #[derive(Clone, Insertable)]
-#[table_name = "artist_rank_snapshots"]
+#[diesel(table_name = artist_rank_snapshots)]
 pub(crate) struct ArtistHistoryEntry {
     pub id: i64,
     pub user_id: i64,
@@ -116,28 +116,27 @@ impl From<TrackHistoryEntry> for UserHistoryEntry {
     }
 }
 
-#[derive(Serialize, Associations, Debug, Queryable)]
-#[table_name = "spotify_items"]
+#[derive(Serialize, Debug, Queryable)]
 pub(crate) struct SpotifyIdMapping {
     pub id: i32,
     pub spotify_id: String,
 }
 
 #[derive(Clone, Serialize, Insertable)]
-#[table_name = "spotify_items"]
+#[diesel(table_name = spotify_items)]
 pub struct NewSpotifyIdMapping {
     pub spotify_id: String,
 }
 
 #[derive(Insertable)]
-#[table_name = "tracks_artists"]
+#[diesel(table_name = tracks_artists)]
 pub(crate) struct TrackArtistPair {
     pub track_id: i32,
     pub artist_id: i32,
 }
 
 #[derive(Insertable)]
-#[table_name = "artists_genres"]
+#[diesel(table_name = artists_genres)]
 pub(crate) struct ArtistGenrePair {
     pub artist_id: i32,
     pub genre: String,
@@ -311,13 +310,13 @@ pub(crate) struct TopTracksResponse {
 
 #[derive(Queryable, QueryableByName)]
 pub(crate) struct StatsHistoryQueryResItem {
-    #[sql_type = "::diesel::sql_types::Text"]
+    #[diesel(sql_type = diesel::sql_types::Text)]
     pub spotify_id: String,
-    #[sql_type = "::diesel::sql_types::Datetime"]
+    #[diesel(sql_type = diesel::sql_types::Datetime)]
     pub update_time: NaiveDateTime,
-    #[sql_type = "::diesel::sql_types::Unsigned<::diesel::sql_types::TinyInt>"]
+    #[diesel(sql_type = diesel::sql_types::Unsigned<diesel::sql_types::TinyInt>)]
     pub ranking: u8,
-    #[sql_type = "::diesel::sql_types::Unsigned<::diesel::sql_types::TinyInt>"]
+    #[diesel(sql_type = diesel::sql_types::Unsigned<diesel::sql_types::TinyInt>)]
     pub timeframe: u8,
 }
 
@@ -619,7 +618,7 @@ pub(crate) struct RelatedArtistsGraph {
 }
 
 #[derive(Clone, Insertable)]
-#[table_name = "related_artists"]
+#[diesel(table_name = related_artists)]
 pub(crate) struct NewRelatedArtistEntry {
     pub artist_spotify_id: i32,
     pub related_artists_json: String,

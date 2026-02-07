@@ -216,7 +216,7 @@ async fn get_entity_stats_history<
     T: HasSpotifyId + Debug,
     Q: RunQueryDsl<MysqlConnection>
         + QueryFragment<Mysql>
-        + LoadQuery<MysqlConnection, StatsHistoryQueryResItem>
+        + for<'a> LoadQuery<'a, MysqlConnection, StatsHistoryQueryResItem>
         + QueryId
         + Send
         + 'static,
@@ -800,7 +800,7 @@ pub(crate) async fn populate_artists_genres_table(
         .collect();
 
     conn.run(move |conn| {
-        conn.transaction::<_, diesel::result::Error, _>(|| {
+        conn.transaction::<(), diesel::result::Error, _>(|conn| {
             // Clear all existing artist/genre mapping entries
             diesel::delete(artists_genres).execute(conn)?;
 
@@ -987,7 +987,7 @@ pub(crate) async fn insert_related_artists(
         .collect();
 
     conn.run(move |conn| {
-        conn.transaction(|| -> QueryResult<()> {
+        conn.transaction(|conn| -> QueryResult<()> {
             diesel::delete(
                 related_artists::table
                     .filter(related_artists::dsl::artist_spotify_id.eq_any(all_artist_ids)),

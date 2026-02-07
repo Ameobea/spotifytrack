@@ -16,7 +16,7 @@ base64 = "0.22"
 
 chrono = { version = "0.4", features = ["serde"] }
 
-diesel = { version = "1.4", features = ["chrono", "mysql"] }
+diesel = { version = "2.2", features = ["chrono", "mysql"] }
 
 dotenv = "0.15.0"
 
@@ -39,8 +39,8 @@ redis = { version = "0.20" }
 
 reqwest = { version = "0.12", features = ["json", "gzip", "brotli", "deflate", "zstd"] }
 
-rocket = { git = "https://github.com/SergioBenitez/Rocket.git", rev = "786db9b832b7edd91f143b24835677c69121a9bb", features = ["json"] }
-rocket_sync_db_pools = { git = "https://github.com/SergioBenitez/Rocket.git", rev = "786db9b832b7edd91f143b24835677c69121a9bb", features = ["diesel_mysql_pool"]}
+rocket = { version = "0.5.1", features = ["json"] }
+rocket_sync_db_pools = { version = "0.1.0", features = ["diesel_mysql_pool"] }
 
 serde_json = "1.0"
 serde = "1.0"
