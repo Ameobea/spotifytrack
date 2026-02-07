@@ -50,6 +50,48 @@ lazy_static! {
     static ref WRITE_LOCKS: DashMap<String, ()> = DashMap::new();
 }
 
+/// Guard that removes the write lock on drop, ensuring cleanup even on panic.
+pub(crate) struct WriteLockGuard {
+    user_spotify_id: String,
+}
+
+impl WriteLockGuard {
+    /// Attempts to acquire the write lock. Returns None if already held.
+    pub fn try_acquire(user_spotify_id: String) -> Option<Self> {
+        let lock_exists = WRITE_LOCKS.insert(user_spotify_id.clone(), ()).is_some();
+        if lock_exists {
+            None
+        } else {
+            Some(Self { user_spotify_id })
+        }
+    }
+}
+
+impl Drop for WriteLockGuard {
+    fn drop(&mut self) {
+        WRITE_LOCKS.remove(&self.user_spotify_id);
+    }
+}
+
+/// Guard that cleans up the retrieve lock on drop, ensuring cleanup even on panic.
+pub(crate) struct RetrieveLockGuard {
+    user_spotify_id: String,
+    tx: watch::Sender<()>,
+}
+
+impl RetrieveLockGuard {
+    pub fn new(user_spotify_id: String, tx: watch::Sender<()>) -> Self {
+        Self { user_spotify_id, tx }
+    }
+}
+
+impl Drop for RetrieveLockGuard {
+    fn drop(&mut self) {
+        let _ = self.tx.send(());
+        RETRIEVE_LOCKS.remove(&self.user_spotify_id);
+    }
+}
+
 struct CachedObjectStore {
     pub store: Arc<dyn ObjectStore>,
     pub cached_at: Instant,

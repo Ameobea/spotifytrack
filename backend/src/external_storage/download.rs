@@ -25,8 +25,8 @@ use crate::{
 };
 
 use super::{
-    build_filenames, build_object_store, set_data_retrieved_flag_for_user, BATCH_SIZE,
-    RETRIEVE_LOCKS, WRITE_LOCKS,
+    build_filenames, build_object_store, set_data_retrieved_flag_for_user, RetrieveLockGuard,
+    BATCH_SIZE, RETRIEVE_LOCKS, WRITE_LOCKS,
 };
 
 /// Returns `(artists_reader, tracks_reader)`
@@ -245,19 +245,29 @@ pub(crate) async fn load_external_user_data(
     Box<dyn std::error::Error + Send + Sync + 'static>,
 > {
     info!("Building parquet readers...");
-    let (artists_reader_opt, tracks_reader_opt) = loop {
-        match tokio::time::timeout(
-            Duration::from_secs(10),
-            build_parquet_readers(&user_spotify_id),
-        )
-        .await
-        {
-            Err(_) => {
-                error!("Timeout building parquet readers for external user data retrieval");
-                continue;
-            },
-            Ok(res) => break res,
-        };
+    let (artists_reader_opt, tracks_reader_opt) = {
+        let mut attempts = 0;
+        loop {
+            match tokio::time::timeout(
+                Duration::from_secs(10),
+                build_parquet_readers(&user_spotify_id),
+            )
+            .await
+            {
+                Err(_) => {
+                    attempts += 1;
+                    if attempts >= 30 {
+                        return Err("Timeout building parquet readers after 30 attempts".into());
+                    }
+                    error!(
+                        "Timeout building parquet readers for load_external_user_data \
+                         (attempt {attempts}/30)"
+                    );
+                    continue;
+                },
+                Ok(res) => break res,
+            }
+        }
     }
     .inspect_err(|err| {
         error!("Error building parquet reader: {err}");
@@ -333,19 +343,29 @@ async fn retrieve_external_user_data_inner(
     user_spotify_id: String,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
     info!("Building parquet readers...");
-    let (artists_reader_opt, tracks_reader_opt) = loop {
-        match tokio::time::timeout(
-            Duration::from_secs(10),
-            build_parquet_readers(&user_spotify_id),
-        )
-        .await
-        {
-            Err(_) => {
-                error!("Timeout building parquet readers for external user data retrieval");
-                continue;
-            },
-            Ok(res) => break res,
-        };
+    let (artists_reader_opt, tracks_reader_opt) = {
+        let mut attempts = 0;
+        loop {
+            match tokio::time::timeout(
+                Duration::from_secs(10),
+                build_parquet_readers(&user_spotify_id),
+            )
+            .await
+            {
+                Err(_) => {
+                    attempts += 1;
+                    if attempts >= 30 {
+                        return Err("Timeout building parquet readers after 30 attempts".into());
+                    }
+                    error!(
+                        "Timeout building parquet readers for retrieve_external_user_data_inner \
+                         (attempt {attempts}/30)"
+                    );
+                    continue;
+                },
+                Ok(res) => break res,
+            }
+        }
     }
     .inspect_err(|err| {
         error!("Error building parquet reader: {err}");
@@ -404,12 +424,13 @@ pub(crate) async fn retrieve_external_user_data(
     user_spotify_id: String,
     ignore_write_lock: bool,
 ) {
-    let mut tx_opt = None;
+    let mut guard_opt = None;
     let mut rx = RETRIEVE_LOCKS
         .entry(user_spotify_id.clone())
         .or_insert_with(|| {
             let (tx, rx) = watch::channel(());
-            tx_opt = Some(tx);
+            // Guard ensures cleanup (send + remove) even on panic
+            guard_opt = Some(RetrieveLockGuard::new(user_spotify_id.clone(), tx));
             rx
         })
         .value()
@@ -419,17 +440,29 @@ pub(crate) async fn retrieve_external_user_data(
     // for it to finish first.  We'll hold the read lock while we wait so no other reads or writes
     // can start while we're sleeping.
     if !ignore_write_lock {
+        let mut wait_attempts = 0;
         while WRITE_LOCKS.contains_key(&user_spotify_id) {
+            wait_attempts += 1;
+            if wait_attempts > 1_000 {
+                error!(
+                    "Giving up waiting for write lock to be released for user {user_spotify_id} \
+                     after 1000 attempts; proceeding with retrieval anyway"
+                );
+                break;
+            }
             warn!(
                 "Waiting for write lock to be released for user {user_spotify_id} before \
-                 reading..."
+                 reading... (attempt {wait_attempts}/1000)"
             );
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         }
     }
 
-    if let Some(tx) = tx_opt {
-        // double check that the user actually needs data retrieval.  Sometimes multiple retrieval
+    if guard_opt.is_some() {
+        // We hold the lock - do the retrieval work.
+        // Guard will clean up on drop (even on panic).
+
+        // Double check that the user actually needs data retrieval.  Sometimes multiple retrieval
         // requests get kicked off at the same time, and we only want to do the retrieval once.
         let user = match get_user_by_spotify_id(conn, user_spotify_id.clone()).await {
             Ok(Some(user)) => user,
@@ -438,8 +471,6 @@ pub(crate) async fn retrieve_external_user_data(
                     "User with spotify id {user_spotify_id} not found in database while checking \
                      if data retrieval is needed",
                 );
-                let _ = tx.send(());
-                RETRIEVE_LOCKS.remove(&user_spotify_id);
                 external_user_data_retrieval_failure_total().inc();
                 return;
             },
@@ -448,8 +479,6 @@ pub(crate) async fn retrieve_external_user_data(
                     "Error getting user by spotify id {user_spotify_id} while checking if data \
                      retrieval is needed: {err}",
                 );
-                let _ = tx.send(());
-                RETRIEVE_LOCKS.remove(&user_spotify_id);
                 external_user_data_retrieval_failure_total().inc();
                 return;
             },
@@ -459,8 +488,6 @@ pub(crate) async fn retrieve_external_user_data(
             info!(
                 "User {user_spotify_id} already has data in local storage; skipping retrieval...",
             );
-            let _ = tx.send(());
-            RETRIEVE_LOCKS.remove(&user_spotify_id);
             return;
         }
 
@@ -484,9 +511,6 @@ pub(crate) async fn retrieve_external_user_data(
                 },
             }
         }
-        let _ = tx.send(());
-
-        RETRIEVE_LOCKS.remove(&user_spotify_id);
 
         info!("Finished retrieving data from cold storage for user {user_spotify_id}",);
 

@@ -27,8 +27,8 @@ use crate::{
 };
 
 use super::{
-    build_filenames, set_data_retrieved_flag_for_user, EXTERNAL_STORAGE_ARROW_SCHEMA,
-    RETRIEVE_LOCKS, WRITE_LOCKS,
+    build_filenames, set_data_retrieved_flag_for_user, WriteLockGuard,
+    EXTERNAL_STORAGE_ARROW_SCHEMA, RETRIEVE_LOCKS,
 };
 
 async fn build_parquet_writer<'a>(
@@ -376,17 +376,13 @@ pub(crate) async fn store_external_user_data(
     conn: &DbConn,
     user_spotify_id: String,
 ) -> Result<(), String> {
-    let lock_exists = WRITE_LOCKS.insert(user_spotify_id.clone(), ()).is_some();
-    if lock_exists {
+    let Some(_guard) = WriteLockGuard::try_acquire(user_spotify_id.clone()) else {
         warn!("Write lock already exists for user {user_spotify_id}, skipping...");
         return Ok(());
-    }
+    };
 
-    let res = store_external_user_data_critical_section(user_spotify_id.clone(), conn).await;
-
-    WRITE_LOCKS.remove(&user_spotify_id);
-
-    res
+    // Guard ensures lock is released even if critical_section panics
+    store_external_user_data_critical_section(user_spotify_id, conn).await
 }
 
 async fn delete_local_user_data(conn: &DbConn, user_spotify_id: String) -> QueryResult<()> {
