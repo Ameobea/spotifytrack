@@ -1234,16 +1234,19 @@ pub(crate) async fn crawl_related_artists(
 
     let mut all_related_artists: Vec<String> = Vec::new();
 
-    let related_artists_jsons: Vec<String> = block_in_place(|| {
-        redis_conn
-            .hget("related_artists", artist_ids)
+    let related_artists_jsons: Vec<Option<String>> = block_in_place(|| {
+        let mut cmd = redis::cmd("HMGET");
+        let cmd = artist_ids
+            .iter()
+            .fold(cmd.arg("related_artists"), |acc, key| acc.arg(key));
+        cmd.query::<Vec<Option<String>>>(&mut *redis_conn)
             .map_err(|err| {
                 error!("Error getting related artist from Redis: {:?}", err);
                 String::from("Redis error")
             })
     })?;
 
-    for related_artists_json in related_artists_jsons {
+    for related_artists_json in related_artists_jsons.into_iter().flatten() {
         let Ok(related_artist_ids) = serde_json::from_str::<Vec<String>>(&related_artists_json)
         else {
             error!(

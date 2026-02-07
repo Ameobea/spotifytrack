@@ -116,7 +116,7 @@ pub(crate) async fn generate_shared_playlist_track_spotify_ids(
 
     playlist_tracks.sort_unstable_by(|track1, track2| track1.id.cmp(&track2.id));
     playlist_tracks.dedup_by(|track1, track2| track1.id == track2.id);
-    playlist_tracks.shuffle(&mut rand::thread_rng());
+    playlist_tracks.shuffle(&mut rand::rng());
 
     Ok(playlist_tracks
         .into_iter()

@@ -1,6 +1,7 @@
 //! Functions for interacting with Redis which caches data from the Spotify API.
 
-use r2d2_redis::{r2d2, redis::Commands, RedisConnectionManager};
+use r2d2::PooledConnection;
+use redis::Commands;
 use serde::{Deserialize, Serialize};
 use serde_json;
 
@@ -9,15 +10,15 @@ use crate::conf::CONF;
 pub mod local_cache;
 
 lazy_static::lazy_static! {
-    pub static ref REDIS_CONN_POOL: r2d2::Pool<RedisConnectionManager> = {
-        let manager = RedisConnectionManager::new(CONF.redis_url.as_str())
+    pub static ref REDIS_CONN_POOL: r2d2::Pool<redis::Client> = {
+        let client = redis::Client::open(CONF.redis_url.as_str())
             .map_err(|err| {
-                error!("Failed to create Redis connection manager: {:?}", err);
+                error!("Failed to create Redis client: {:?}", err);
                 std::process::exit(1);
             })
             .unwrap();
         r2d2::Pool::builder()
-            .build(manager)
+            .build(client)
             .map_err(|err| {
                 error!("Failed to build Redis connection pool: {:?}", err);
                 std::process::exit(1);
@@ -26,7 +27,7 @@ lazy_static::lazy_static! {
     };
 }
 
-pub fn get_redis_conn() -> Result<diesel::r2d2::PooledConnection<RedisConnectionManager>, String> {
+pub fn get_redis_conn() -> Result<PooledConnection<redis::Client>, String> {
     REDIS_CONN_POOL.get().map_err(|err| -> String {
         error!("Error getting client from connection pool: {:?}", err);
         "Error connecting to Spotify metadata cache".into()

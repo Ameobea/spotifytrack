@@ -11,9 +11,16 @@ extern crate rocket;
 use std::time::Duration;
 
 use artist_embedding::{init_artist_embedding_ctx, map_3d::get_packed_3d_artist_coords};
-use foundations::telemetry::{
-    settings::{MetricsSettings, ServiceNameFormat, TelemetryServerSettings, TelemetrySettings},
-    tokio_runtime_metrics::record_runtime_metrics_sample,
+use foundations::{
+    addr::ListenAddr,
+    telemetry::{
+        settings::{
+            LoggingSettings, MetricsSettings, ServiceNameFormat, TelemetryServerSettings,
+            TelemetrySettings,
+        },
+        tokio_runtime_metrics::record_runtime_metrics_sample,
+        TelemetryConfig,
+    },
 };
 // use rocket_async_compression::Compression;
 use tokio::sync::Mutex;
@@ -45,22 +52,26 @@ pub struct DbConn(diesel::MysqlConnection);
 pub async fn main() {
     dotenv::dotenv().expect("dotenv file parsing failed");
 
-    let tele_serv_fut = foundations::telemetry::init_with_server(
-        &foundations::service_info!(),
-        &TelemetrySettings {
-            metrics: MetricsSettings {
-                service_name_format: ServiceNameFormat::default(),
-                report_optional: true,
-            },
-            server: TelemetryServerSettings {
-                enabled: true,
-                addr: format!("0.0.0.0:{}", CONF.telemetry_server_port)
-                    .parse()
-                    .unwrap(),
-            },
+    let service_info = foundations::service_info!();
+    let telemetry_addr: std::net::SocketAddr = format!("0.0.0.0:{}", CONF.telemetry_server_port)
+        .parse()
+        .unwrap();
+    let telemetry_settings = TelemetrySettings {
+        logging: LoggingSettings::default(),
+        metrics: MetricsSettings {
+            service_name_format: ServiceNameFormat::default(),
+            report_optional: true,
         },
-        Vec::new(),
-    )
+        server: TelemetryServerSettings {
+            enabled: true,
+            addr: ListenAddr::from(telemetry_addr),
+        },
+    };
+    let tele_serv_fut = foundations::telemetry::init(TelemetryConfig {
+        service_info: &service_info,
+        settings: &telemetry_settings,
+        custom_server_routes: Vec::new(),
+    })
     .expect("Failed to initialize telemetry server");
     let tele_serv_addr = tele_serv_fut.server_addr().unwrap();
     println!("Telemetry server is listening on http://{}", tele_serv_addr);

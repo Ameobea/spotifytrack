@@ -29,15 +29,15 @@ tokio = { version = "1.43.1", features = ["rt", "rt-multi-thread", "macros", "pa
 
 lazy_static = "1.4.0"
 
-foundations = { version = "3.4", default-features = false, features = ["metrics", "jemalloc", "telemetry-server", "tokio-runtime-metrics"] }
+foundations = { version = "5.4", default-features = false, features = ["metrics", "jemalloc", "telemetry-server", "tokio-runtime-metrics", "logging"] }
 
-rand = "0.8"
+rand = "0.9"
 
-r2d2_redis = "0.14"
+r2d2 = "0.8"
 
-redis = "0.20"
+redis = { version = "1.0", features = ["r2d2"] }
 
-reqwest = { version = "0.12", features = ["json", "gzip", "brotli", "deflate", "zstd"] }
+reqwest = { version = "0.13", features = ["json", "gzip", "brotli", "deflate", "zstd", "form"] }
 
 rocket = { version = "0.5.1", features = ["json"] }
 rocket_sync_db_pools = { version = "0.1.0", features = ["diesel_mysql_pool"] }
