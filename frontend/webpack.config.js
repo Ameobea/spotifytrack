@@ -3,12 +3,8 @@ const path = require('path');
 
 const webpack = require('webpack');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
-const sass = require('node-sass');
-const sassUtils = require('node-sass-utils')(sass);
 // const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin;
 const { RetryChunkLoadPlugin } = require('webpack-retry-chunk-load-plugin');
-
-const styles = require('./src/_style');
 
 const isDev = !process.env.NODE_ENV || process.env.NODE_ENV === 'development';
 
@@ -67,28 +63,7 @@ const buildConfig = () => ({
       },
       {
         test: /\.scss$/,
-        use: [
-          {
-            loader: 'style-loader',
-          },
-          {
-            loader: 'css-loader',
-          },
-          {
-            loader: 'resolve-url-loader',
-          },
-          {
-            loader: 'sass-loader',
-            options: {
-              sassOptions: {
-                functions: {
-                  'jsStyles()': () => sassUtils.castToSass(styles),
-                },
-                includePaths: ['src/'],
-              },
-            },
-          },
-        ],
+        use: ['style-loader', 'css-loader'],
       },
     ],
   },

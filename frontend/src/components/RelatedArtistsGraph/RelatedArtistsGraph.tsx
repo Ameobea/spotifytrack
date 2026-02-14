@@ -3,7 +3,7 @@ import { useWindowSize } from 'ameo-utils/util/react';
 import React, { useMemo } from 'react';
 import { useEffect } from 'react';
 import { useRef } from 'react';
-import { useQuery } from 'react-query';
+import { useQuery } from '@tanstack/react-query';
 import * as R from 'ramda';
 import type { Layout } from 'webcola';
 import { withMobileProp } from 'ameo-utils/dist/responsive';
@@ -450,10 +450,10 @@ export const RelatedArtistsGraphForUser: React.FC<RelatedArtistsGraphForUserProp
   username,
   fullHeight,
 }) => {
-  const { data: rawRelatedArtists } = useQuery(
-    ['relatedArtists', username],
-    mkFetchAndStoreRelatedArtistsForUser(username)
-  );
+  const { data: rawRelatedArtists } = useQuery({
+    queryKey: ['relatedArtists', username],
+    queryFn: mkFetchAndStoreRelatedArtistsForUser(username),
+  });
 
   const relatedArtists = useMemo(() => {
     if (!rawRelatedArtists) {

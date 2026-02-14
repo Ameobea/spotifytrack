@@ -1,8 +1,7 @@
 import { withMobileProp } from 'ameo-utils/dist/responsive';
 import React, { useEffect, useMemo, useState } from 'react';
-import { useQuery } from 'react-query';
-import { useRouteMatch } from 'react-router';
-import { Link, useLocation } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { Link, useLocation, useParams } from 'react-router-dom';
 
 import { fetchComparison } from 'src/api';
 import { ImageBoxGrid, Track as TrackCard } from 'src/Cards';
@@ -30,9 +29,7 @@ const LegendItem: React.FC<LegendItemProps> = ({ color, label }) => (
 );
 
 const CompareInner: React.FC<{ mobile: boolean }> = ({ mobile }) => {
-  const {
-    params: { user1, user2 },
-  } = useRouteMatch<{ user1: string; user2: string }>();
+  const { user1 = '', user2 = '' } = useParams<{ user1: string; user2: string }>();
   const { displayName: user1DisplayName } = useUsername(user1);
   const { displayName: user2DisplayName } = useUsername(user2);
   const [playing, setPlaying] = useState<string | false>(false);

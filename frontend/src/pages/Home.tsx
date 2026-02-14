@@ -3,12 +3,11 @@ import { Link } from 'react-router-dom';
 import { Carousel } from 'react-responsive-carousel';
 import 'react-responsive-carousel/lib/styles/carousel.min.css';
 
-import { ReactRouterRouteProps } from '../types';
 import './Home.scss';
 import '../components/BigButton.scss';
 import { getSentry } from 'src/sentry';
 
-const Home: React.FC<ReactRouterRouteProps> = () => (
+const Home: React.FC = () => (
   <main className="home">
     <h1>Spotifytrack</h1>
     <h2>Hub for Spotify Stats Tracking + Musical Taste Analysis</h2>

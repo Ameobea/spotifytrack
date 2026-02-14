@@ -1,17 +1,7 @@
 import * as R from 'ramda';
 import { buildStore, buildActionGroup, buildModule } from 'jantix';
-import { createBrowserHistory } from 'history';
-import { routerMiddleware, connectRouter } from 'connected-react-router';
 
 import { UserStats, Track, Artist } from '../types';
-
-export const history = createBrowserHistory();
-
-const customReducers = {
-  router: connectRouter(history),
-};
-
-const middleware = routerMiddleware(history);
 
 interface EntityStoreState {
   tracks: { [trackId: string]: Track };
@@ -134,9 +124,8 @@ const jantixModules = {
 };
 
 export const { dispatch, getState, actionCreators, useSelector, store } = buildStore<
-  typeof jantixModules,
-  typeof customReducers
->(jantixModules, middleware, customReducers);
+  typeof jantixModules
+>(jantixModules);
 
 (window as any).getState = getState;
 (window as any).dispatch = dispatch;

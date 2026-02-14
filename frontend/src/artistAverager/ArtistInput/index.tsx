@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useQuery } from 'react-query';
+import { useQuery } from '@tanstack/react-query';
 
 import { getArtistAutocompleteSuggestions, getArtistImageURL } from '../api';
 import AutocompleteDropdown, { AutocompleteSuggestion } from './AutocompleteDropdown';
@@ -37,9 +37,11 @@ const ArtistInput: React.FC<ArtistInputProps> = ({
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const lastSuggestions = useRef<AutocompleteSuggestion[]>([]);
-  const { data: suggestions } = useQuery(['artistAutocomplete', text], ({ queryKey: [, text] }) =>
-    text ? getArtistAutocompleteSuggestions(text, filterAutocompleteResults) : []
-  );
+  const { data: suggestions } = useQuery({
+    queryKey: ['artistAutocomplete', text],
+    queryFn: ({ queryKey: [, text] }) =>
+      text ? getArtistAutocompleteSuggestions(text, filterAutocompleteResults) : [],
+  });
   useEffect(() => {
     if (suggestions) {
       lastSuggestions.current = suggestions;
@@ -47,15 +49,15 @@ const ArtistInput: React.FC<ArtistInputProps> = ({
     setSelectedSuggestionIx(0);
   }, [suggestions]);
 
-  const { data: artistURL } = useQuery(
-    ['artistURL', selectedArtist?.spotifyID],
-    ({ queryKey: [, artistSpotifyID] }) => {
+  const { data: artistURL } = useQuery({
+    queryKey: ['artistURL', selectedArtist?.spotifyID],
+    queryFn: ({ queryKey: [, artistSpotifyID] }) => {
       if (artistSpotifyID) {
         return getArtistImageURL(artistSpotifyID);
       }
       return null;
-    }
-  );
+    },
+  });
 
   return (
     <div className="artist-input-wrapper">

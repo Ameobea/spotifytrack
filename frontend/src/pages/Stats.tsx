@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import * as R from 'ramda';
-import { Link, useHistory } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { PropTypesOf } from 'ameo-utils/dist/util/react';
 import { withMobileProp } from 'ameo-utils/dist/responsive';
 
-import { ReactRouterRouteProps, UserStats, Track, Artist, ValueOf } from 'src/types';
-import { useOnce } from 'src/util/hooks';
+import { UserStats, Track, Artist, ValueOf } from 'src/types';
 import { fetchUserStats } from 'src/api';
 import { mapObj } from 'src/util';
 import { dispatch, actionCreators, useSelector, UserStatsState } from 'src/store';
@@ -170,14 +170,15 @@ const RelatedArtistsGraphModal: React.FC<{ onClose: () => void }> = ({ onClose }
 );
 
 const StatsDetailsTabs: React.FC<StatsDetailsTabsProps> = ({ selectedTab, setSelectedTab }) => {
-  const history = useHistory();
+  const navigate = useNavigate();
+  const location = useLocation();
   const username = useUsername();
   const mkOnSelect = (value: StatsDetailsTab) => () => {
     setSelectedTab(value);
-    history.push({
-      pathname: history.location.pathname,
-      search: history.location.search,
-      hash: value,
+    navigate({
+      pathname: location.pathname,
+      search: location.search,
+      hash: `#${value}`,
     });
 
     getSentry()?.captureMessage('stats page tab select', { extra: { username, newTab: value } });
@@ -249,12 +250,18 @@ const MusicGalaxyPromo: React.FC = () => {
   );
 };
 
+interface StatsRouteParams {
+  username: string;
+  artistId?: string;
+  genre?: string;
+}
+
 const StatsDetailsInner: React.FC<{ stats: UserStats; mobile: boolean }> = ({ stats, mobile }) => {
-  const history = useHistory();
+  const location = useLocation();
   // TODO: Default to different default selected tab if we only have one update for the user
   const [selectedTab, setSelectedTab] = useState(
     (() => {
-      const matchingTab = ALL_TABS.find((tab) => `#${tab.value}` === history.location.hash);
+      const matchingTab = ALL_TABS.find((tab) => `#${tab.value}` === location.hash);
       if (matchingTab) {
         return matchingTab.value;
       }
@@ -383,13 +390,16 @@ const StatsDetailsInner: React.FC<{ stats: UserStats; mobile: boolean }> = ({ st
 
 const StatsDetails = withMobileProp({ maxDeviceWidth: 800 })(StatsDetailsInner);
 
-const StatsContent: React.FC<
-  { username: string; statsForUser: ValueOf<UserStatsState> } & Pick<ReactRouterRouteProps, 'match'>
-> = ({ match, username, statsForUser }) => {
-  if (match.params.artistId) {
-    return <ArtistStats match={match} />;
-  } else if (match.params.genre) {
-    return <GenreStats username={username} genre={match.params.genre} />;
+const StatsContent: React.FC<{
+  username: string;
+  artistId?: string;
+  genre?: string;
+  statsForUser: ValueOf<UserStatsState>;
+}> = ({ username, artistId, genre, statsForUser }) => {
+  if (artistId) {
+    return <ArtistStats username={username} artistId={artistId} />;
+  } else if (genre) {
+    return <GenreStats username={username} genre={genre} />;
   } else {
     if (!statsForUser?.tracks || !statsForUser.artists) {
       return <Loading style={{ marginTop: 100 }} />;
@@ -398,24 +408,23 @@ const StatsContent: React.FC<
   }
 };
 
-const Stats: React.FC<ReactRouterRouteProps> = ({
-  match,
-  match: {
-    params: { username },
-  },
-}) => {
+const Stats: React.FC = () => {
+  const { username = '', artistId, genre } = useParams<StatsRouteParams>();
   const statsForUser = useSelector(({ userStats }) => userStats[username]);
+  const hasUserStats = !!(statsForUser?.tracks && statsForUser?.artists);
 
-  useOnce(async () => {
-    if (statsForUser && statsForUser.tracks && statsForUser.artists) {
+  const { data: fetchedUserStats } = useQuery({
+    queryKey: ['userStats', username],
+    queryFn: () => fetchUserStats(username),
+    enabled: !hasUserStats,
+    staleTime: Infinity,
+    refetchOnMount: false,
+  });
+  useEffect(() => {
+    if (!fetchedUserStats) {
       return;
     }
-
-    const userStats = await fetchUserStats(username);
-    if (!userStats) {
-      return;
-    }
-    const { last_update_time, tracks, artists } = userStats;
+    const { last_update_time, tracks, artists } = fetchedUserStats;
 
     dispatch(
       actionCreators.entityStore.ADD_TRACKS(
@@ -428,7 +437,10 @@ const Stats: React.FC<ReactRouterRouteProps> = ({
     dispatch(
       actionCreators.entityStore.ADD_ARTISTS(
         R.flatten(Object.values(artists)).reduce(
-          (acc: { [artistId: string]: Artist }, datum: Artist) => ({ ...acc, [datum.id]: datum }),
+          (acc: { [artistId: string]: Artist }, datum: Artist) => ({
+            ...acc,
+            [datum.id]: datum,
+          }),
           {}
         )
       )
@@ -446,11 +458,16 @@ const Stats: React.FC<ReactRouterRouteProps> = ({
         artistStats: {},
       })
     );
-  });
+  }, [fetchedUserStats, username]);
 
   return (
     <main className="stats">
-      <StatsContent username={username} match={match} statsForUser={statsForUser} />
+      <StatsContent
+        username={username}
+        artistId={artistId}
+        genre={genre}
+        statsForUser={statsForUser}
+      />
     </main>
   );
 };

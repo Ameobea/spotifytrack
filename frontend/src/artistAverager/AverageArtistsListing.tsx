@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useQuery } from 'react-query';
+import { useQuery } from '@tanstack/react-query';
 
 import Loading from 'src/components/Loading';
 import type { Track } from 'src/types';
@@ -115,10 +115,10 @@ const AverageArtistsListing: React.FC<AverageArtistsListingProps> = ({
   artist2Name,
 }) => {
   const [playing, setPlaying] = useState<string | false>(false);
-  const { data: averageArtists, error } = useQuery(
-    ['averageArtists', artist1ID, artist2ID],
-    ({ queryKey: [, artist1ID, artist2ID] }) => getAverageArtists(artist1ID, artist2ID)
-  );
+  const { data: averageArtists, error } = useQuery({
+    queryKey: ['averageArtists', artist1ID, artist2ID],
+    queryFn: ({ queryKey: [, artist1ID, artist2ID] }) => getAverageArtists(artist1ID, artist2ID),
+  });
 
   return (
     <div className="average-artists-listing">

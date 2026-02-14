@@ -1,12 +1,11 @@
 import React, { Suspense } from 'react';
 import ReactDOM from 'react-dom';
-import { Route, Switch } from 'react-router';
+import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { Provider } from 'react-redux';
-import { ConnectedRouter } from 'connected-react-router';
-import { QueryClient, QueryClientProvider } from 'react-query';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import Loading from 'src/components/Loading';
-import { history, store } from 'src/store';
+import { store } from 'src/store';
 import './index.scss';
 import OAuthRedirect from './components/OAuthRedirect';
 import Footer from './components/Footer';
@@ -21,25 +20,25 @@ const [Stats, Compare] = [
   () => import('./components/Compare'),
 ].map((doImport) => {
   const Comp = React.lazy(doImport);
-  const RenderComp = ({ ...props }: any) => <Comp {...props} />;
+  const RenderComp = () => <Comp />;
   return RenderComp;
 });
 
 const App = () => (
-  <ConnectedRouter history={history}>
+  <BrowserRouter>
     <Suspense fallback={<Loading />}>
-      <Switch>
-        <Route exact path="/" render={Home} />
-        <Route exact path="/stats/:username" component={Stats} />
-        <Route exact path="/stats/:username/artist/:artistId" component={Stats} />
-        <Route exact path="/stats/:username/genre/:genre" component={Stats} />
-        <Route exact path="/compare/:username" component={CompareToLanding} />
-        <Route exact path="/compare/:user1/:user2" component={Compare} />
-        <Route path="/connect" component={OAuthRedirect} />
-      </Switch>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/stats/:username" element={<Stats />} />
+        <Route path="/stats/:username/artist/:artistId" element={<Stats />} />
+        <Route path="/stats/:username/genre/:genre" element={<Stats />} />
+        <Route path="/compare/:username" element={<CompareToLanding />} />
+        <Route path="/compare/:user1/:user2" element={<Compare />} />
+        <Route path="/connect" element={<OAuthRedirect />} />
+      </Routes>
     </Suspense>
     <Footer />
-  </ConnectedRouter>
+  </BrowserRouter>
 );
 
 const reactQueryClient = new QueryClient({

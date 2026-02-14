@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { useQuery } from 'react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { withMobileProp } from 'ameo-utils/dist/responsive';
 import { useDispatch, useSelector } from 'react-redux';
@@ -41,15 +41,17 @@ const GenreStats: React.FC<GenreStatsProps> = ({ username, genre, mobile }) => {
   const artistsCorpus = useSelector((state: ReduxStore) => state.entityStore.artists);
   const dispatch = useDispatch();
 
-  const { data: genreStats, status } = useQuery([genre, { username, genre }], () =>
-    fetchGenreStats(username, genre).then((res) => {
-      if (res) {
-        dispatch(actionCreators.entityStore.ADD_ARTISTS(res.artists_by_id));
-      }
+  const { data: genreStats, isPending } = useQuery({
+    queryKey: [genre, { username, genre }],
+    queryFn: () =>
+      fetchGenreStats(username, genre).then((res) => {
+        if (res) {
+          dispatch(actionCreators.entityStore.ADD_ARTISTS(res.artists_by_id));
+        }
 
-      return res;
-    })
-  );
+        return res;
+      }),
+  });
 
   const series = useMemo(() => {
     if (!genreStats) {
@@ -74,7 +76,7 @@ const GenreStats: React.FC<GenreStatsProps> = ({ username, genre, mobile }) => {
     </h1>
   );
 
-  if (status === 'loading' || !genreStats || !series) {
+  if (isPending || !genreStats || !series) {
     return (
       <div className="genre-stats">
         {title}

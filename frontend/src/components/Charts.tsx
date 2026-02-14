@@ -235,7 +235,6 @@ export const Treemap: React.FC<{
       ),
     [otherConfig, mobile, data]
   );
-  console.log({ chartConfig });
 
   return <ReactEchartsCore style={style} echarts={echarts} option={chartConfig} />;
 };

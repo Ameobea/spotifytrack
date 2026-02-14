@@ -1,43 +1,58 @@
 import { getUserDisplayName } from 'src/api';
+import { useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useLocation } from 'react-router-dom';
 import { actionCreators, dispatch, useSelector } from './';
 
-const combineWithDisplayName = (
-  displayNamesByUsername: { [username: string]: string | null },
-  username: string
-): {
-  username: string;
-  displayName: string | null | undefined;
-} => {
-  const displayName: string | null | undefined = displayNamesByUsername[username];
-  if (displayName === undefined) {
-    dispatch(actionCreators.entityStore.ADD_USER_DISPLAY_NAME(username, null));
-
-    getUserDisplayName(username).then((displayName) =>
-      dispatch(actionCreators.entityStore.ADD_USER_DISPLAY_NAME(username, displayName))
-    );
+const getUsernameFromPathname = (pathname: string): string | null => {
+  const match = pathname.match(/\/stats\/([^\/]+)\/?.*$/);
+  if (match) {
+    return match[1];
   }
 
-  return { username, displayName: displayName };
+  const match2 = pathname.match(/\/compare\/([^\/]+)\/?.*/);
+  if (match2) {
+    return match2[1];
+  }
+
+  return null;
 };
 
-export const useUsername = (username?: string) =>
-  useSelector(
-    ({
-      router: {
-        location: { pathname },
-      },
-      entityStore: { userDisplayNames: displayNamesByUsername },
-    }) => {
-      const match = pathname.match(/\/stats\/([^\/]+)\/?.*$/);
-      if (match || username) {
-        return combineWithDisplayName(displayNamesByUsername, username ?? match![1]);
-      }
+export const useUsername = (username?: string) => {
+  const { pathname } = useLocation();
+  const usernameFromRoute = getUsernameFromPathname(pathname);
 
-      const match2 = pathname.match(/\/compare\/([^\/]+)\/?.*/);
-      if (match2) {
-        return combineWithDisplayName(displayNamesByUsername, match2[1]);
-      }
-
-      return { username: null, displayName: null };
-    }
+  const resolvedUsername = username ?? usernameFromRoute;
+  const displayName = useSelector(({ entityStore: { userDisplayNames } }) =>
+    resolvedUsername ? userDisplayNames[resolvedUsername] : null
   );
+
+  useEffect(() => {
+    if (!resolvedUsername || displayName !== undefined) {
+      return;
+    }
+    dispatch(actionCreators.entityStore.ADD_USER_DISPLAY_NAME(resolvedUsername, null));
+  }, [resolvedUsername, displayName]);
+
+  const { data: fetchedDisplayName, error: displayNameError } = useQuery({
+    queryKey: ['displayName', resolvedUsername],
+    queryFn: () => getUserDisplayName(resolvedUsername!),
+    enabled: !!resolvedUsername && displayName === null,
+    staleTime: Infinity,
+    refetchOnMount: false,
+  });
+  useEffect(() => {
+    if (!resolvedUsername || fetchedDisplayName === undefined) {
+      return;
+    }
+    dispatch(actionCreators.entityStore.ADD_USER_DISPLAY_NAME(resolvedUsername, fetchedDisplayName));
+  }, [resolvedUsername, fetchedDisplayName]);
+  useEffect(() => {
+    if (!resolvedUsername || !displayNameError) {
+      return;
+    }
+    dispatch(actionCreators.entityStore.ADD_USER_DISPLAY_NAME(resolvedUsername, resolvedUsername));
+  }, [resolvedUsername, displayNameError]);
+
+  return { username: resolvedUsername, displayName };
+};

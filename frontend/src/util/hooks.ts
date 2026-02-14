@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { RouteComponentProps, useHistory } from 'react-router';
+import { NavigateOptions, To, useNavigate } from 'react-router-dom';
 
 export const useOnce = (cb: () => void) => {
   const called = useRef(false);
@@ -12,9 +12,9 @@ export const useOnce = (cb: () => void) => {
   });
 };
 
-export type PushFn = RouteComponentProps['history']['push'];
+export type PushFn = (to: To, options?: NavigateOptions) => void;
 
 export const usePush = () => {
-  const history = useHistory();
-  return history.push.bind(history);
+  const navigate = useNavigate();
+  return navigate;
 };

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { useQuery } from 'react-query';
+import { useQuery } from '@tanstack/react-query';
 import dayjs, { Dayjs } from 'dayjs';
 import { UnimplementedError } from 'ameo-utils';
 import { withMobileOrDesktop, withMobileProp } from 'ameo-utils/dist/responsive';
@@ -262,9 +262,10 @@ const Timeline: React.FC<{ mobile: boolean }> = ({ mobile }) => {
   const { username } = useUsername();
 
   const [curMonth, setCurMonth] = useState(dayjs().startOf('month'));
-  const { data: origData } = useQuery(['timeline', username, curMonth.toString()], () =>
-    fetchTimelineEvents(username, curMonth.toString())
-  );
+  const { data: origData } = useQuery({
+    queryKey: ['timeline', username, curMonth.toString()],
+    queryFn: () => fetchTimelineEvents(username, curMonth.toString()),
+  });
 
   const weeks = useMemo(() => {
     const month = curMonth.month();

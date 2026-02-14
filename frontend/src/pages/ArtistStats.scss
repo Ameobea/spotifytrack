@@ -1,5 +1,3 @@
-@import './colors.scss';
-
 .artist-stats {
   margin-left: auto;
   margin-right: auto;
@@ -28,12 +26,12 @@
     .genre-chip {
       padding: 8px;
       border-radius: 1em;
-      border: 2px solid nth($monochrome-chart-colors, 1);
+      border: 2px solid #71ff33;
       display: flex;
       flex: 1;
       margin-right: 10px;
       font-size: 18px;
-      color: map-get($colors, 'green');
+      color: #27b14c;
       white-space: nowrap;
     }
   }
@@ -57,7 +55,7 @@
 
       .genre-chip {
         padding: 5px;
-        border: 1px solid nth($monochrome-chart-colors, 1);
+        border: 1px solid #71ff33;
         font-size: 14.5px;
         margin-right: 4px;
       }

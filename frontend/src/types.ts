@@ -2,12 +2,6 @@ import { getState } from 'src/store';
 
 export type ReduxStore = ReturnType<typeof getState>;
 
-export interface ReactRouterRouteProps {
-  match: {
-    params: { [key: string]: string };
-  };
-}
-
 export type ValueOf<T> = T[keyof T];
 
 export type Timeframe = 'short' | 'medium' | 'long';

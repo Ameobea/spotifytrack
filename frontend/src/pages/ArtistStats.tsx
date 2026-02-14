@@ -1,10 +1,11 @@
-import React, { useMemo, useRef, useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import * as R from 'ramda';
 import { withMobileProp } from 'ameo-utils/dist/responsive';
+import { useQuery } from '@tanstack/react-query';
 
 import { useSelector, dispatch, actionCreators } from 'src/store';
-import { ReactRouterRouteProps, ArtistStats as ArtistStatsType, Artist } from 'src/types';
+import { ArtistStats as ArtistStatsType, Artist } from 'src/types';
 import { fetchArtistStats } from 'src/api';
 import { colors } from 'src/style';
 import Loading from 'src/components/Loading';
@@ -140,8 +141,13 @@ const BottomContent: React.FC<BottomContentProps> = ({ artistStats, mobile }) =>
   );
 };
 
-const ArtistStats: React.FC<ReactRouterRouteProps & { mobile: boolean }> = ({ match, mobile }) => {
-  const { username, artistId } = match.params;
+interface ArtistStatsProps {
+  username: string;
+  artistId: string;
+  mobile: boolean;
+}
+
+const ArtistStats: React.FC<ArtistStatsProps> = ({ username, artistId, mobile }) => {
   const artistStats: ArtistStatsType | undefined = useSelector(({ userStats }) =>
     R.path([username, 'artistStats', artistId], userStats)
   );
@@ -163,49 +169,48 @@ const ArtistStats: React.FC<ReactRouterRouteProps & { mobile: boolean }> = ({ ma
   );
   console.log({ series, artistStats });
 
-  const fetchedStatsFor = useRef<string | null>(null);
+  const { data: fetchedArtistStats, error: artistStatsError } = useQuery({
+    queryKey: ['artistStats', username, artistId],
+    queryFn: () => fetchArtistStats(username, artistId),
+    enabled: !series,
+    staleTime: Infinity,
+    refetchOnMount: false,
+  });
   useEffect(() => {
-    if (fetchedStatsFor.current === artistId || !!series) {
+    if (fetchedArtistStats === undefined) {
+      return;
+    } else if (fetchedArtistStats === null) {
+      console.warn(`No history found for artist id ${artistId} user ${username}`);
+      dispatch(actionCreators.entityStore.ADD_TRACKS({}));
+      dispatch(actionCreators.userStats.SET_ARTIST_STATS(username, artistId, [], []));
       return;
     }
 
-    fetchedStatsFor.current = artistId;
-    (async () => {
-      try {
-        const res = await fetchArtistStats(username, artistId);
-        if (!res) {
-          console.warn(`No history found for artist id ${artistId} user ${username}`);
-          dispatch(actionCreators.entityStore.ADD_TRACKS({}));
-          dispatch(actionCreators.userStats.SET_ARTIST_STATS(username, artistId, [], []));
-          return;
-        }
+    const { artist, top_tracks, popularity_history, tracks_by_id } = fetchedArtistStats;
 
-        const { artist, top_tracks, popularity_history, tracks_by_id } = res;
+    dispatch(actionCreators.entityStore.ADD_TRACKS(tracks_by_id));
+    dispatch(actionCreators.entityStore.ADD_ARTISTS({ [artist.id]: artist }));
+    dispatch(
+      actionCreators.userStats.SET_ARTIST_STATS(
+        username,
+        artistId,
+        top_tracks.map(([trackId, score]) => ({ trackId, score })),
+        popularity_history.map(([timestamp, popularityPerTimePeriod]) => ({
+          timestamp: new Date(timestamp),
+          popularityPerTimePeriod,
+        }))
+      )
+    );
+  }, [fetchedArtistStats, username, artistId]);
+  useEffect(() => {
+    if (!artistStatsError) {
+      return;
+    }
 
-        console.log('dispatching');
-        dispatch(actionCreators.entityStore.ADD_TRACKS(tracks_by_id));
-        dispatch(actionCreators.entityStore.ADD_ARTISTS({ [artist.id]: artist }));
-        dispatch(
-          actionCreators.userStats.SET_ARTIST_STATS(
-            username,
-            artistId,
-            top_tracks.map(([trackId, score]) => ({ trackId, score })),
-            popularity_history.map(([timestamp, popularityPerTimePeriod]) => ({
-              timestamp: new Date(timestamp),
-              popularityPerTimePeriod,
-            }))
-          )
-        );
-      } catch (err) {
-        console.error(
-          `Error fetching artist history for artist id ${artistId} user ${username}: `,
-          err
-        );
-        dispatch(actionCreators.entityStore.ADD_TRACKS({}));
-        dispatch(actionCreators.userStats.SET_ARTIST_STATS(username, artistId, [], []));
-      }
-    })();
-  });
+    console.error(`Error fetching artist history for artist id ${artistId} user ${username}: `, artistStatsError);
+    dispatch(actionCreators.entityStore.ADD_TRACKS({}));
+    dispatch(actionCreators.userStats.SET_ARTIST_STATS(username, artistId, [], []));
+  }, [artistStatsError, username, artistId]);
 
   return (
     <div className="artist-stats">
