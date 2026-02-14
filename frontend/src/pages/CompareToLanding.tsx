@@ -3,8 +3,8 @@ import { Link } from 'react-router-dom';
 
 import { useUsername } from 'src/store/selectors';
 import { colors } from 'src/style';
-import './CompareToLanding.scss';
-import '../components/BigButton.scss';
+import './CompareToLanding.css';
+import '../components/BigButton.css';
 
 const CompareToLanding: React.FC = () => {
   const { username, displayName } = useUsername();

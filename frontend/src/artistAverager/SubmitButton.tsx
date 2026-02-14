@@ -1,6 +1,6 @@
 import React from 'react';
 
-import './SubmitButton.scss';
+import './SubmitButton.css';
 
 interface SubmitButtonProps {
   onSubmit: () => void;

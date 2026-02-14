@@ -2,8 +2,8 @@ import ReactDOM from 'react-dom';
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-import '../index.scss';
-import './index.scss';
+import '../index.css';
+import './index.css';
 import ArtistMap from './ArtistMap';
 import { initSentry } from 'src/sentry';
 

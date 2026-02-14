@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { getArtistAutocompleteSuggestions, getArtistImageURL } from '../api';
 import AutocompleteDropdown, { AutocompleteSuggestion } from './AutocompleteDropdown';
-import './ArtistInput.scss';
+import './ArtistInput.css';
 import { getProxiedImageURL } from 'src/util/index';
 
 interface ArtistInputProps {

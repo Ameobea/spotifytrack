@@ -1,7 +1,7 @@
 import React from 'react';
 import { useLocation } from 'react-router-dom';
 
-import './Footer.scss';
+import './Footer.css';
 
 const Footer: React.FC = () => {
   const { pathname } = useLocation();

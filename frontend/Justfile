@@ -14,19 +14,6 @@ run-prod:
 build:
   just build-wasm-client
   yarn build
-  just monkey-patch-worker-url
 
 deploy:
   rsync -Prv -e "ssh -o StrictHostKeyChecking=no -o IdentitiesOnly=yes -F /dev/null" ./dist/* debian@ameo.dev:/var/www/spotifytrack.net/
-
-monkey-patch-worker-url:
-  #!/usr/bin/env bash
-  set -euxo pipefail
-
-  # Loading web workers from different origins is not supported, so this re-writes the worker URL to load it directly from the same origin.
-  if ! command -v gsed &> /dev/null
-  then
-      sed -i --regexp-extended "s/new URL\(\\w+\.\\w+/new URL\('https:\/\/galaxy\.spotifytrack\.net\/'/g" ./dist/musicGalaxy*.js
-  else
-      gsed -i --regexp-extended "s/new URL\(\\w+\.\\w+/new URL\('https:\/\/galaxy\.spotifytrack\.net\/'/g" ./dist/musicGalaxy*.js
-  fi

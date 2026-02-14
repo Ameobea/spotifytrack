@@ -9,7 +9,7 @@ import { useSelector, actionCreators, dispatch } from 'src/store';
 import Loading from 'src/components/Loading';
 import { useUsername } from 'src/store/selectors';
 import { fetchGenreHistory } from 'src/api';
-import './GenresTreemap.scss';
+import './GenresTreemap.css';
 
 const GenresTreemap: React.FC<{ mobile: boolean }> = ({ mobile }) => {
   const { username } = useUsername();

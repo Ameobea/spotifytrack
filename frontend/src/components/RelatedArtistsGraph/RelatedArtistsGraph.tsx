@@ -10,7 +10,7 @@ import { withMobileProp } from 'ameo-utils/dist/responsive';
 
 import { fetchRelatedArtists, fetchRelatedArtistsForUser } from 'src/api';
 import { actionCreators, dispatch, getState } from 'src/store';
-import './RelatedArtistsGraph.scss';
+import './RelatedArtistsGraph.css';
 import { Artist } from 'src/types';
 import type RelatedArtistsGraphCanvasRenderer from './CanvasRenderer';
 

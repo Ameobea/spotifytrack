@@ -13,7 +13,7 @@ import {
 import ArtistSearch, { CollapsedArtistSearch } from './ArtistSearch';
 import CheatSheet, { CollapsedCheatSheet } from './CheatSheet';
 import OnboardingSidebar from './OnboardingSidebar';
-import './OverlayUI.scss';
+import './OverlayUI.css';
 import VolumeAndReturnToOrbitModeControls from './VolumeAndReturnToOrbitModeControls';
 
 interface State {

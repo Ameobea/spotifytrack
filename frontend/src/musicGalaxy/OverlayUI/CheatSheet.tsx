@@ -1,7 +1,7 @@
 import React from 'react';
 import * as R from 'ramda';
 
-import './CheatSheet.scss';
+import './CheatSheet.css';
 
 interface CSItemProps {
   name: string;

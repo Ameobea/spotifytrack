@@ -10,7 +10,7 @@ import { faInfoCircle, faChevronLeft, faChevronRight } from '@fortawesome/free-s
 import { useUsername } from 'src/store/selectors';
 import { fetchTimelineEvents } from 'src/api';
 import { TimelineEvent, Image, TimelineData } from 'src/types';
-import './Timeline.scss';
+import './Timeline.css';
 import { truncateWithElipsis } from 'src/util';
 import DayStats from './DayStats';
 import { getProxiedImageURL } from 'src/util/index';

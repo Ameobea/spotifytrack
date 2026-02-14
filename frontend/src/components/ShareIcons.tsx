@@ -1,7 +1,7 @@
 import { IconButton } from '@rmwc/icon-button';
 import React from 'react';
 
-import './ShareIcons.scss';
+import './ShareIcons.css';
 
 const ShareIcons: React.FC = () => (
   <div className="share-icons">

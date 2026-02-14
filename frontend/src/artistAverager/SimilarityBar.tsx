@@ -2,7 +2,7 @@ import React from 'react';
 import { Tooltip } from 'react-tippy';
 import 'react-tippy/dist/tippy.css';
 
-import './SimilarityBar.scss';
+import './SimilarityBar.css';
 
 interface SimilarityBarProps {
   /**

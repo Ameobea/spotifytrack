@@ -1,6 +1,6 @@
 import React from 'react';
 
-import './Tooltip.scss';
+import './Tooltip.css';
 
 const Tooltip: React.FC<{ tooltip: React.ReactNode; style?: React.CSSProperties }> = ({
   tooltip,

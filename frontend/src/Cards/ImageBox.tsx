@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 
 import { getProxiedImageURL } from 'src/util/index';
-import './Cards.scss';
+import './Cards.css';
 
 interface ImageBoxProps {
   imageSrc: string | null | undefined;

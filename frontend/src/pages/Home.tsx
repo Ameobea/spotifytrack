@@ -3,8 +3,8 @@ import { Link } from 'react-router-dom';
 import { Carousel } from 'react-responsive-carousel';
 import 'react-responsive-carousel/lib/styles/carousel.min.css';
 
-import './Home.scss';
-import '../components/BigButton.scss';
+import './Home.css';
+import '../components/BigButton.css';
 import { getSentry } from 'src/sentry';
 
 const Home: React.FC = () => (

@@ -11,7 +11,7 @@ import Loading from 'src/components/Loading';
 import { ImageBoxGrid } from 'src/Cards';
 import ArtistCard from 'src/Cards/ArtistCard';
 import { actionCreators } from 'src/store';
-import './GenreStats.scss';
+import './GenreStats.css';
 import { colors } from 'src/style';
 import { makeRetryable } from 'src/util2';
 

@@ -3,7 +3,7 @@ import * as R from 'ramda';
 import { withMobileProp } from 'ameo-utils/dist/responsive';
 
 import type { Timeframe } from 'src/types';
-import './Cards.scss';
+import './Cards.css';
 import mkTrack from './TrackCard';
 import { ArtistStatsLink } from './ArtistCard';
 

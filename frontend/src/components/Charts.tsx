@@ -16,7 +16,7 @@ import { withMobileProp } from 'ameo-utils/dist/responsive';
 import dayjs from 'dayjs';
 
 import { monochromeChartColors, colors } from 'src/style';
-import { categoryChartColors } from 'src/_style';
+import { categoryChartColors } from 'src/styleConstants';
 
 interface Series {
   seriesName: string;

@@ -1,6 +1,6 @@
 import React from 'react';
 
-import './About.scss';
+import './About.css';
 import { GALAXY_BLOG_POST_LINK } from './conf';
 
 const CloseButton: React.FC<{ onClose: () => void }> = ({ onClose }) => (

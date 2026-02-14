@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import Loading from 'src/components/Loading';
 import { store } from 'src/store';
-import './index.scss';
+import './index.css';
 import OAuthRedirect from './components/OAuthRedirect';
 import Footer from './components/Footer';
 import Home from 'src/pages/Home';

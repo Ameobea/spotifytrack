@@ -1,6 +1,6 @@
 import React from 'react';
 
-import './Loading.scss';
+import './Loading.css';
 
 // TODO: Make this a cool animated SVG thing; maybe a growing tree or something.
 const Loading: React.FC<{ style?: React.CSSProperties }> = ({ style }) => (

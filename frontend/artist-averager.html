@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
-    <title>{{ htmlWebpackPlugin.options.title }}</title>
+    <title>Artist Averager</title>
 
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
     <meta name="theme-color" content="#121212" />
@@ -18,14 +18,6 @@
       content="Find the average between any two different musical artists and explore a 3D map of Spotify"
     />
     <meta property="og:type" content="website" />
-    <!-- TODO: Image -->
-    <!-- <meta property="og:image" content="https://spotifytrack.net/spotifytrack.png" />
-    <meta property="og:image:width" content="1024" />
-    <meta property="og:image:height" content="1024" />
-    <meta
-      property="og:image:alt"
-      content="A green music note on a dark background; the Spotifytrack logo"
-    /> -->
     <meta property="og:twitter:card" content="summary" />
     <meta name="twitter:title" content="Artist Averager" />
     <meta
@@ -33,11 +25,11 @@
       content="Find the average between any two different musical artists and explore a 3D map of Spotify"
     />
 
-    <!-- pause -->
     <script async defer data-domain="spotifytrack.net" src="https://pause.ameo.dev/js/pause.js"></script>
   </head>
 
   <body>
     <div id="root"></div>
+    <script type="module" src="/src/artistAverager/index.tsx"></script>
   </body>
 </html>

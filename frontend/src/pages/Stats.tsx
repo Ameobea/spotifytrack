@@ -18,13 +18,14 @@ import GenresTreemap from 'src/components/GenresTreemap';
 import { useUsername } from 'src/store/selectors';
 import Timeline from 'src/components/Timeline';
 import { RelatedArtistsGraphForUser } from 'src/components/RelatedArtistsGraph';
-import './Stats.scss';
+import './Stats.css';
 import { colors } from 'src/style';
 import CompareLanding from './CompareLanding';
 import ShareIcons from 'src/components/ShareIcons';
 import { getSentry } from 'src/sentry';
-import '../components/BigButton.scss';
-import musicGalaxyScreenshot from '../../public/music-galaxy.jpg';
+import '../components/BigButton.css';
+
+const musicGalaxyScreenshot = '/music-galaxy.jpg';
 
 type ArtistCardProps = {
   horizontallyScrollable?: boolean;

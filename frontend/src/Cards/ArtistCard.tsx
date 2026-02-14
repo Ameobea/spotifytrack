@@ -4,7 +4,7 @@ import * as R from 'ramda';
 
 import { useUsername } from 'src/store/selectors';
 import { map } from 'src/util2';
-import './Cards.scss';
+import './Cards.css';
 import ImageBox from './ImageBox';
 
 export const buildArtistStatsUrl = (username: string, artistId: string): string =>

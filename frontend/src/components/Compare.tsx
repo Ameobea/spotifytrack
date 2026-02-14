@@ -8,7 +8,7 @@ import { ImageBoxGrid, Track as TrackCard } from 'src/Cards';
 import ArtistCard from 'src/Cards/ArtistCard';
 import { useUsername } from 'src/store/selectors';
 import { usePush } from 'src/util/hooks';
-import './Compare.scss';
+import './Compare.css';
 import { mkFetchAndStoreRelatedArtistsForUser, RelatedArtistsGraph } from './RelatedArtistsGraph';
 import * as relatedArtistsGraphConf from './RelatedArtistsGraph/conf';
 

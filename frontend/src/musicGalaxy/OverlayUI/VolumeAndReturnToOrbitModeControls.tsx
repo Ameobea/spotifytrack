@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
 import { DEFAULT_VOLUME } from '../conf';
-import './VolumeAndReturnToOrbitModeControls.scss';
+import './VolumeAndReturnToOrbitModeControls.css';
 
 interface VolumeAndReturnToOrbitModeControlsProps {
   onVolumeChange: (volume: number) => void;

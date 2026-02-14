@@ -3,7 +3,7 @@ import React from 'react';
 import { API_BASE_URL } from 'src/conf';
 import { getSentry } from 'src/sentry';
 import { GALAXY_BLOG_POST_LINK } from '../conf';
-import './OnboardingSidebar.scss';
+import './OnboardingSidebar.css';
 import { OverlayAction } from './OverlayUI';
 
 interface ActionButtonProps {

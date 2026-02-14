@@ -6,7 +6,7 @@ import type { Track } from 'src/types';
 import { getProxiedImageURL } from 'src/util/index';
 import mkTrackCard from 'src/Cards/TrackCard';
 import { getAverageArtists, AverageArtistItem as AverageArtistItemType } from './api';
-import './AverageArtistsListing.scss';
+import './AverageArtistsListing.css';
 import SimilarityBar from './SimilarityBar';
 
 const TrackCard = mkTrackCard(React.Fragment);

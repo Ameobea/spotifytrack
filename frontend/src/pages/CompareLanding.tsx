@@ -4,7 +4,7 @@ import '@rmwc/icon-button/styles';
 
 import { SITE_URL } from 'src/conf';
 import { useUsername } from 'src/store/selectors';
-import './CompareLanding.scss';
+import './CompareLanding.css';
 
 const buildCompareLink = (username: string): string => `${SITE_URL}/compare/${username}`;
 

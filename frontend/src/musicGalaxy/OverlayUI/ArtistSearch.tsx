@@ -2,7 +2,7 @@ import { UnreachableException } from 'ameo-utils';
 import React, { useState } from 'react';
 
 import ArtistInput from 'src/artistAverager/ArtistInput';
-import './ArtistSearch.scss';
+import './ArtistSearch.css';
 
 interface ArtistSearchProps {
   onSubmit: (
