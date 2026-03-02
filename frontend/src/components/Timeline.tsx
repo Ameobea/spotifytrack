@@ -347,7 +347,8 @@ const Timeline: React.FC<{ mobile: boolean }> = ({ mobile }) => {
     <div className={`timeline${!origData ? ' timeline-loading' : ''}`}>
       {origData?.events &&
       origData.events.length > 0 &&
-      origData.events.every((evt) => evt.date === origData.events[0].date) ? (
+      origData.userStartDate &&
+      origData.events.every((evt) => evt.date === origData.userStartDate) ? (
         <NoHistoryWarning />
       ) : null}
 
@@ -388,7 +389,9 @@ const Timeline: React.FC<{ mobile: boolean }> = ({ mobile }) => {
         </button>
       </div>
 
-      <InnerTimeline weeks={weeks} selectedDay={selectedDay} setSelectedDay={setSelectedDay} />
+      <div style={!mobile ? { minHeight: 768 } : undefined}>
+        <InnerTimeline weeks={weeks} selectedDay={selectedDay} setSelectedDay={setSelectedDay} />
+      </div>
 
       {(() => {
         if (mobile) {

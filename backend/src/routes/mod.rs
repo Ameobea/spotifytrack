@@ -286,7 +286,11 @@ pub(crate) async fn get_timeline(
     )
     .map_err(|_| String::from("Invalid `end_day_id` provided"))?;
 
-    let User { id: user_id, .. } = match db_util::get_user_by_spotify_id(&conn, username).await? {
+    let User {
+        id: user_id,
+        creation_time,
+        ..
+    } = match db_util::get_user_by_spotify_id(&conn, username).await? {
         Some(user) => user,
         None => {
             return Ok(None);
@@ -345,9 +349,15 @@ pub(crate) async fn get_timeline(
     ));
 
     events.sort_unstable_by_key(|evt| evt.date);
+
+    let user_start_date = Some(creation_time.date());
+
     endpoint_response_time("get_timeline").observe(start.elapsed().as_nanos() as u64);
 
-    Ok(Some(Json(Timeline { events })))
+    Ok(Some(Json(Timeline {
+        events,
+        user_start_date,
+    })))
 }
 
 /// Redirects to the Spotify authorization page for the application

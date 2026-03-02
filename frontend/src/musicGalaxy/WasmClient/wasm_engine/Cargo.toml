@@ -16,7 +16,7 @@ float-ord = "0.3"
 fastapprox = "0.3"
 fnv = "1.0"
 pcg = "4.0"
-rand = { version = "0.7", default_features = false, features = ["alloc"] }
+rand = { version = "0.7", default-features = false, features = ["alloc"] }
 noise = "0.7"
 palette = "0.6"
 lazy_static = "1.3"

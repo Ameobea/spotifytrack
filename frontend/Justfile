@@ -3,6 +3,11 @@ set dotenv-load := true
 build-wasm-client:
   cd src/musicGalaxy/WasmClient/wasm_engine && just build
 
+build-webcola-wasm:
+  cd ~/webcola-wasm && npm run build
+  cp -r ~/webcola-wasm/dist node_modules/webcola/
+  cp ~/webcola-wasm/package.json node_modules/webcola/package.json
+
 run:
   just build-wasm-client
   REACT_APP_API_BASE_URL=http://localhost:8000 REACT_APP_SITE_URL=http://localhost:9050 yarn start --host 0.0.0.0 --port 9050
@@ -13,6 +18,7 @@ run-prod:
 
 build:
   just build-wasm-client
+  just build-webcola-wasm
   yarn build
 
 deploy:

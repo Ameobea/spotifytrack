@@ -397,7 +397,7 @@ impl ArtistMapCtx {
     }
 }
 
-const DID_INIT: Once = Once::new();
+static DID_INIT: Once = Once::new();
 
 fn maybe_init() {
     DID_INIT.call_once(|| {
@@ -406,7 +406,7 @@ fn maybe_init() {
             wasm_logger::init(wasm_logger::Config::default());
         }
 
-        let seed: u64 = unsafe { std::mem::transmute(js_random()) };
+        let seed: u64 = f64::to_bits(js_random());
         unsafe {
             RNG = Box::into_raw(Box::new(pcg::Pcg::from_seed(seed.into())));
         }
@@ -541,13 +541,13 @@ pub fn get_all_artist_data(ctx: *mut ArtistMapCtx) -> Vec<f32> {
     unsafe { out.set_len(ctx.all_artists.len() * 5) };
 
     for (i, (artist_id, state)) in ctx.all_artists.iter().enumerate() {
-        out[i * 5] = unsafe { std::mem::transmute(*artist_id) };
+        out[i * 5] = f32::from_bits(*artist_id);
 
         for (dim_ix, val_for_dim) in state.position.iter().enumerate() {
             out[i * 5 + 1 + dim_ix] = *val_for_dim;
         }
 
-        out[i * 5 + 4] = unsafe { std::mem::transmute(state.popularity as u32) };
+        out[i * 5 + 4] = f32::from_bits(state.popularity as u32);
     }
 
     out

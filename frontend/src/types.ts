@@ -89,7 +89,7 @@ export type TimelineEvent = {
 
 export interface TimelineData {
   events: TimelineEvent[];
-  // firstUpdate: Date;
+  userStartDate?: string;
 }
 
 export interface RelatedArtistsGraphRes {
