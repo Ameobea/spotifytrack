@@ -370,11 +370,9 @@ pub(crate) fn authorize(playlist_perms: Option<&str>, state: Option<&str>) -> Re
     let callback_uri = crate::conf::CONF.get_absolute_oauth_cb_uri();
 
     Redirect::to(format!(
-        "https://accounts.spotify.com/authorize?client_id={}&response_type=code&redirect_uri={}&scope={}&state={}",
+        "https://accounts.spotify.com/authorize?client_id={}&response_type=code&redirect_uri={callback_uri}&scope={scopes}&state={}",
         CONF.client_id,
-        callback_uri,
-        scopes,
-        RawStr::new(state.unwrap_or("")).percent_encode()
+        RawStr::new(state.unwrap_or("_")).percent_encode()
     ))
 }
 
@@ -404,15 +402,11 @@ async fn generate_shared_playlist(
     );
     let (user1, conn1) = match user1_res? {
         Some(user) => user,
-        None => {
-            return Ok(None);
-        },
+        None => return Ok(None),
     };
     let (mut user2, conn2) = match user2_res? {
         Some(user) => user,
-        None => {
-            return Ok(None);
-        },
+        None => return Ok(None),
     };
 
     let spotify_access_token = {
@@ -421,8 +415,8 @@ async fn generate_shared_playlist(
     }?;
 
     if let Some(res) = db_util::refresh_user_access_token(&conn1, &mut user2).await? {
-        error!("Error refreshing access token: {:?}", res);
-        return Err("Error refreshing access token".to_string());
+        error!("Error refreshing access token: {res:?}");
+        return Err("Error refreshing access token".to_owned());
     }
 
     let playlist_track_spotify_ids =
@@ -472,8 +466,8 @@ pub(crate) async fn oauth_cb(
     let start = Instant::now();
 
     if error.is_some() {
-        error!("Error during Oauth authorization process: {:?}", error);
-        return Err("An error occured while authenticating with Spotify.".into());
+        error!("Error during Oauth authorization process: {error:?}");
+        return Err("An error occured while authenticating with Spotify.".to_owned());
     }
 
     let oauth_cb_url = crate::conf::CONF.get_absolute_oauth_cb_uri();
@@ -494,14 +488,14 @@ pub(crate) async fn oauth_cb(
         .send()
         .await
         .map_err(|_| -> String {
-            "Error fetching token from Spotify from response Oauth code".into()
+            "Error fetching token from Spotify from response Oauth code".to_owned()
         })?;
 
     let res: OAuthTokenResponse = match res.json().await {
         Ok(res) => res,
         Err(err) => {
             error!("Failed to fetch user tokens from OAuth CB code: {:?}", err);
-            return Err("Error parsing response from token fetch endpoint".into());
+            return Err("Error parsing response from token fetch endpoint".to_owned());
         },
     };
 
@@ -519,11 +513,8 @@ pub(crate) async fn oauth_cb(
             error,
             error_description,
         } => {
-            error!(
-                "Error fetching tokens for user: {}; {}",
-                error, error_description
-            );
-            return Err("Error fetching user access tokens from Spotify API.".into());
+            error!("Error fetching tokens for user: {error}; {error_description}");
+            return Err("Error fetching user access tokens from Spotify API.".to_owned());
         },
     };
 
@@ -559,10 +550,7 @@ pub(crate) async fn oauth_cb(
                 .run(move |conn| query.execute(conn))
                 .await
                 .map_err(|err| {
-                    error!(
-                        "Error updating tokens for user id={}: {:?}",
-                        user_spotify_id, err
-                    );
+                    error!("Error updating tokens for user id={user_spotify_id}: {err:?}",);
                     String::from("Internal error occurred when trying to update user")
                 })?;
 
@@ -570,7 +558,7 @@ pub(crate) async fn oauth_cb(
         },
         Err(err) => {
             error!("Error inserting row: {:?}", err);
-            return Err("Error inserting user into database".into());
+            return Err("Error inserting user into database".to_owned());
         },
         Ok(_) => {
             // Retrieve the inserted user row
@@ -583,10 +571,10 @@ pub(crate) async fn oauth_cb(
                 Some(stats) => stats,
                 None => {
                     error!(
-                        "Failed to fetch stats for user \"{}\"; bad response from Spotify API?",
-                        username
+                        "Failed to fetch stats for user \"{username}\"; bad response from Spotify \
+                         API?"
                     );
-                    return Err("Error fetching user stats from the Spotify API.".into());
+                    return Err("Error fetching user stats from the Spotify API.".to_owned());
                 },
             };
 
@@ -595,11 +583,11 @@ pub(crate) async fn oauth_cb(
     };
 
     match state {
+        Some(s) if s == "_" => (),
         Some(s) if !s.is_empty() => {
             if s == "galaxy" {
                 return Ok(Redirect::to(format!(
-                    "https://galaxy.spotifytrack.net/?spotifyID={}",
-                    user_spotify_id
+                    "https://galaxy.spotifytrack.net/?spotifyID={user_spotify_id}"
                 )));
             }
 
@@ -609,7 +597,7 @@ pub(crate) async fn oauth_cb(
                     .map(|s| -> String { s.into() })
                     .map_err(|_| {
                         error!("Invalid URL-Encoded `state` param; dropping");
-                        "Invalid URL-encoded `state` param provided; can't parse.".to_string()
+                        "Invalid URL-encoded `state` param provided; can't parse.".to_owned()
                     })?;
 
             match serde_json::from_str(percent_decoded.as_ref()) {
@@ -634,14 +622,14 @@ pub(crate) async fn oauth_cb(
                                 "name": playlist.name
                             }))
                             .map_err(|err| {
-                                error!("Error JSON-encoding playlist: {:?}", err);
-                                "Internal error while generating playlist".to_string()
+                                error!("Error JSON-encoding playlist: {err:?}");
+                                "Internal error while generating playlist".to_owned()
                             })?;
                             let encoded_playlist =
                                 RawStr::percent_encode(&RawStr::new(encoded_playlist.as_str()));
                             let redirect_url = format!(
-                                "{}/compare/{}/{}?playlist={}",
-                                CONF.website_url, user1_id, user2_id, encoded_playlist
+                                "{}/compare/{user1_id}/{user2_id}?playlist={encoded_playlist}",
+                                CONF.website_url
                             );
                             return Ok(Redirect::to(redirect_url));
                         },
@@ -657,16 +645,15 @@ pub(crate) async fn oauth_cb(
                         serde_json::from_str(percent_decoded.as_ref())
                     {
                         let redirect_url = format!(
-                            "{}/compare/{}/{}",
-                            CONF.website_url, compare_to, user_spotify_id
+                            "{}/compare/{compare_to}/{user_spotify_id}",
+                            CONF.website_url
                         );
                         return Ok(Redirect::to(redirect_url));
                     }
 
                     warn!(
                         "Error parsing JSON body of what we presume is a playlist generation \
-                         request: {:?}",
-                        err
+                         request: {err:?}"
                     );
                     return Err("Error parsing state param for presumed shared playlist \
                                 generation request"
