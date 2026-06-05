@@ -9,7 +9,6 @@ use diesel::{
 };
 use fnv::{FnvHashMap as HashMap, FnvHashSet as HashSet};
 use futures::Future;
-use rocket::{http::Status, response::status};
 use serde::Serialize;
 
 use crate::{
@@ -22,6 +21,14 @@ use crate::{
     },
     DbConn,
 };
+
+const MAX_CONSECUTIVE_AUTH_FAILURES: u8 = 3;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum RefreshUserAccessTokenContext {
+    NaturalUpdate,
+    UserAction,
+}
 
 pub(crate) async fn get_user_by_spotify_id(
     conn: &DbConn,
@@ -824,8 +831,6 @@ pub(crate) async fn populate_artists_genres_table(
     .map(|_| ())
 }
 
-/// Sets the `last_updated_time` column for the provided user to the provided `update_time`.
-/// Returns the number of rows updated or an error message.
 pub(crate) async fn update_user_last_updated(
     user: &User,
     conn: &DbConn,
@@ -941,29 +946,110 @@ pub(crate) async fn get_all_top_artists_for_user(
 pub(crate) async fn refresh_user_access_token(
     conn: &DbConn,
     user: &mut User,
-) -> Result<Option<status::Custom<String>>, String> {
+    context: RefreshUserAccessTokenContext,
+) -> Result<Option<String>, String> {
     use crate::schema::users;
 
     // Update the access token for that user using the refresh token
-    let updated_access_token =
-        match crate::spotify_api::refresh_user_token(&user.refresh_token).await {
-            Ok(updated_access_token) => updated_access_token,
-            Err(_) => {
-                update_user_last_updated(&user, &conn, Utc::now().naive_utc()).await?;
+    let updated_access_token = match crate::spotify_api::refresh_user_token(&user.refresh_token)
+        .await
+    {
+        Ok(updated_access_token) => updated_access_token,
+        Err(crate::spotify_api::RefreshUserTokenError::HardFailure {
+            error,
+            error_description,
+        }) => {
+            let now = Utc::now().naive_utc();
+            let failure_reason = format!(
+                "Spotify refresh token exchange failed with `{error}`: {error_description}"
+            );
 
-                // TODO: Disable auto-updates for the user that has removed their permission grant
-                // to prevent wasted updates in the future
-                let msg = format!(
-                    "Failed to refresh user token for user {}; updating last updated timestamp \
-                     and not updating.",
-                    user.username
-                );
-                info!("{}", msg);
-                return Ok(Some(status::Custom(Status::Unauthorized, msg)));
-            },
-        };
-    let query = diesel::update(users::table.filter(users::dsl::id.eq(user.id)))
-        .set(users::dsl::token.eq(updated_access_token.clone()));
+            if context == RefreshUserAccessTokenContext::NaturalUpdate {
+                let new_failure_count = user
+                    .consecutive_auth_failures
+                    .saturating_add(1)
+                    .min(MAX_CONSECUTIVE_AUTH_FAILURES);
+                let auth_failed = new_failure_count >= MAX_CONSECUTIVE_AUTH_FAILURES;
+                let failure_reason_for_query = failure_reason.clone();
+                let query = diesel::update(users::table.filter(users::dsl::id.eq(user.id))).set((
+                    users::dsl::last_update_time.eq(now),
+                    users::dsl::auth_failed.eq(auth_failed),
+                    users::dsl::consecutive_auth_failures.eq(new_failure_count),
+                    users::dsl::last_auth_failure_at.eq(Some(now)),
+                    users::dsl::last_auth_failure_reason.eq(Some(failure_reason_for_query)),
+                ));
+                conn.run(move |conn| query.execute(conn))
+                    .await
+                    .map_err(|err| -> String {
+                        error!("{:?}", err);
+                        "Error updating user auth failure state".into()
+                    })?;
+
+                user.last_update_time = now;
+                user.auth_failed = auth_failed;
+                user.consecutive_auth_failures = new_failure_count;
+                user.last_auth_failure_at = Some(now);
+                user.last_auth_failure_reason = Some(failure_reason.clone());
+
+                let msg = if auth_failed {
+                    format!(
+                        "Failed to refresh user token for user {}; marked auth_failed after {} \
+                         consecutive hard failures.",
+                        user.username, new_failure_count
+                    )
+                } else {
+                    format!(
+                        "Failed to refresh user token for user {}; recorded hard auth failure \
+                         {}/{}.",
+                        user.username, new_failure_count, MAX_CONSECUTIVE_AUTH_FAILURES
+                    )
+                };
+                info!("{} reason={}", msg, failure_reason);
+                return Ok(Some(msg));
+            }
+
+            let msg = format!(
+                "Failed to refresh user token for user {}; not counting hard auth failure outside \
+                 automatic updates.",
+                user.username
+            );
+            info!("{} reason={}", msg, failure_reason);
+            return Ok(Some(msg));
+        },
+        Err(err) => {
+            let msg = err.message();
+            // Soft failure: bump `last_update_time` so the cron doesn't tight-loop, but leave
+            // the hard-failure counters alone — clearing them would let an alternating
+            // hard/soft/hard pattern dodge the `MAX_CONSECUTIVE_AUTH_FAILURES` gate forever.
+            if context == RefreshUserAccessTokenContext::NaturalUpdate {
+                let now = Utc::now().naive_utc();
+                let query = diesel::update(users::table.filter(users::dsl::id.eq(user.id)))
+                    .set(users::dsl::last_update_time.eq(now));
+                conn.run(move |conn| query.execute(conn))
+                    .await
+                    .map_err(|err| -> String {
+                        error!("{:?}", err);
+                        "Error bumping user last_update_time after soft auth failure".into()
+                    })?;
+
+                user.last_update_time = now;
+            }
+
+            let msg = format!(
+                "Failed to refresh user token for user {}; not updating. {}",
+                user.username, msg
+            );
+            info!("{}", msg);
+            return Ok(Some(msg));
+        },
+    };
+    let query = diesel::update(users::table.filter(users::dsl::id.eq(user.id))).set((
+        users::dsl::token.eq(updated_access_token.clone()),
+        users::dsl::auth_failed.eq(false),
+        users::dsl::consecutive_auth_failures.eq(0u8),
+        users::dsl::last_auth_failure_at.eq::<Option<NaiveDateTime>>(None),
+        users::dsl::last_auth_failure_reason.eq::<Option<String>>(None),
+    ));
     conn.run(move |conn| query.execute(conn))
         .await
         .map_err(|err| -> String {
@@ -971,6 +1057,10 @@ pub(crate) async fn refresh_user_access_token(
             "Error updating user with new access token".into()
         })?;
     user.token = updated_access_token;
+    user.auth_failed = false;
+    user.consecutive_auth_failures = 0;
+    user.last_auth_failure_at = None;
+    user.last_auth_failure_reason = None;
 
     Ok(None)
 }

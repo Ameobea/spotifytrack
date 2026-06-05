@@ -60,12 +60,10 @@ async fn build_parquet_readers(
     let (artists_obj_meta, tracks_obj_meta) = try_join!(artists_meta_fut, tracks_meta_fut)
         .inspect_err(|err| error!("Error getting object metadata: {err}"))?;
 
-    let artists_reader = artists_obj_meta.map(|_| {
-        ParquetObjectReader::new(Arc::clone(&object_store), artists_location.clone())
-    });
-    let tracks_reader = tracks_obj_meta.map(|_| {
-        ParquetObjectReader::new(Arc::clone(&object_store), tracks_location.clone())
-    });
+    let artists_reader = artists_obj_meta
+        .map(|_| ParquetObjectReader::new(Arc::clone(&object_store), artists_location.clone()));
+    let tracks_reader = tracks_obj_meta
+        .map(|_| ParquetObjectReader::new(Arc::clone(&object_store), tracks_location.clone()));
     Ok((artists_reader, tracks_reader))
 }
 
@@ -260,8 +258,8 @@ pub(crate) async fn load_external_user_data(
                         return Err("Timeout building parquet readers after 30 attempts".into());
                     }
                     error!(
-                        "Timeout building parquet readers for load_external_user_data \
-                         (attempt {attempts}/30)"
+                        "Timeout building parquet readers for load_external_user_data (attempt \
+                         {attempts}/30)"
                     );
                     continue;
                 },

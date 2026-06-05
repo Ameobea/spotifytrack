@@ -25,8 +25,8 @@ use crate::{
         AccessTokenResponse, Album, Artist, ArtistGenrePair, ArtistSearchResult,
         CreatePlaylistRequest, GetRelatedArtistsResponse, NewArtistHistoryEntry,
         NewTrackHistoryEntry, Playlist, SpotifyBatchArtistsResponse, SpotifyBatchTracksResponse,
-        SpotifyResponse, StatsSnapshot, TopArtistsResponse, TopTracksResponse, Track,
-        TrackArtistPair, UpdatePlaylistResponse, User, UserProfile,
+        SpotifyResponse, SpotifyTokenErrorResponse, StatsSnapshot, TopArtistsResponse,
+        TopTracksResponse, Track, TrackArtistPair, UpdatePlaylistResponse, User, UserProfile,
     },
     DbConn,
 };
@@ -97,6 +97,41 @@ async fn process_spotify_res<R: for<'de> Deserialize<'de> + Clone + std::fmt::De
             "Error decoding response from Spotify API".into()
         })?
         .into_result()
+}
+
+#[derive(Clone, Debug)]
+pub(crate) enum RefreshUserTokenError {
+    HardFailure {
+        error: String,
+        error_description: String,
+    },
+    Other(String),
+}
+
+impl RefreshUserTokenError {
+    pub(crate) fn message(&self) -> String {
+        match self {
+            Self::HardFailure {
+                error,
+                error_description,
+            } => format!(
+                "Spotify refresh token exchange failed with hard error `{error}`: \
+                 {error_description}"
+            ),
+            Self::Other(msg) => msg.clone(),
+        }
+    }
+}
+
+fn is_confirmed_refresh_token_hard_failure(error: &str, error_description: &str) -> bool {
+    if !error.eq_ignore_ascii_case("invalid_grant") {
+        return false;
+    }
+
+    matches!(
+        error_description.to_ascii_lowercase().as_str(),
+        "refresh token revoked" | "user does not exist"
+    )
 }
 
 pub(crate) async fn spotify_user_api_request<
@@ -306,14 +341,114 @@ pub(crate) async fn fetch_auth_token() -> Result<AccessTokenResponse, String> {
     spotify_server_api_request(SPOTIFY_APP_TOKEN_URL, params, "fetch_auth_token").await
 }
 
-pub(crate) async fn refresh_user_token(refresh_token: &str) -> Result<String, String> {
+pub(crate) async fn refresh_user_token(
+    refresh_token: &str,
+) -> Result<String, RefreshUserTokenError> {
+    spotify_api_requests_total("refresh_user_token").inc();
+
     let mut params = HashMap::default();
     params.insert("grant_type", "refresh_token");
     params.insert("refresh_token", refresh_token);
+    let client = get_reqwest_client().await;
+    let mut start = Instant::now();
 
-    let res: AccessTokenResponse =
-        spotify_server_api_request(SPOTIFY_APP_TOKEN_URL, params, "refresh_user_token").await?;
-    Ok(res.access_token)
+    loop {
+        info!(
+            "Hitting Spotify API POST at URL {}, params: {:?}",
+            SPOTIFY_APP_TOKEN_URL, params
+        );
+        let res = client
+            .post(SPOTIFY_APP_TOKEN_URL)
+            .header("Authorization", CONF.get_authorization_header_content())
+            .form(&params)
+            .send()
+            .await
+            .map_err(|err| {
+                spotify_api_requests_failure_total("refresh_user_token").inc();
+                error!("Error communicating with Spotify API: {:?}", err);
+                RefreshUserTokenError::Other(
+                    "Error communicating with from the Spotify API".into(),
+                )
+            })?;
+
+        if res.status() == StatusCode::TOO_MANY_REQUESTS {
+            warn!("Rate limited on refresh_user_token; sleeping 5s before retry...");
+            spotify_api_requests_rate_limited_total("refresh_user_token").inc();
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            start = Instant::now();
+            continue;
+        }
+
+        if !res.status().is_success() {
+            spotify_api_requests_failure_total("refresh_user_token").inc();
+            let status = res.status();
+            let body = res.text().await.map_err(|err| {
+                error!("Error reading Spotify API error body: {:?}", err);
+                RefreshUserTokenError::Other("Error reading response from the Spotify API".into())
+            })?;
+            error!(
+                "Got bad status code of {} from Spotify API: {:?}",
+                status, body
+            );
+
+            if let Ok(err_body) = serde_json::from_str::<SpotifyTokenErrorResponse>(&body) {
+                let description = err_body.error_description.as_deref().unwrap_or("");
+                if is_confirmed_refresh_token_hard_failure(&err_body.error, description) {
+                    return Err(RefreshUserTokenError::HardFailure {
+                        error: err_body.error,
+                        error_description: description.to_owned(),
+                    });
+                }
+
+                return Err(RefreshUserTokenError::Other(format!(
+                    "Spotify refresh token exchange failed with `{}`: {}",
+                    err_body.error, description
+                )));
+            }
+
+            return Err(RefreshUserTokenError::Other(
+                "Got bad response from Spotify API".into(),
+            ));
+        }
+
+        let parsed_res: AccessTokenResponse = res.json().await.map_err(|err| {
+            spotify_api_requests_failure_total("refresh_user_token").inc();
+            error!("Error decoding response from Spotify API: {:?}.", err);
+            RefreshUserTokenError::Other("Error decoding response from Spotify API".into())
+        })?;
+        spotify_api_requests_success_total("refresh_user_token").inc();
+        spotify_api_response_time("refresh_user_token").observe(start.elapsed().as_nanos() as u64);
+        return Ok(parsed_res.access_token);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_confirmed_refresh_token_hard_failure;
+
+    #[test]
+    fn classifies_confirmed_hard_refresh_failures() {
+        assert!(is_confirmed_refresh_token_hard_failure(
+            "invalid_grant",
+            "Refresh token revoked",
+        ));
+        assert!(is_confirmed_refresh_token_hard_failure(
+            "INVALID_GRANT",
+            "User does not exist",
+        ));
+    }
+
+    #[test]
+    fn ignores_non_hard_refresh_failures() {
+        assert!(!is_confirmed_refresh_token_hard_failure(
+            "invalid_client",
+            "Refresh token revoked",
+        ));
+        assert!(!is_confirmed_refresh_token_hard_failure(
+            "invalid_grant",
+            "temporarily unavailable",
+        ));
+    }
 }
 
 pub(crate) async fn fetch_cur_stats(user: &User) -> Result<Option<StatsSnapshot>, String> {
@@ -450,10 +585,10 @@ fn map_timeframe_to_timeframe_id(timeframe: &str) -> u8 {
     }
 }
 
-/// For each track and artist timeframe, store a row in the `track_rank_snapshots` and
-/// `artist_rank_snapshots` tables respectively
+/// Pushes rank-snapshot rows and per-user `last_update_time` into the buffer for later flush.
 pub(crate) async fn store_stats_snapshot(
     conn: &DbConn,
+    buffer: &crate::update_buffer::UpdateBuffer,
     user: &User,
     stats: StatsSnapshot,
 ) -> Result<(), String> {
@@ -497,17 +632,6 @@ pub(crate) async fn store_stats_snapshot(
         })
         .collect();
 
-    conn.run(move |conn| {
-        diesel::insert_into(crate::schema::artist_rank_snapshots::table)
-            .values(&artist_entries)
-            .execute(conn)
-    })
-    .await
-    .map_err(|err| -> String {
-        println!("Error inserting row: {:?}", err);
-        "Error inserting user into database".into()
-    })?;
-
     let track_spotify_ids: Vec<String> = stats
         .tracks
         .iter()
@@ -516,7 +640,6 @@ pub(crate) async fn store_stats_snapshot(
     let mapped_track_spotify_ids =
         crate::db_util::get_internal_ids_by_spotify_id(conn, track_spotify_ids.iter()).await?;
 
-    // Create track/artist mapping entries for each (track, artist) pair
     let track_artist_pairs: Vec<TrackArtistPair> = stats
         .tracks
         .iter()
@@ -535,18 +658,7 @@ pub(crate) async fn store_stats_snapshot(
             })
         })
         .collect();
-    conn.run(move |conn| {
-        diesel::insert_or_ignore_into(crate::schema::tracks_artists::table)
-            .values(&track_artist_pairs)
-            .execute(conn)
-    })
-    .await
-    .map_err(|err| -> String {
-        error!("Error inserting track/artist mappings: {:?}", err);
-        "Error inserting track/artist metadata into database".into()
-    })?;
 
-    // Create artist/genre mapping entries for each (artist, genre) pair
     let artist_genre_pairs: Vec<ArtistGenrePair> = genres_by_artist_id
         .into_iter()
         .flat_map(|(artist_id, genres)| {
@@ -559,17 +671,6 @@ pub(crate) async fn store_stats_snapshot(
                 .map(move |genre| ArtistGenrePair { artist_id, genre })
         })
         .collect();
-
-    // Delete all old artist/genre entries for the artists we have here and insert the new ones,
-    // making sure that the entries we have are all valid and up-to-date
-    let query = diesel::insert_or_ignore_into(crate::schema::artists_genres::table)
-        .values(artist_genre_pairs);
-    conn.run(move |conn| query.execute(conn))
-        .await
-        .map_err(|err| -> String {
-            error!("Error inserting artist/genre mappings: {:?}", err);
-            "Error inserting artist/genre mappings into database".into()
-        })?;
 
     let track_entries: Vec<NewTrackHistoryEntry> = stats
         .tracks
@@ -591,28 +692,17 @@ pub(crate) async fn store_stats_snapshot(
         })
         .collect();
 
-    conn.run(move |conn| {
-        diesel::insert_into(crate::schema::track_rank_snapshots::table)
-            .values(&track_entries)
-            .execute(conn)
-    })
-    .await
-    .map_err(|err| -> String {
-        error!("Error inserting row: {:?}", err);
-        "Error inserting user into database".into()
-    })?;
-
-    // Update the user to have a last update time that matches all of the new updates
-    let updated_row_count =
-        crate::db_util::update_user_last_updated(&user, &conn, update_time).await?;
-
-    if updated_row_count != 1 {
-        error!(
-            "Updated {} rows when setting last update time for user with spotify_id={}, but \
-             should have updated 1.",
-            updated_row_count, user.spotify_id
-        );
-    }
+    buffer
+        .push_user_stats(
+            user.id,
+            user.spotify_id.clone(),
+            update_time,
+            artist_entries,
+            track_entries,
+            track_artist_pairs,
+            artist_genre_pairs,
+        )
+        .await;
 
     Ok(())
 }

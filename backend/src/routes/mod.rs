@@ -42,10 +42,52 @@ use crate::{
         fetch_artists, fetch_top_tracks_for_artist, get_multiple_related_artists,
         get_reqwest_client, search_artists,
     },
-    DbConn, SpotifyTokenData,
+    update_buffer::UpdateBuffer,
+    ActiveUserUpdates, DbConn, SpotifyTokenData,
 };
 
 const SPOTIFY_TOKEN_FETCH_URL: &str = "https://accounts.spotify.com/api/token";
+
+enum UpdateUserResult {
+    Updated(String),
+    Skipped(String),
+}
+
+struct ActiveUserUpdateGuard<'a> {
+    active_updates: &'a State<ActiveUserUpdates>,
+    spotify_id: String,
+}
+
+impl<'a> ActiveUserUpdateGuard<'a> {
+    fn try_acquire(
+        active_updates: &'a State<ActiveUserUpdates>,
+        spotify_id: &str,
+    ) -> Result<ActiveUserUpdateGuard<'a>, ()> {
+        let mut active_updates_guard = active_updates
+            .0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if !active_updates_guard.insert(spotify_id.to_owned()) {
+            return Err(());
+        }
+
+        Ok(Self {
+            active_updates,
+            spotify_id: spotify_id.to_owned(),
+        })
+    }
+}
+
+impl Drop for ActiveUserUpdateGuard<'_> {
+    fn drop(&mut self) {
+        let mut active_updates_guard = self
+            .active_updates
+            .0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        active_updates_guard.remove(&self.spotify_id);
+    }
+}
 
 #[get("/")]
 pub(crate) fn index() -> &'static str { "Application successfully started!" }
@@ -414,8 +456,17 @@ async fn generate_shared_playlist(
         token_data.get().await
     }?;
 
-    if let Some(res) = db_util::refresh_user_access_token(&conn1, &mut user2).await? {
-        error!("Error refreshing access token: {res:?}");
+    if let Some(msg) = db_util::refresh_user_access_token(
+        &conn1,
+        &mut user2,
+        db_util::RefreshUserAccessTokenContext::UserAction,
+    )
+    .await?
+    {
+        error!(
+            "Error refreshing access token for playlist generation: {}",
+            msg
+        );
         return Err("Error refreshing access token".to_owned());
     }
 
@@ -457,6 +508,7 @@ pub(crate) async fn oauth_cb(
     conn3: DbConn,
     conn4: DbConn,
     token_data: &State<Mutex<SpotifyTokenData>>,
+    update_buffer: &State<Arc<UpdateBuffer>>,
     error: Option<&str>,
     code: &str,
     state: Option<&str>,
@@ -545,6 +597,10 @@ pub(crate) async fn oauth_cb(
                 .set((
                     users::dsl::refresh_token.eq(refresh_token),
                     users::dsl::token.eq(access_token.clone()),
+                    users::dsl::auth_failed.eq(false),
+                    users::dsl::consecutive_auth_failures.eq(0u8),
+                    users::dsl::last_auth_failure_at.eq::<Option<NaiveDateTime>>(None),
+                    users::dsl::last_auth_failure_reason.eq::<Option<String>>(None),
                 ));
             conn1
                 .run(move |conn| query.execute(conn))
@@ -578,7 +634,25 @@ pub(crate) async fn oauth_cb(
                 },
             };
 
-            crate::spotify_api::store_stats_snapshot(&conn1, &user, cur_user_stats).await?;
+            crate::spotify_api::store_stats_snapshot(
+                &conn1,
+                update_buffer.inner(),
+                &user,
+                cur_user_stats,
+            )
+            .await?;
+            // Flush synchronously so the initial snapshot is queryable when the user lands on
+            // their stats page. Failure here just means a partial first view — don't abort OAuth.
+            if let Err(err) = update_buffer
+                .inner()
+                .flush_user_by_spotify_id(&conn1, &user.spotify_id)
+                .await
+            {
+                error!(
+                    "Per-user flush during oauth_cb for {} failed: {err}",
+                    user.spotify_id
+                );
+            }
         },
     };
 
@@ -689,14 +763,33 @@ async fn validate_api_token(api_token_data: rocket::data::Data<'_>) -> Result<bo
     Ok(api_token == CONF.admin_api_token)
 }
 
+/// Bumps `last_update_time` to NOW() so a transient Spotify/DB failure doesn't tight-loop the
+/// cron on the same user. If the bump itself fails we accept the re-pick next tick.
+async fn bump_last_update_time_on_failure(user: &User, conn: &DbConn) {
+    if let Err(err) =
+        db_util::update_user_last_updated(user, conn, Utc::now().naive_utc()).await
+    {
+        error!(
+            "Failed to bump last_update_time for user {}: {err}",
+            user.spotify_id
+        );
+    }
+}
+
 async fn update_user_inner(
     conn: &DbConn,
+    active_updates: &State<ActiveUserUpdates>,
+    update_buffer: &UpdateBuffer,
     user_id: Option<String>,
-) -> Result<(), status::Custom<String>> {
+) -> Result<UpdateUserResult, status::Custom<String>> {
     use crate::schema::users::dsl::*;
 
-    // Get the least recently updated user
-    let mut user: User = match user_id.clone().map(|s| -> Result<String, _> {
+    let update_context = if user_id.is_some() {
+        db_util::RefreshUserAccessTokenContext::UserAction
+    } else {
+        db_util::RefreshUserAccessTokenContext::NaturalUpdate
+    };
+    let maybe_user: Option<User> = match user_id.clone().map(|s| -> Result<String, _> {
         let s = RawStr::new(s.as_str());
         match s.percent_decode() {
             Ok(decoded) => Ok(decoded.into()),
@@ -712,26 +805,71 @@ async fn update_user_inner(
                 )
             })?;
 
-            conn.run(move |conn| users.filter(spotify_id.eq(user_id)).first(conn))
-                .await
+            conn.run(move |conn| {
+                db_util::diesel_not_found_to_none(users.filter(spotify_id.eq(user_id)).first(conn))
+            })
+            .await
         },
-        None =>
-            conn.run(move |conn| users.order_by(last_update_time).first(conn))
-                .await,
+        None => {
+            // Exclude in-flight users — their `last_update_time` isn't advanced until flush, so
+            // without this the count-loop would pick the same user every iteration.
+            let in_flight_user_ids = update_buffer.in_flight_user_ids();
+            conn.run(move |conn| {
+                db_util::diesel_not_found_to_none(
+                    users
+                        .filter(auth_failed.eq(false))
+                        .filter(diesel::dsl::not(id.eq_any(in_flight_user_ids)))
+                        .order_by(last_update_time)
+                        .first(conn),
+                )
+            })
+            .await
+        },
     }
-    .map_err(|err| {
-        error!("{:?}", err);
-        status::Custom(
-            Status::InternalServerError,
-            "Error querying user to update from database".into(),
-        )
-    })?;
+    .map_err(|err| status::Custom(Status::InternalServerError, err))?;
+    let mut user = match maybe_user {
+        Some(user) => user,
+        None if user_id.is_some() =>
+            return Err(status::Custom(Status::NotFound, "User not found".into())),
+        None => {
+            let msg = String::from("No eligible users available for automatic update.");
+            info!("{}", msg);
+            return Ok(UpdateUserResult::Skipped(msg));
+        },
+    };
 
-    if let Some(res) = db_util::refresh_user_access_token(&conn, &mut user)
+    let _active_update_guard =
+        match ActiveUserUpdateGuard::try_acquire(active_updates, &user.spotify_id) {
+            Ok(guard) => guard,
+            Err(()) if user_id.is_some() => {
+                let msg = format!(
+                    "An update is already in progress for user {}.",
+                    user.spotify_id
+                );
+                info!("{}", msg);
+                return Err(status::Custom(Status::Conflict, msg));
+            },
+            Err(()) => {
+                let msg = format!(
+                    "Skipping user {} because an update is already in progress.",
+                    user.spotify_id
+                );
+                info!("{}", msg);
+                return Ok(UpdateUserResult::Skipped(msg));
+            },
+        };
+
+    if let Some(msg) = db_util::refresh_user_access_token(&conn, &mut user, update_context)
         .await
         .map_err(|err| status::Custom(Status::InternalServerError, err))?
     {
-        return Err(res);
+        // Cron: skip and try someone else. Explicit user-targeted call: caller wants to know
+        // the update didn't happen, so surface it as an error so the route increments
+        // `user_updates_failure_total` and returns non-200.
+        if user_id.is_some() {
+            return Err(status::Custom(Status::BadGateway, msg));
+        }
+        return Ok(UpdateUserResult::Skipped(msg));
     }
 
     // Only update the user if it's been longer than the minimum update interval
@@ -744,22 +882,14 @@ async fn update_user_inner(
             diff
         );
         info!("{}", msg);
-        return Err(status::Custom(Status::Ok, msg));
+        return Ok(UpdateUserResult::Skipped(msg));
     }
     info!("{diff} since last update; proceeding with update.");
 
-    if let Err(err) =
-        crate::db_util::update_user_last_updated(&user, &conn, Utc::now().naive_utc()).await
-    {
-        error!(
-            "Error updating user {:?} last updated time: {:?}",
-            user, err
-        );
-        return Err(status::Custom(
-            Status::InternalServerError,
-            "Error updating user last updated time".into(),
-        ));
-    }
+    // Claim the user so the cron doesn't re-pick them while we fetch — `last_update_time` won't
+    // advance until the buffer flushes. On crash the claim dies with the process, which is fine:
+    // we want the user re-picked on restart.
+    let claim = update_buffer.claim_user(user.id);
 
     let stats = match crate::spotify_api::fetch_cur_stats(&user).await {
         Ok(Some(stats)) => stats,
@@ -768,6 +898,7 @@ async fn update_user_inner(
                 "Error when fetching stats for user {:?}; no stats returned.",
                 user
             );
+            bump_last_update_time_on_failure(&user, &conn).await;
             return Err(status::Custom(
                 Status::InternalServerError,
                 "No data from Spotify API for that user".into(),
@@ -775,6 +906,7 @@ async fn update_user_inner(
         },
         Err(err) => {
             error!("Error fetching user stats: {:?}", err);
+            bump_last_update_time_on_failure(&user, &conn).await;
             return Err(status::Custom(
                 Status::InternalServerError,
                 "Error fetching user stats".into(),
@@ -782,13 +914,22 @@ async fn update_user_inner(
         },
     };
 
-    crate::spotify_api::store_stats_snapshot(&conn, &user, stats)
-        .await
-        .map_err(|err| status::Custom(Status::InternalServerError, err))?;
+    if let Err(err) =
+        crate::spotify_api::store_stats_snapshot(&conn, update_buffer, &user, stats).await
+    {
+        bump_last_update_time_on_failure(&user, &conn).await;
+        return Err(status::Custom(Status::InternalServerError, err));
+    }
+
+    // Hand the claim off to the flusher; it'll release on durable write.
+    claim.commit();
 
     info!("Successfully updated user {}", user.spotify_id);
 
-    Ok(())
+    Ok(UpdateUserResult::Updated(format!(
+        "Successfully updated user {}",
+        user.spotify_id
+    )))
 }
 
 /// This route is internal and hit by the cron job that is called to periodically update the stats
@@ -796,6 +937,8 @@ async fn update_user_inner(
 #[post("/update_user?<user_id>&<count>", data = "<api_token_data>")]
 pub(crate) async fn update_user(
     conn: DbConn,
+    active_updates: &State<ActiveUserUpdates>,
+    update_buffer: &State<Arc<UpdateBuffer>>,
     api_token_data: rocket::data::Data<'_>,
     user_id: Option<String>,
     count: Option<usize>,
@@ -808,25 +951,36 @@ pub(crate) async fn update_user(
     }
 
     if let Some(user_id) = user_id {
-        if let Err(status) = update_user_inner(&conn, Some(user_id)).await {
-            user_updates_failure_total().inc();
-            return Ok(status);
+        match update_user_inner(&conn, active_updates, update_buffer.inner(), Some(user_id)).await {
+            Ok(UpdateUserResult::Updated(msg)) => {
+                user_updates_success_total().inc();
+                return Ok(status::Custom(Status::Ok, msg));
+            },
+            Ok(UpdateUserResult::Skipped(msg)) => return Ok(status::Custom(Status::Ok, msg)),
+            Err(status) => {
+                user_updates_failure_total().inc();
+                return Ok(status);
+            },
         }
-        user_updates_success_total().inc();
-        return Ok(status::Custom(Status::Ok, "User updated".into()));
     }
 
     let count = count.unwrap_or(1);
     let mut success_count = 0usize;
     let mut fail_count = 0usize;
+    let mut skip_count = 0usize;
     for _ in 0..count {
-        let success = update_user_inner(&conn, None).await.is_ok();
-        if success {
-            user_updates_success_total().inc();
-            success_count += 1;
-        } else {
-            user_updates_failure_total().inc();
-            fail_count += 1;
+        match update_user_inner(&conn, active_updates, update_buffer.inner(), None).await {
+            Ok(UpdateUserResult::Updated(_)) => {
+                user_updates_success_total().inc();
+                success_count += 1;
+            },
+            Ok(UpdateUserResult::Skipped(_)) => {
+                skip_count += 1;
+            },
+            Err(_) => {
+                user_updates_failure_total().inc();
+                fail_count += 1;
+            },
         }
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     }
@@ -834,8 +988,8 @@ pub(crate) async fn update_user(
     Ok(status::Custom(
         Status::Ok,
         format!(
-            "Successfully updated {} user(s); failed to update {} user(s)",
-            success_count, fail_count
+            "Successfully updated {} user(s); failed to update {} user(s); skipped {} user(s)",
+            success_count, fail_count, skip_count
         ),
     ))
 }
@@ -2000,6 +2154,7 @@ pub(crate) async fn get_top_artists_internal_ids_for_user(
 pub(crate) async fn transfer_user_data_to_external_storage(
     api_token_data: rocket::Data<'_>,
     conn: DbConn,
+    update_buffer: &State<Arc<UpdateBuffer>>,
     user_id: String,
 ) -> Result<status::Custom<String>, String> {
     if !validate_api_token(api_token_data).await? {
@@ -2024,8 +2179,12 @@ pub(crate) async fn transfer_user_data_to_external_storage(
         );
     }
 
-    if let Err(err) =
-        crate::external_storage::upload::store_external_user_data(&conn, user.spotify_id).await
+    if let Err(err) = crate::external_storage::upload::store_external_user_data(
+        &conn,
+        update_buffer.inner(),
+        user.spotify_id,
+    )
+    .await
     {
         error!("Error storing external user data: {err}");
     }
@@ -2078,6 +2237,7 @@ pub(crate) async fn bulk_transfer_user_data_to_external_storage(
     conn2: DbConn,
     conn3: DbConn,
     conn4: DbConn,
+    update_buffer: &State<Arc<UpdateBuffer>>,
     user_count: u32,
     only_already_stored: Option<bool>,
     concurrency: Option<usize>,
@@ -2142,6 +2302,7 @@ pub(crate) async fn bulk_transfer_user_data_to_external_storage(
 
                 match crate::external_storage::upload::store_external_user_data(
                     &conn,
+                    update_buffer.inner(),
                     user.spotify_id.clone(),
                 )
                 .await

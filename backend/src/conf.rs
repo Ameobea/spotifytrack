@@ -16,6 +16,8 @@ pub(crate) struct Conf {
     pub min_update_interval: Duration,
     pub admin_api_token: String,
     pub telemetry_server_port: u16,
+    pub update_buffer_flush_interval: std::time::Duration,
+    pub update_buffer_max_pending_rows: usize,
 }
 
 impl Conf {
@@ -49,6 +51,22 @@ impl Conf {
                 .unwrap_or_else(|_| -> String { "4101".to_string() })
                 .parse()
                 .expect("Invalid value provided for `TELEMETRY_SERVER_PORT`; must be a u16"),
+            update_buffer_flush_interval: std::time::Duration::from_secs(
+                env::var("UPDATE_BUFFER_FLUSH_INTERVAL_SECONDS")
+                    .unwrap_or_else(|_| "500".to_string())
+                    .parse()
+                    .expect(
+                        "Invalid value provided for `UPDATE_BUFFER_FLUSH_INTERVAL_SECONDS`; must \
+                         be an unsigned integer",
+                    ),
+            ),
+            update_buffer_max_pending_rows: env::var("UPDATE_BUFFER_MAX_PENDING_ROWS")
+                .unwrap_or_else(|_| "500000".to_string())
+                .parse()
+                .expect(
+                    "Invalid value provided for `UPDATE_BUFFER_MAX_PENDING_ROWS`; must be an \
+                     unsigned integer",
+                ),
         }
     }
 

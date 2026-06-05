@@ -14,6 +14,7 @@ diesel::table! {
 diesel::table! {
     artist_stats_history (id) {
         id -> Bigint,
+        #[max_length = 191]
         spotify_id -> Varchar,
         followers -> Unsigned<Bigint>,
         popularity -> Unsigned<Bigint>,
@@ -25,6 +26,7 @@ diesel::table! {
     artists_genres (id) {
         id -> Bigint,
         artist_id -> Integer,
+        #[max_length = 191]
         genre -> Varchar,
     }
 }
@@ -47,6 +49,7 @@ diesel::table! {
 diesel::table! {
     spotify_items (id) {
         id -> Integer,
+        #[max_length = 191]
         spotify_id -> Varchar,
     }
 }
@@ -92,6 +95,7 @@ diesel::table! {
         id -> Bigint,
         creation_time -> Datetime,
         last_update_time -> Datetime,
+        #[max_length = 191]
         spotify_id -> Varchar,
         username -> Text,
         token -> Text,
@@ -99,6 +103,10 @@ diesel::table! {
         external_data_retrieved -> Bool,
         last_viewed -> Timestamp,
         last_external_data_store -> Timestamp,
+        auth_failed -> Bool,
+        consecutive_auth_failures -> Unsigned<Tinyint>,
+        last_auth_failure_at -> Nullable<Timestamp>,
+        last_auth_failure_reason -> Nullable<Text>,
     }
 }
 

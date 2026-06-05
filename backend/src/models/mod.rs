@@ -34,9 +34,13 @@ pub(crate) struct User {
     pub external_data_retrieved: bool,
     pub last_viewed: NaiveDateTime,
     pub last_external_data_store: NaiveDateTime,
+    pub auth_failed: bool,
+    pub consecutive_auth_failures: u8,
+    pub last_auth_failure_at: Option<NaiveDateTime>,
+    pub last_auth_failure_reason: Option<String>,
 }
 
-#[derive(Serialize, Insertable, Associations)]
+#[derive(Clone, Serialize, Insertable, Associations)]
 #[diesel(belongs_to(User))]
 #[diesel(table_name = track_rank_snapshots)]
 pub(crate) struct NewTrackHistoryEntry {
@@ -47,7 +51,7 @@ pub(crate) struct NewTrackHistoryEntry {
     pub ranking: u8,
 }
 
-#[derive(Serialize, Insertable, Associations)]
+#[derive(Clone, Serialize, Insertable, Associations)]
 #[diesel(belongs_to(User))]
 #[diesel(table_name = artist_rank_snapshots)]
 pub(crate) struct NewArtistHistoryEntry {
@@ -128,14 +132,14 @@ pub struct NewSpotifyIdMapping {
     pub spotify_id: String,
 }
 
-#[derive(Insertable)]
+#[derive(Clone, Insertable)]
 #[diesel(table_name = tracks_artists)]
 pub(crate) struct TrackArtistPair {
     pub track_id: i32,
     pub artist_id: i32,
 }
 
-#[derive(Insertable)]
+#[derive(Clone, Insertable)]
 #[diesel(table_name = artists_genres)]
 pub(crate) struct ArtistGenrePair {
     pub artist_id: i32,
@@ -435,10 +439,11 @@ impl<T: for<'de> Deserialize<'de> + std::fmt::Debug + Clone> SpotifyResponse<T> 
     }
 }
 
-impl<T: for<'de> Deserialize<'de> + std::fmt::Debug + Clone> std::ops::FromResidual
-    for SpotifyResponse<T>
+impl<T: for<'de> Deserialize<'de> + std::fmt::Debug + Clone>
+    std::ops::FromResidual<Result<std::convert::Infallible, String>> for SpotifyResponse<T>
 {
-    fn from_residual(err_msg: String) -> Self {
+    fn from_residual(residual: Result<std::convert::Infallible, String>) -> Self {
+        let Err(err_msg) = residual;
         SpotifyResponse::Error(SpotifyError {
             error: SpotifyErrorInner {
                 status: None,
@@ -452,7 +457,7 @@ impl<T: for<'de> Deserialize<'de> + std::fmt::Debug + Clone> std::ops::FromResid
 
 impl<T: for<'de> Deserialize<'de> + std::fmt::Debug + Clone> std::ops::Try for SpotifyResponse<T> {
     type Output = T;
-    type Residual = String;
+    type Residual = Result<std::convert::Infallible, String>;
 
     fn branch(self) -> std::ops::ControlFlow<Self::Residual, Self::Output> {
         match self {
@@ -460,11 +465,10 @@ impl<T: for<'de> Deserialize<'de> + std::fmt::Debug + Clone> std::ops::Try for S
             SpotifyResponse::Error(err) => {
                 error!("Error fetching data from Spotify API: {:?}", err);
 
-                std::ops::ControlFlow::Break(
-                    err.error
-                        .message
-                        .unwrap_or_else(|| -> String { "No error message supplied".into() }),
-                )
+                std::ops::ControlFlow::Break(Err(err
+                    .error
+                    .message
+                    .unwrap_or_else(|| -> String { "No error message supplied".into() })))
             },
         }
     }
@@ -482,6 +486,13 @@ pub(crate) struct AccessTokenResponse {
     pub access_token: String,
     pub token_type: String,
     pub expires_in: usize,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub(crate) struct SpotifyTokenErrorResponse {
+    pub error: String,
+    #[serde(default)]
+    pub error_description: Option<String>,
 }
 
 pub trait HasSpotifyId {

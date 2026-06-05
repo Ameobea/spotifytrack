@@ -68,9 +68,7 @@ impl WriteLockGuard {
 }
 
 impl Drop for WriteLockGuard {
-    fn drop(&mut self) {
-        WRITE_LOCKS.remove(&self.user_spotify_id);
-    }
+    fn drop(&mut self) { WRITE_LOCKS.remove(&self.user_spotify_id); }
 }
 
 /// Guard that cleans up the retrieve lock on drop, ensuring cleanup even on panic.
@@ -81,7 +79,10 @@ pub(crate) struct RetrieveLockGuard {
 
 impl RetrieveLockGuard {
     pub fn new(user_spotify_id: String, tx: watch::Sender<()>) -> Self {
-        Self { user_spotify_id, tx }
+        Self {
+            user_spotify_id,
+            tx,
+        }
     }
 }
 

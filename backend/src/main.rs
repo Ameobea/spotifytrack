@@ -8,7 +8,7 @@ extern crate serde_derive;
 #[macro_use]
 extern crate rocket;
 
-use std::time::Duration;
+use std::{sync::Arc, sync::Mutex as StdMutex, time::Duration};
 
 use artist_embedding::{init_artist_embedding_ctx, map_3d::get_packed_3d_artist_coords};
 use foundations::{
@@ -23,6 +23,7 @@ use foundations::{
     },
 };
 // use rocket_async_compression::Compression;
+use fnv::FnvHashSet;
 use tokio::sync::Mutex;
 
 pub mod artist_embedding;
@@ -40,6 +41,7 @@ pub mod shared_playlist_gen;
 pub mod spotify_api;
 pub mod spotify_token;
 pub mod stats;
+pub mod update_buffer;
 
 use crate::{cache::local_cache::init_spotify_id_map_cache, conf::CONF};
 
@@ -47,6 +49,8 @@ use self::spotify_token::SpotifyTokenData;
 
 #[rocket_sync_db_pools::database("spotify_homepage")]
 pub struct DbConn(diesel::MysqlConnection);
+
+pub struct ActiveUserUpdates(pub StdMutex<FnvHashSet<String>>);
 
 #[rocket::main]
 pub async fn main() {
@@ -131,13 +135,57 @@ pub async fn main() {
     //     get_packed_3d_artist_coords().await;
     // });
 
+    let update_buffer = Arc::new(update_buffer::UpdateBuffer::new(
+        CONF.update_buffer_max_pending_rows,
+    ));
+    let flusher_buffer = Arc::clone(&update_buffer);
+    let flush_interval = CONF.update_buffer_flush_interval;
+    // Shared cell for the fairing to stash the flusher's JoinHandle so we can await it after
+    // `launch()` returns — otherwise the runtime drops mid-flush and buffered rows are lost.
+    let flusher_handle: Arc<StdMutex<Option<tokio::task::JoinHandle<()>>>> =
+        Arc::new(StdMutex::new(None));
+    let flusher_handle_for_fairing = Arc::clone(&flusher_handle);
+
     let builder = rocket::build()
         .mount("/", all_routes.clone())
         .mount("/api/", all_routes)
         .manage(Mutex::new(SpotifyTokenData::new().await))
+        .manage(ActiveUserUpdates(StdMutex::new(FnvHashSet::default())))
+        .manage(update_buffer)
         .attach(DbConn::fairing())
-        .attach(cors::CorsFairing);
+        .attach(cors::CorsFairing)
+        .attach(rocket::fairing::AdHoc::on_liftoff(
+            "update buffer flusher",
+            move |rocket| {
+                Box::pin(async move {
+                    let conn = match DbConn::get_one(rocket).await {
+                        Some(conn) => conn,
+                        None => {
+                            error!(
+                                "Could not acquire a DbConn for the update buffer flusher; the \
+                                 buffer will accumulate forever until shutdown"
+                            );
+                            return;
+                        },
+                    };
+                    let shutdown = rocket.shutdown();
+                    let handle = tokio::spawn(update_buffer::run_flusher(
+                        flusher_buffer,
+                        conn,
+                        flush_interval,
+                        shutdown,
+                    ));
+                    *flusher_handle_for_fairing.lock().unwrap() = Some(handle);
+                })
+            },
+        ));
 
     builder.launch().await.expect("Error launching Rocket");
-    info!("Rocket exited cleanly");
+    info!("Rocket exited cleanly; waiting for update buffer flusher to finish final flush");
+    let handle = flusher_handle.lock().unwrap().take();
+    if let Some(handle) = handle {
+        if let Err(err) = handle.await {
+            error!("Update buffer flusher task panicked or was cancelled: {err}");
+        }
+    }
 }

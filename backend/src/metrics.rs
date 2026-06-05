@@ -52,6 +52,21 @@ pub(crate) mod metrics {
     }]
     pub fn external_user_data_export_time() -> TimeHistogram;
 
+    /// Total number of successful update buffer flushes
+    pub fn update_buffer_flush_success_total() -> Counter;
+
+    /// Total number of failed update buffer flushes
+    pub fn update_buffer_flush_failure_total() -> Counter;
+
+    /// Total number of rows dropped from the update buffer due to flush errors
+    pub fn update_buffer_dropped_rows_total(table: &'static str) -> Counter;
+
+    /// Distribution of update buffer flush times
+    #[ctor = HistogramBuilder {
+        buckets: &[0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 15.0, 30.0, 60.0, 120.0, 300.0],
+    }]
+    pub fn update_buffer_flush_time() -> TimeHistogram;
+
     /// Distribution of endpoint response times
     #[ctor = HistogramBuilder {
         buckets: &[0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.75, 1.0, 2.5, 5.0, 10.0, 15.0, 20.0, 30.0, 45.0, 60.0, 120.0, 300.0],

@@ -30,6 +30,7 @@ use super::{
     build_filenames, set_data_retrieved_flag_for_user, WriteLockGuard,
     EXTERNAL_STORAGE_ARROW_SCHEMA, RETRIEVE_LOCKS,
 };
+use crate::update_buffer::UpdateBuffer;
 
 async fn build_parquet_writer<'a>(
     buf: &'a mut Vec<u8>,
@@ -280,6 +281,7 @@ async fn store_external_user_data_inner(
 async fn store_external_user_data_critical_section(
     user_spotify_id: String,
     conn: &DbConn,
+    update_buffer: &UpdateBuffer,
 ) -> Result<(), String> {
     // If we're super unlucky and there's currently a read operation ongoing for this user, wait
     // for it to finish first.  We'll hold the write lock while we wait.
@@ -296,6 +298,17 @@ async fn store_external_user_data_critical_section(
         warn!("Waiting for read lock to be released for user {user_spotify_id} before writing...");
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     }
+
+    // Drain pending buffer rows for this user before reading the DB; otherwise they'd be lost
+    // when the local table is truncated post-upload. Abort on drain failure — the rows that
+    // did land in the DB will still get truncated, compounding the loss.
+    update_buffer
+        .flush_user_by_spotify_id(conn, &user_spotify_id)
+        .await
+        .map_err(|err| {
+            error!("Aborting external-storage upload for {user_spotify_id}: {err}");
+            err
+        })?;
 
     // To start, we first do a full retrieve for the user so that we can merge any existing external
     // data with the local data before writing it out.
@@ -374,6 +387,7 @@ async fn store_external_user_data_critical_section(
 
 pub(crate) async fn store_external_user_data(
     conn: &DbConn,
+    update_buffer: &UpdateBuffer,
     user_spotify_id: String,
 ) -> Result<(), String> {
     let Some(_guard) = WriteLockGuard::try_acquire(user_spotify_id.clone()) else {
@@ -382,46 +396,34 @@ pub(crate) async fn store_external_user_data(
     };
 
     // Guard ensures lock is released even if critical_section panics
-    store_external_user_data_critical_section(user_spotify_id, conn).await
+    store_external_user_data_critical_section(user_spotify_id, conn, update_buffer).await
 }
 
 async fn delete_local_user_data(conn: &DbConn, user_spotify_id: String) -> QueryResult<()> {
     let user_spotify_id_clone = user_spotify_id.clone();
     info!("Deleting local data for user {user_spotify_id} after upload to cold storage...");
     let fut = conn.run(move |conn| -> QueryResult<()> {
-        use crate::schema::{artist_rank_snapshots, track_rank_snapshots, users};
+        use crate::schema::users;
 
         let user_internal_id = users::table
             .filter(users::dsl::spotify_id.eq(user_spotify_id.clone()))
             .select(users::dsl::id)
             .first::<i64>(conn)?;
 
+        // Batched range deletes via the (user_id, update_time) index. Touches contiguous
+        // index pages per statement rather than the scattered pages an `id IN (...)`
+        // list would dirty, dropping per-row IOPS amplification by ~10x.
         let mut total_deleted_artist_entry_count = 0usize;
         loop {
-            // Delete in batches to try to avoid deadlocks and other issues with the table since
-            // this is a huge, busy table with lots of reads and writes all the time
-            let ids_to_delete = artist_rank_snapshots::table
-                .filter(artist_rank_snapshots::dsl::user_id.eq(user_internal_id))
-                .select(artist_rank_snapshots::dsl::id)
-                .limit(500)
-                .load::<i64>(conn)?;
-            if ids_to_delete.is_empty() {
+            let deleted = diesel::sql_query(
+                "DELETE FROM `artist_rank_snapshots` WHERE `user_id` = ? LIMIT 500",
+            )
+            .bind::<diesel::sql_types::BigInt, _>(user_internal_id)
+            .execute(conn)?;
+            if deleted == 0 {
                 break;
             }
-
-            match diesel::delete(
-                artist_rank_snapshots::table
-                    .filter(artist_rank_snapshots::dsl::id.eq_any(ids_to_delete)),
-            )
-            .execute(conn)
-            {
-                Ok(deleted_artist_entry_count) =>
-                    total_deleted_artist_entry_count += deleted_artist_entry_count,
-                Err(err) => error!(
-                    "Error deleting local artist data for user {user_spotify_id} after upload to \
-                     cold storage: {err}"
-                ),
-            }
+            total_deleted_artist_entry_count += deleted;
         }
         info!(
             "Deleted {total_deleted_artist_entry_count} local artist data entries for user \
@@ -430,30 +432,15 @@ async fn delete_local_user_data(conn: &DbConn, user_spotify_id: String) -> Query
 
         let mut total_deleted_track_entry_count = 0usize;
         loop {
-            // Delete in batches to try to avoid deadlocks and other issues with the table since
-            // this is a huge, busy table with lots of reads and writes all the time
-            let ids_to_delete = track_rank_snapshots::table
-                .filter(track_rank_snapshots::dsl::user_id.eq(user_internal_id))
-                .select(track_rank_snapshots::dsl::id)
-                .limit(500)
-                .load::<i64>(conn)?;
-            if ids_to_delete.is_empty() {
+            let deleted = diesel::sql_query(
+                "DELETE FROM `track_rank_snapshots` WHERE `user_id` = ? LIMIT 500",
+            )
+            .bind::<diesel::sql_types::BigInt, _>(user_internal_id)
+            .execute(conn)?;
+            if deleted == 0 {
                 break;
             }
-
-            match diesel::delete(
-                track_rank_snapshots::table
-                    .filter(track_rank_snapshots::dsl::id.eq_any(ids_to_delete)),
-            )
-            .execute(conn)
-            {
-                Ok(deleted_track_entry_count) =>
-                    total_deleted_track_entry_count += deleted_track_entry_count,
-                Err(err) => error!(
-                    "Error deleting local track data for user {user_spotify_id} after upload to \
-                     cold storage: {err}",
-                ),
-            }
+            total_deleted_track_entry_count += deleted;
         }
         info!(
             "Deleted {total_deleted_track_entry_count} local track data entries for user \
