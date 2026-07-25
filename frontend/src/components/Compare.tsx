@@ -7,6 +7,7 @@ import { fetchComparison } from 'src/api';
 import { ImageBoxGrid, Track as TrackCard } from 'src/Cards';
 import ArtistCard from 'src/Cards/ArtistCard';
 import { useUsername } from 'src/store/selectors';
+import { logEvent } from 'src/eventAnalytics';
 import { usePush } from 'src/util/hooks';
 import './Compare.css';
 import { mkFetchAndStoreRelatedArtistsForUser, RelatedArtistsGraph } from './RelatedArtistsGraph';
@@ -158,6 +159,7 @@ const CompareInner: React.FC<{ mobile: boolean }> = ({ mobile }) => {
                   <button
                     className="gen-playlist-button"
                     onClick={() => {
+                      logEvent('compare', 'gen_playlist_click', { user1, user2 });
                       const req = { user1_id: user1, user2_id: user2 };
                       const url = `/connect?playlist_perms=true&state=${encodeURIComponent(
                         JSON.stringify(req)

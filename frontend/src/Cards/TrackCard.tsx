@@ -2,6 +2,7 @@ import React, { Fragment, useEffect, useRef } from 'react';
 import { faPause, faPlay } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
+import { logEvent } from 'src/eventAnalytics';
 import { truncateWithElipsis } from 'src/util';
 
 import ImageBox from './ImageBox';
@@ -83,7 +84,12 @@ export const mkTrack = (ArtistStatsLink: React.ComponentType<{ artistId: string 
 
         <div
           className="play-pause-button-wrapper"
-          onClick={() => setPlaying(isPlaying ? false : previewUrl)}
+          onClick={() => {
+            if (!isPlaying && previewUrl) {
+              logEvent('track', 'preview_play');
+            }
+            setPlaying(isPlaying ? false : previewUrl);
+          }}
         >
           {previewUrl ? <FontAwesomeIcon icon={isPlaying ? faPause : faPlay} /> : null}
         </div>

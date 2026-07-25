@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import dayjs, { Dayjs } from 'dayjs';
 import { UnimplementedError } from 'ameo-utils';
@@ -7,6 +7,7 @@ import * as R from 'ramda';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faInfoCircle, faChevronLeft, faChevronRight } from '@fortawesome/free-solid-svg-icons';
 
+import { useSelector } from 'src/store';
 import { useUsername } from 'src/store/selectors';
 import { fetchTimelineEvents } from 'src/api';
 import { TimelineEvent, Image, TimelineData } from 'src/types';
@@ -15,7 +16,7 @@ import { truncateWithElipsis } from 'src/util';
 import DayStats from './DayStats';
 import { getProxiedImageURL } from 'src/util/index';
 import Tooltip from './Tooltip';
-import { getSentry } from 'src/sentry';
+import { logEvent } from 'src/eventAnalytics';
 
 export interface TimelineDay {
   date: number;
@@ -260,12 +261,44 @@ const NoHistoryWarning: React.FC = () => (
 
 const Timeline: React.FC<{ mobile: boolean }> = ({ mobile }) => {
   const { username } = useUsername();
+  const lastUpdateTime = useSelector(({ userStats }) =>
+    username ? userStats[username]?.last_update_time : undefined
+  );
 
   const [curMonth, setCurMonth] = useState(dayjs().startOf('month'));
   const { data: origData } = useQuery({
     queryKey: ['timeline', username, curMonth.toString()],
     queryFn: () => fetchTimelineEvents(username, curMonth.toString()),
   });
+
+  // Latch `userStartDate` since `origData` goes undefined while fetching each newly viewed month
+  const [userStartDate, setUserStartDate] = useState<string | null>(null);
+  useEffect(() => {
+    if (origData?.userStartDate) {
+      setUserStartDate(origData.userStartDate);
+    }
+  }, [origData?.userStartDate]);
+
+  const minMonth = useMemo(
+    () => (userStartDate ? dayjs(userStartDate).startOf('month') : null),
+    [userStartDate]
+  );
+  const maxMonth = useMemo(() => {
+    const now = dayjs();
+    const lastUpdate = lastUpdateTime ? dayjs(lastUpdateTime) : null;
+    return (lastUpdate && lastUpdate.isAfter(now) ? lastUpdate : now).startOf('month');
+  }, [lastUpdateTime]);
+
+  useEffect(() => {
+    if (minMonth && curMonth.isBefore(minMonth)) {
+      setCurMonth(minMonth);
+    } else if (curMonth.isAfter(maxMonth)) {
+      setCurMonth(maxMonth);
+    }
+  }, [minMonth, maxMonth, curMonth]);
+
+  const canGoBack = !minMonth || curMonth.isAfter(minMonth);
+  const canGoForward = curMonth.isBefore(maxMonth);
 
   const weeks = useMemo(() => {
     const month = curMonth.month();
@@ -364,12 +397,11 @@ const Timeline: React.FC<{ mobile: boolean }> = ({ mobile }) => {
       <div className="timeframe-controls">
         <button
           title="Back one month"
+          disabled={!canGoBack}
           onClick={() => {
             const newCurMonth = curMonth.subtract(1, 'month');
             setCurMonth(newCurMonth);
-            getSentry()?.captureMessage('timeframe arrow left', {
-              extra: { href: window.location.href, newCurMonth: newCurMonth.format('YYYY-MM') },
-            });
+            logEvent('timeline', 'month_nav', { dir: 'prev', month: newCurMonth.format('YYYY-MM') });
           }}
         >
           <FontAwesomeIcon icon={faChevronLeft} size="sm" />
@@ -377,12 +409,11 @@ const Timeline: React.FC<{ mobile: boolean }> = ({ mobile }) => {
         <div className="cur-month">{curMonth.format('MMMM YYYY')}</div>
         <button
           title="Forward one month"
+          disabled={!canGoForward}
           onClick={() => {
             const newCurMonth = curMonth.add(1, 'month');
             setCurMonth(newCurMonth);
-            getSentry()?.captureMessage('timeframe arrow right', {
-              extra: { href: window.location.href, newCurMonth: newCurMonth.format('YYYY-MM') },
-            });
+            logEvent('timeline', 'month_nav', { dir: 'next', month: newCurMonth.format('YYYY-MM') });
           }}
         >
           <FontAwesomeIcon icon={faChevronRight} size="sm" />

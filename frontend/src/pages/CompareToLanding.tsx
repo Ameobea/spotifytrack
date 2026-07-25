@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 
+import { logEvent } from 'src/eventAnalytics';
 import { useUsername } from 'src/store/selectors';
 import { colors } from 'src/style';
 import './CompareToLanding.css';
@@ -40,7 +41,12 @@ const CompareToLanding: React.FC = () => {
           <Link
             to={`/connect?state=${encodeURIComponent(JSON.stringify({ compare_to: username }))}`}
           >
-            <button className="big-button">Connect to Spotify</button>
+            <button
+              className="big-button"
+              onClick={() => logEvent('oauth', 'connect_click', { from: 'compare_landing' })}
+            >
+              Connect to Spotify
+            </button>
           </Link>
         </div>
       </div>

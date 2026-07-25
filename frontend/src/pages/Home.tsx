@@ -5,7 +5,7 @@ import 'react-responsive-carousel/lib/styles/carousel.min.css';
 
 import './Home.css';
 import '../components/BigButton.css';
-import { getSentry } from 'src/sentry';
+import { logEvent } from 'src/eventAnalytics';
 
 const Home: React.FC = () => (
   <main className="home">
@@ -26,11 +26,15 @@ const Home: React.FC = () => (
 
     <div className="buttons-container">
       <Link to="/connect">
-        <button className="big-button">Connect to Spotify</button>
+        <button className="big-button" onClick={() => logEvent('oauth', 'connect_click', { from: 'home' })}>
+          Connect to Spotify
+        </button>
       </Link>
 
       <Link to="/stats/ameobea">
-        <button className="big-button">View Example User Profile</button>
+        <button className="big-button" onClick={() => logEvent('home', 'view_example_click')}>
+          View Example User Profile
+        </button>
       </Link>
     </div>
 
@@ -40,7 +44,7 @@ const Home: React.FC = () => (
       autoPlay
       infiniteLoop
       interval={5338}
-      onClickThumb={() => getSentry()?.captureMessage('Home page carousel thumb click')}
+      onClickThumb={() => logEvent('home', 'carousel_thumb_click')}
     >
       <div className="example-image">
         <img

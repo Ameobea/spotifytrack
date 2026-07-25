@@ -22,7 +22,7 @@ import './Stats.css';
 import { colors } from 'src/style';
 import CompareLanding from './CompareLanding';
 import ShareIcons from 'src/components/ShareIcons';
-import { getSentry } from 'src/sentry';
+import { logEvent } from 'src/eventAnalytics';
 import '../components/BigButton.css';
 
 const musicGalaxyScreenshot = '/music-galaxy.jpg';
@@ -182,7 +182,7 @@ const StatsDetailsTabs: React.FC<StatsDetailsTabsProps> = ({ selectedTab, setSel
       hash: `#${value}`,
     });
 
-    getSentry()?.captureMessage('stats page tab select', { extra: { username, newTab: value } });
+    logEvent('stats', 'tab_select', { tab: value, profile: username.username });
   };
 
   return (
@@ -203,8 +203,7 @@ const MusicGalaxyPromo: React.FC = () => {
   const { username, displayName } = useUsername();
   const musicGalaxyURL = `https://galaxy.spotifytrack.net/?spotifyID=${username ?? ''}`;
 
-  const handleGalaxyClick = () =>
-    getSentry()?.captureMessage('music galaxy link click', { extra: { username, displayName } });
+  const handleGalaxyClick = () => logEvent('stats', 'music_galaxy_launch', { profile: username });
 
   return (
     <div className="music-galaxy-launcher">
@@ -321,9 +320,7 @@ const StatsDetailsInner: React.FC<{ stats: UserStats; mobile: boolean }> = ({ st
                 <RelatedArtistsGraphTooltip
                   onClick={() => {
                     setRelatedArtistsGraphModalOpen(true);
-                    getSentry()?.captureMessage("related artists what's this tooltip click", {
-                      extra: { href: window.location.href },
-                    });
+                    logEvent('graph', 'whats_this_click');
                   }}
                 />
                 <RelatedArtistsGraphForUser username={username} />

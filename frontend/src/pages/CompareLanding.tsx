@@ -3,6 +3,7 @@ import { IconButton } from '@rmwc/icon-button';
 import '@rmwc/icon-button/styles';
 
 import { SITE_URL } from 'src/conf';
+import { logEvent } from 'src/eventAnalytics';
 import { useUsername } from 'src/store/selectors';
 import './CompareLanding.css';
 
@@ -34,6 +35,7 @@ const CopyCompareLink: React.FC = () => {
               marginTop: 3,
             }}
             onClick={() => {
+              logEvent('compare', 'copy_link');
               navigator.clipboard.writeText(compareLink);
             }}
             ripple={{ accent: true }}

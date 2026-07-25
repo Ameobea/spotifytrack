@@ -1,7 +1,7 @@
 import dayjs from 'dayjs';
 
 import { API_BASE_URL } from 'src/conf';
-import { getSentry } from 'src/sentry';
+import { logEvent } from 'src/eventAnalytics';
 import { Artist, RelatedArtistsGraphRes, TimeFrames, TimelineData, Track } from 'src/types';
 import { makeRetryable, retryAsync } from 'src/util2';
 
@@ -86,13 +86,7 @@ export const fetchRelatedArtists = makeRetryable(
   async (artistID: string): Promise<RelatedArtistsGraphRes | null> => {
     const url = getUrl(`/related_artists/${artistID}`);
 
-    try {
-      getSentry()?.captureMessage('Load related artists via double click', {
-        extra: { href: window.location.href, artistID },
-      });
-    } catch (err) {
-      //
-    }
+    logEvent('graph', 'expand_artist', { artistID });
 
     return getJsonEndpoint(url);
   }

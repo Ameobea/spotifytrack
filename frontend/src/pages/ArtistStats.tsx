@@ -12,10 +12,15 @@ import Loading from 'src/components/Loading';
 import { LineChart, BarChart } from 'src/components/Charts';
 import { ArtistCards } from 'src/pages/Stats';
 import './ArtistStats.css';
+import { logEvent } from 'src/eventAnalytics';
 import { useUsername } from 'src/store/selectors';
 
 const GenreChip: React.FC<{ username: string; genre: string }> = ({ username, genre }) => (
-  <Link className="genre-chip-link" to={`/stats/${username}/genre/${genre}/`}>
+  <Link
+    className="genre-chip-link"
+    to={`/stats/${username}/genre/${genre}/`}
+    onClick={() => logEvent('artist', 'genre_chip_click', { genre })}
+  >
     <div className="genre-chip">{genre}</div>
   </Link>
 );

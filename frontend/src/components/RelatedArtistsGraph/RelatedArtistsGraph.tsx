@@ -10,9 +10,10 @@ import { withMobileProp } from 'ameo-utils/dist/responsive';
 
 import { fetchRelatedArtists, fetchRelatedArtistsForUser } from 'src/api';
 import { actionCreators, dispatch, getState } from 'src/store';
+import * as conf from './conf';
 import './RelatedArtistsGraph.css';
 import { Artist } from 'src/types';
-import type RelatedArtistsGraphCanvasRenderer from './CanvasRenderer';
+import type RelatedArtistsGraphCanvasRenderer from './WebGLRenderer';
 
 type RelatedArtists = { [artistID: string]: { userIndex?: number; relatedArtistIDs: string[] } };
 
@@ -25,7 +26,7 @@ interface RelatedArtistsGraphProps {
 
 const WebColaModule = new AsyncOnce(() => import('webcola'));
 const RelatedArtistsGraphCanvasRendererModule = new AsyncOnce(() =>
-  import('./CanvasRenderer').then((mod) => mod['default'])
+  import('./WebGLRenderer').then((mod) => mod['default'])
 );
 
 export interface Node {
@@ -76,6 +77,7 @@ export class RelatedArtistsRenderer {
    */
   private backwardsConnections: Map<string, Set<string>> = new Map();
   private canvasRenderer: RelatedArtistsGraphCanvasRenderer;
+  private isMobile: boolean;
 
   /**
    * Populates forwards and backwards connection databases with related artists data
@@ -219,6 +221,10 @@ export class RelatedArtistsRenderer {
 
     this.canvasRenderer.addNodes(newNodes, R.clone(newLinks));
 
+    const useMidpoint =
+      this.isMobile || this.nodes.length > conf.MIDPOINT_INTEGRATOR_NODE_THRESHOLD;
+    this.webcolaInst.integrator(useMidpoint ? 1 : 0);
+
     if (isFirst) {
       this.webcolaInst.start(10, 15, 20);
     }
@@ -234,8 +240,10 @@ export class RelatedArtistsRenderer {
     width: number,
     height: number,
     canvas: HTMLCanvasElement,
-    relatedArtists: RelatedArtists | null | undefined
+    relatedArtists: RelatedArtists | null | undefined,
+    isMobile: boolean
   ) {
+    this.isMobile = isMobile;
     this.webcolaInst = new cola.Layout()
       .linkDistance(300)
       .symmetricDiffLinkLengths(25)
@@ -246,8 +254,7 @@ export class RelatedArtistsRenderer {
       height,
       width,
       this.webcolaInst,
-      this,
-      () => getState().entityStore.artists
+      this
     );
 
     if (relatedArtists) {
@@ -331,8 +338,7 @@ export class RelatedArtistsRenderer {
   }
 
   public setSize(width: number, height: number) {
-    // console.log({ width, height });
-    // TODO
+    this.canvasRenderer.setSize(width, height);
   }
 }
 
@@ -374,10 +380,11 @@ const RelatedArtistsGraphInner: React.FC<RelatedArtistsGraphProps> = ({
         width,
         height,
         canvas.current,
-        latestRelatedArtists.current
+        latestRelatedArtists.current,
+        mobile
       );
     });
-  }, [height, width]);
+  }, [height, width, mobile]);
   useEffect(() => {
     if (!inst.current) {
       return;
