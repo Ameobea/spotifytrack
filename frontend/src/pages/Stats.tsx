@@ -15,6 +15,7 @@ import ArtistStats from 'src/pages/ArtistStats';
 import GenreStats from 'src/pages/GenreStats';
 import Loading from 'src/components/Loading';
 import GenresTreemap from 'src/components/GenresTreemap';
+import ReconnectBanner from 'src/components/ReconnectBanner';
 import { useUsername } from 'src/store/selectors';
 import Timeline from 'src/components/Timeline';
 import { RelatedArtistsGraphForUser } from 'src/components/RelatedArtistsGraph';
@@ -303,6 +304,7 @@ const StatsDetailsInner: React.FC<{ stats: UserStats; mobile: boolean }> = ({ st
           </div>
           {selectedTab === StatsDetailsTab.Compare ? null : <ShareIcons />}
         </div>
+        {stats.auth_failed ? <ReconnectBanner /> : null}
         <StatsDetailsTabs selectedTab={selectedTab} setSelectedTab={setSelectedTab} />
       </div>
 
@@ -422,7 +424,7 @@ const Stats: React.FC = () => {
     if (!fetchedUserStats) {
       return;
     }
-    const { last_update_time, tracks, artists } = fetchedUserStats;
+    const { last_update_time, auth_failed, tracks, artists } = fetchedUserStats;
 
     dispatch(
       actionCreators.entityStore.ADD_TRACKS(
@@ -446,6 +448,7 @@ const Stats: React.FC = () => {
     dispatch(
       actionCreators.userStats.ADD_USER_STATS(username, {
         last_update_time,
+        auth_failed,
         // TODO: Fix this type hackery when you're less lazy and ennui-riddled
         tracks: mapObj(tracks as any as { [key: string]: { id: string }[] }, (tracks) =>
           tracks.map(R.prop('id'))

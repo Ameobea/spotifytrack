@@ -26,3 +26,21 @@ export const DEFAULT_NODE_DIM = 0.86;
 export const RK4_UPGRADE_TICK_MS = 2.5;
 export const RK4_DOWNGRADE_TICK_MS = 6;
 export const ADAPT_WINDOW = 48;
+
+/**
+ * Until the user takes control of the camera, it follows the graph's center of mass as the
+ * layout settles.
+ */
+export const AUTO_CENTER_LERP = 0.12;
+
+/**
+ * Auto-framing zoom sits between the default zoom and a full fit, falling off logarithmically
+ * in the graph's overflow past the viewport: bigger graphs keep opening the view up, but with
+ * diminishing returns, so a huge graph ends up cropped rather than shrunk to an illegible
+ * speck.  The extent driving it is the node bounding box capped at `AUTO_ZOOM_OUTLIER_SIGMAS`
+ * standard deviations so a stray far-flung component can't dominate.
+ */
+export const AUTO_ZOOM_PADDING_PX = 28;
+export const AUTO_ZOOM_FALLOFF = 0.3;
+export const AUTO_ZOOM_MIN_NODE_DEVICE_PX = 10;
+export const AUTO_ZOOM_OUTLIER_SIGMAS = 2.75;

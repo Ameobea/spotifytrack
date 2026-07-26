@@ -1,0 +1,62 @@
+.reconnect-banner {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  max-width: 1020px;
+  margin: 0 auto 14px auto;
+  padding: 12px 16px;
+  border: 1px solid #7a4a12;
+  background-color: #241705;
+}
+
+.reconnect-banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+.reconnect-banner-title {
+  font-weight: 600;
+  color: #ffb15d;
+}
+
+.reconnect-banner-button {
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+  padding: 9px 18px;
+  color: #ddd;
+  background-color: #0b0b0b;
+  border: 2px solid #444;
+  outline: none;
+  cursor: pointer;
+}
+
+.reconnect-banner-button:hover {
+  background-color: #141414;
+  border-color: #27b14c;
+}
+
+@media only screen and (min-width: 801px) {
+  .reconnect-banner-button {
+    margin-left: 28px;
+  }
+}
+
+@media only screen and (max-width: 800px) {
+  .reconnect-banner {
+    max-width: calc(100vw - 16px);
+    margin-left: 8px;
+    margin-right: 8px;
+    font-size: 15px;
+  }
+
+  .reconnect-banner-button {
+    width: 100%;
+  }
+}

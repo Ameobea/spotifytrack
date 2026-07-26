@@ -254,6 +254,11 @@ export default class RelatedArtistsGraphWebGLRenderer {
   private staticDirty = true;
   private cameraDirty = true;
   private isTicking = false;
+  /** the layout has produced real positions; before this every node still sits at the origin */
+  private hasLayoutPositions = false;
+  private autoCam = true;
+  private autoCamSnapped = false;
+  private autoCamCenter = { x: 0, y: 0 };
   private contextLost = false;
   private destroyed = false;
 
@@ -313,6 +318,7 @@ export default class RelatedArtistsGraphWebGLRenderer {
     // Hack for the embedded standalone graph which is locked to my personal artists
     if (window.location.href.includes('graph.html')) {
       this.cam = { tx: 575, ty: 400, scale: 0.82 };
+      this.autoCam = false;
     }
 
     canvas.addEventListener('webglcontextlost', (evt) => {
@@ -422,7 +428,16 @@ export default class RelatedArtistsGraphWebGLRenderer {
       gl.bindVertexArray(null);
       return vao;
     };
-    const attr = (buf: WebGLBuffer, loc: number, size: number, divisor: number, type = gl.FLOAT, normalized = false, stride = 0, offset = 0) => {
+    const attr = (
+      buf: WebGLBuffer,
+      loc: number,
+      size: number,
+      divisor: number,
+      type: typeof gl.FLOAT | typeof gl.UNSIGNED_BYTE = gl.FLOAT,
+      normalized = false,
+      stride = 0,
+      offset = 0
+    ) => {
       gl.bindBuffer(gl.ARRAY_BUFFER, buf);
       gl.enableVertexAttribArray(loc);
       gl.vertexAttribPointer(loc, size, type, normalized, stride, offset);
@@ -470,6 +485,10 @@ export default class RelatedArtistsGraphWebGLRenderer {
     this.cssHeight = height;
     this.canvas.width = Math.round(width * RESOLUTION);
     this.canvas.height = Math.round(height * RESOLUTION);
+    if (this.autoCam && this.autoCamSnapped) {
+      this.cam.tx = width / 2 - this.autoCamCenter.x * this.cam.scale;
+      this.cam.ty = height / 2 - this.autoCamCenter.y * this.cam.scale;
+    }
     this.cameraDirty = true;
   }
 
@@ -486,8 +505,6 @@ export default class RelatedArtistsGraphWebGLRenderer {
     this.positionsDirty = true;
     this.colorsDirty = true;
   }
-
-  // ------------------------------------------------------------------ selection
 
   private setSelectedArtistID(newSelectedArtistID: string | null) {
     this.selectedArtistID = newSelectedArtistID;
@@ -543,8 +560,6 @@ export default class RelatedArtistsGraphWebGLRenderer {
       ? conf.DULL_PRIMARY_NODE_COLOR[R.isNil(node.userIndex) ? 0 : node.userIndex + 1]
       : conf.DULL_SECONDARY_NODE_COLOR;
   }
-
-  // ------------------------------------------------------------------ buffers
 
   private uploadStatic() {
     const gl = this.gl;
@@ -667,7 +682,80 @@ export default class RelatedArtistsGraphWebGLRenderer {
     }
   }
 
-  // ------------------------------------------------------------------ render
+  /**
+   * The layout only centers the graph inside the canvas box at the end of `start()`; the
+   * settling ticks afterwards are free stress majorization which doesn't preserve the centroid,
+   * so a large graph walks out of frame within a second or two.  Keep the center of mass under
+   * the viewport center until the user takes over: snap on the first laid-out frame, then ease.
+   */
+  private updateAutoCamera() {
+    const n = this.nodes.length;
+    let sumX = 0;
+    let sumY = 0;
+    let sumXX = 0;
+    let sumYY = 0;
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (let i = 0; i < n; i++) {
+      const { node, pos } = this.nodes[i];
+      const halfW = node.width / 2;
+      sumX += pos.x;
+      sumY += pos.y;
+      sumXX += pos.x * pos.x;
+      sumYY += pos.y * pos.y;
+      minX = Math.min(minX, pos.x - halfW);
+      maxX = Math.max(maxX, pos.x + halfW);
+      minY = Math.min(minY, pos.y - PILL_HALF_H);
+      maxY = Math.max(maxY, pos.y + PILL_HALF_H);
+    }
+
+    const cx = sumX / n;
+    const cy = sumY / n;
+    const sigmaX = Math.sqrt(Math.max(sumXX / n - cx * cx, 0));
+    const sigmaY = Math.sqrt(Math.max(sumYY / n - cy * cy, 0));
+    const targetScale = this.autoZoom(
+      Math.min(Math.max(cx - minX, maxX - cx), conf.AUTO_ZOOM_OUTLIER_SIGMAS * sigmaX),
+      Math.min(Math.max(cy - minY, maxY - cy), conf.AUTO_ZOOM_OUTLIER_SIGMAS * sigmaY)
+    );
+
+    if (this.autoCamSnapped) {
+      const t = conf.AUTO_CENTER_LERP;
+      this.autoCamCenter.x += (cx - this.autoCamCenter.x) * t;
+      this.autoCamCenter.y += (cy - this.autoCamCenter.y) * t;
+      this.cam.scale *= Math.pow(targetScale / this.cam.scale, t);
+    } else {
+      this.autoCamCenter = { x: cx, y: cy };
+      this.cam.scale = targetScale;
+      this.autoCamSnapped = true;
+    }
+
+    this.cam.tx = this.cssWidth / 2 - this.autoCamCenter.x * this.cam.scale;
+    this.cam.ty = this.cssHeight / 2 - this.autoCamCenter.y * this.cam.scale;
+    this.cameraDirty = true;
+  }
+
+  /**
+   * `INITIAL_ZOOM` for anything that already fits, decaying as `1 / (1 + k * ln(overflow))` past
+   * that.  Floored at the zoom where a node pill stops resolving on the display: the canvas is
+   * always backed at `RESOLUTION`, so effective device resolution is the lesser of that and dpr.
+   */
+  private autoZoom(halfW: number, halfH: number): number {
+    const availW = Math.max(this.cssWidth - conf.AUTO_ZOOM_PADDING_PX * 2, 32);
+    const availH = Math.max(this.cssHeight - conf.AUTO_ZOOM_PADDING_PX * 2, 32);
+    const fit = Math.min(availW / (halfW * 2), availH / (halfH * 2));
+    if (fit >= INITIAL_ZOOM) {
+      return INITIAL_ZOOM;
+    }
+
+    const floor = Math.min(
+      Math.max(fit, conf.AUTO_ZOOM_MIN_NODE_DEVICE_PX / (PILL_HALF_H * 2)),
+      INITIAL_ZOOM
+    );
+    const falloff = 1 + conf.AUTO_ZOOM_FALLOFF * Math.log(INITIAL_ZOOM / fit);
+    return Math.max(INITIAL_ZOOM / falloff, floor);
+  }
 
   private tickAndRender() {
     if (this.contextLost) {
@@ -685,10 +773,16 @@ export default class RelatedArtistsGraphWebGLRenderer {
           this.nodes[i].pos.y = layoutNodes[i].y;
         }
         this.positionsDirty = true;
+        this.hasLayoutPositions = true;
+        if (this.autoCam && this.nodes.length > 0) {
+          this.updateAutoCamera();
+        }
       }
     }
 
-    if (this.nodes.length === 0) {
+    // nothing worth showing until the layout has run at least once; every node is at the
+    // origin until then, and the initial frame should be the auto-framed one
+    if (this.nodes.length === 0 || !this.hasLayoutPositions) {
       return;
     }
     const needsRender =
@@ -713,8 +807,18 @@ export default class RelatedArtistsGraphWebGLRenderer {
       gl.uniform1f(u.uScale, this.cam.scale);
       gl.uniform2f(u.uRes, this.cssWidth, this.cssHeight);
     };
-    const setColorUniform = (u: Record<string, WebGLUniformLocation>, hex: number, alpha: number) => {
-      gl.uniform4f(u.uColor, ((hex >> 16) & 0xff) / 255, ((hex >> 8) & 0xff) / 255, (hex & 0xff) / 255, alpha);
+    const setColorUniform = (
+      u: Record<string, WebGLUniformLocation>,
+      hex: number,
+      alpha: number
+    ) => {
+      gl.uniform4f(
+        u.uColor,
+        ((hex >> 16) & 0xff) / 255,
+        ((hex >> 8) & 0xff) / 255,
+        (hex & 0xff) / 255,
+        alpha
+      );
     };
 
     // edges
@@ -771,8 +875,6 @@ export default class RelatedArtistsGraphWebGLRenderer {
     gl.bindVertexArray(null);
   }
 
-  // ------------------------------------------------------------------ input
-
   private screenToWorld(sx: number, sy: number): { x: number; y: number } {
     return {
       x: (sx - this.cam.tx) / this.cam.scale,
@@ -813,6 +915,7 @@ export default class RelatedArtistsGraphWebGLRenderer {
       const pos = this.eventPos(evt);
       this.pointers.set(evt.pointerId, pos);
       canvas.setPointerCapture(evt.pointerId);
+      this.autoCam = false;
 
       if (this.pointers.size > 1) {
         // second finger: switch to pinch, abort any drag
@@ -934,6 +1037,7 @@ export default class RelatedArtistsGraphWebGLRenderer {
   }
 
   private zoomAround(sx: number, sy: number, factor: number) {
+    this.autoCam = false;
     const newScale = Math.min(Math.max(this.cam.scale * factor, 0.02), 10);
     const realFactor = newScale / this.cam.scale;
     this.cam.tx = sx - (sx - this.cam.tx) * realFactor;

@@ -27,6 +27,7 @@ export const fetchUserStats = (username: string) =>
   retryAsync(() =>
     getJsonEndpoint<{
       last_update_time: string;
+      auth_failed: boolean;
       tracks: TimeFrames<Track>;
       artists: TimeFrames<Artist>;
     } | null>(getUrl(`/stats/${username}`))

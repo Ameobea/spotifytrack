@@ -61,6 +61,7 @@ export interface ArtistStats {
 
 export type UserStats = Partial<{
   last_update_time: string;
+  auth_failed: boolean;
   tracks: TimeFrames<string>;
   artists: TimeFrames<string>;
   artistStats: {

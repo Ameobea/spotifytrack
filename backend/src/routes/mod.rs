@@ -126,6 +126,7 @@ pub(crate) async fn get_current_stats(
     mark(tok, "Fetched artist and track stats");
 
     let mut snapshot = StatsSnapshot::new(user.last_update_time);
+    snapshot.auth_failed = user.auth_failed;
 
     for (timeframe_id, artist) in artist_stats {
         snapshot.artists.add_item_by_id(timeframe_id, artist);

@@ -249,6 +249,7 @@ impl<'a, T: Serialize> TimeFrames<T> {
 #[derive(Serialize)]
 pub(crate) struct StatsSnapshot {
     pub last_update_time: NaiveDateTime,
+    pub auth_failed: bool,
     pub tracks: TimeFrames<Track>,
     pub artists: TimeFrames<Artist>,
 }
@@ -257,6 +258,7 @@ impl StatsSnapshot {
     pub(crate) fn new(last_update_time: NaiveDateTime) -> Self {
         StatsSnapshot {
             last_update_time,
+            auth_failed: false,
             tracks: TimeFrames::default(),
             artists: TimeFrames::default(),
         }
