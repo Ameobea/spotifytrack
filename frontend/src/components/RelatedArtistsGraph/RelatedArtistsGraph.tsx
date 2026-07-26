@@ -159,7 +159,7 @@ export class RelatedArtistsRenderer {
         return !exists;
       })
       .map((artistID) => ({ artistID }));
-    const newNodes = this.buildNodes(nodesToBuild, false);
+    const newNodes = this.buildNodes(nodesToBuild, false, node);
 
     const newLinks = nodesToBuild
       .flatMap(({ artistID }) => {
@@ -227,9 +227,11 @@ export class RelatedArtistsRenderer {
 
     if (isFirst) {
       this.webcolaInst.start(10, 15, 20);
+    } else {
+      // `centerGraph` re-packs the disconnected components and recenters them on the canvas box,
+      // which teleports the whole graph out from under the camera on every expansion
+      this.webcolaInst.start(0, 0, 0, 0, true, false);
     }
-
-    if (!isFirst) this.webcolaInst.start();
   }
 
   constructor(
@@ -292,16 +294,33 @@ export class RelatedArtistsRenderer {
 
   private buildNodes(
     artistIDs: { artistID: string; userIndex?: number }[],
-    isPrimary: boolean
+    isPrimary: boolean,
+    origin?: { x: number; y: number }
   ): Node[] {
     const canvas = document.createElement('canvas');
     const ctx2d = canvas.getContext('2d')!;
     ctx2d.font = '12px "PT Sans"';
     const allArtists = getState().entityStore.artists;
 
-    return artistIDs.map(({ artistID, userIndex }) =>
-      RelatedArtistsRenderer.buildNode(allArtists, ctx2d, artistID, isPrimary, userIndex)
-    );
+    return artistIDs.map(({ artistID, userIndex }, i) => {
+      const node = RelatedArtistsRenderer.buildNode(
+        allArtists,
+        ctx2d,
+        artistID,
+        isPrimary,
+        userIndex
+      );
+      if (origin) {
+        // Seeding these at the world origin instead makes them streak across the whole graph as
+        // the layout pulls them in.  Golden angle + sqrt radius spreads them evenly regardless
+        // of how many came back.
+        const theta = i * 2.39996;
+        const radius = conf.EXPANSION_SEED_RADIUS * Math.sqrt(i + 1);
+        node.x = origin.x + Math.cos(theta) * radius;
+        node.y = origin.y + Math.sin(theta) * radius;
+      }
+      return node;
+    });
   }
 
   public setRelatedArtists(relatedArtists: RelatedArtists) {

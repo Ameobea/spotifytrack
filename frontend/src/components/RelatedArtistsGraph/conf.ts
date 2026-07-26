@@ -44,3 +44,6 @@ export const AUTO_ZOOM_PADDING_PX = 28;
 export const AUTO_ZOOM_FALLOFF = 0.3;
 export const AUTO_ZOOM_MIN_NODE_DEVICE_PX = 10;
 export const AUTO_ZOOM_OUTLIER_SIGMAS = 2.75;
+
+/** Pitch of the sunflower spiral that expanded-in nodes are seeded onto around their parent */
+export const EXPANSION_SEED_RADIUS = 40;
