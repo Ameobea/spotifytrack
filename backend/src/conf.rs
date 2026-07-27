@@ -38,7 +38,7 @@ impl Conf {
             tracks_cache_hash_name: "tracks".into(),
             min_update_interval: Duration::seconds(
                 env::var("MIN_UPDATE_INTERVAL_SECONDS")
-                    .unwrap_or_else(|_| -> String { (60 * 60 * 6).to_string() })
+                    .unwrap_or_else(|_| -> String { (60 * 60 * 18).to_string() })
                     .parse()
                     .expect(
                         "Invalid value provided for `MIN_UPDATE_INTERVAL_SECONDS`; must be an \

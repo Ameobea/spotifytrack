@@ -815,10 +815,15 @@ async fn update_user_inner(
             // Exclude in-flight users — their `last_update_time` isn't advanced until flush, so
             // without this the count-loop would pick the same user every iteration.
             let in_flight_user_ids = update_buffer.in_flight_user_ids();
+            // The interval is enforced here rather than after fetching the user because a
+            // not-yet-due user stays the oldest row indefinitely; checking later would re-pick
+            // and re-refresh their Spotify token every iteration until they aged out.
+            let update_cutoff = Utc::now().naive_utc() - CONF.min_update_interval;
             conn.run(move |conn| {
                 db_util::diesel_not_found_to_none(
                     users
                         .filter(auth_failed.eq(false))
+                        .filter(last_update_time.lt(update_cutoff))
                         .filter(diesel::dsl::not(id.eq_any(in_flight_user_ids)))
                         .order_by(last_update_time)
                         .first(conn),
@@ -873,18 +878,7 @@ async fn update_user_inner(
         return Ok(UpdateUserResult::Skipped(msg));
     }
 
-    // Only update the user if it's been longer than the minimum update interval
-    let min_update_interval_seconds = crate::conf::CONF.min_update_interval;
-    let now = chrono::Utc::now().naive_utc();
-    let diff = now - user.last_update_time;
-    if user_id.is_none() && diff < min_update_interval_seconds {
-        let msg = format!(
-            "{} since last update; not updating anything right now.",
-            diff
-        );
-        info!("{}", msg);
-        return Ok(UpdateUserResult::Skipped(msg));
-    }
+    let diff = Utc::now().naive_utc() - user.last_update_time;
     info!("{diff} since last update; proceeding with update.");
 
     // Claim the user so the cron doesn't re-pick them while we fetch — `last_update_time` won't
