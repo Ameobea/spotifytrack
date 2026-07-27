@@ -529,6 +529,7 @@ pub(crate) struct TimelineEvent {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct Timeline {
     pub events: Vec<TimelineEvent>,
     #[serde(skip_serializing_if = "Option::is_none")]
