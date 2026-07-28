@@ -50,6 +50,8 @@ use self::spotify_token::SpotifyTokenData;
 #[rocket_sync_db_pools::database("spotify_homepage")]
 pub struct DbConn(diesel::MysqlConnection);
 
+pub type DbPool = rocket_sync_db_pools::ConnectionPool<DbConn, diesel::MysqlConnection>;
+
 pub struct ActiveUserUpdates(pub StdMutex<FnvHashSet<String>>);
 
 #[rocket::main]
@@ -158,11 +160,15 @@ pub async fn main() {
             "update buffer flusher",
             move |rocket| {
                 Box::pin(async move {
-                    let conn = match DbConn::get_one(rocket).await {
-                        Some(conn) => conn,
+                    // Hand the flusher a pool handle rather than a checked-out connection: a
+                    // connection held across the whole process lifetime is exempt from r2d2's
+                    // idle/lifetime reaping and its checkout-time validation, so it dies silently
+                    // once an idle stretch exceeds the server's `wait_timeout`.
+                    let pool = match DbConn::pool(rocket) {
+                        Some(pool) => pool.clone(),
                         None => {
                             error!(
-                                "Could not acquire a DbConn for the update buffer flusher; the \
+                                "Could not acquire the DB pool for the update buffer flusher; the \
                                  buffer will accumulate forever until shutdown"
                             );
                             return;
@@ -171,7 +177,7 @@ pub async fn main() {
                     let shutdown = rocket.shutdown();
                     let handle = tokio::spawn(update_buffer::run_flusher(
                         flusher_buffer,
-                        conn,
+                        pool,
                         flush_interval,
                         shutdown,
                     ));

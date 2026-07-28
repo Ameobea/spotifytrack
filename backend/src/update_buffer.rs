@@ -11,7 +11,10 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    sync::{Arc, Mutex as StdMutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex as StdMutex,
+    },
     time::{Duration, Instant},
 };
 
@@ -32,13 +35,50 @@ use crate::{
         update_buffer_flush_success_total, update_buffer_flush_time,
     },
     models::{ArtistGenrePair, NewArtistHistoryEntry, NewTrackHistoryEntry, TrackArtistPair},
-    DbConn,
+    DbConn, DbPool,
 };
 
 const FLUSH_CHUNK_SIZE: usize = 2000;
 const RETRY_MAX_ELAPSED: Duration = Duration::from_secs(60);
 const RETRY_INITIAL_BACKOFF: Duration = Duration::from_millis(250);
 const RETRY_MAX_BACKOFF: Duration = Duration::from_secs(8);
+/// Whole-flush budget, checked between chunks. Per-chunk retry limits alone don't bound a flush:
+/// a large buffer times out chunk after chunk and holds `flush_serialize` for hours, which parks
+/// every request-scoped `DbConn` waiting on a per-user flush and starves the connection pool.
+const FLUSH_MAX_ELAPSED: Duration = Duration::from_secs(300);
+
+/// Per-flush state shared across every chunk of a single `flush_all` / per-user flush.
+///
+/// Once the connection is lost there is nothing left to retry against — the `DbConn` is pinned to
+/// one pooled connection for the flush — so the first such error aborts the remaining chunks
+/// instead of letting each one burn its own retry budget.
+struct FlushSession<'a> {
+    conn: &'a DbConn,
+    deadline: Instant,
+    connection_lost: AtomicBool,
+}
+
+impl<'a> FlushSession<'a> {
+    fn new(conn: &'a DbConn) -> Self {
+        Self {
+            conn,
+            deadline: Instant::now() + FLUSH_MAX_ELAPSED,
+            connection_lost: AtomicBool::new(false),
+        }
+    }
+
+    fn should_abort(&self) -> bool {
+        self.connection_lost.load(Ordering::Relaxed) || Instant::now() >= self.deadline
+    }
+
+    fn abort_reason(&self) -> &'static str {
+        if self.connection_lost.load(Ordering::Relaxed) {
+            "DB connection lost"
+        } else {
+            "flush deadline exceeded"
+        }
+    }
+}
 
 #[derive(Default)]
 struct Inner {
@@ -224,16 +264,17 @@ impl UpdateBuffer {
             artist_genre_pairs.len()
         );
         let start = Instant::now();
+        let sess = FlushSession::new(conn);
         let outcomes = [
-            flush_artist_snapshots(conn, artist_snapshots).await,
-            flush_track_snapshots(conn, track_snapshots).await,
-            flush_track_artist_pairs(conn, track_artist_pairs).await,
-            flush_artist_genre_pairs(conn, artist_genre_pairs).await,
+            flush_artist_snapshots(&sess, artist_snapshots).await,
+            flush_track_snapshots(&sess, track_snapshots).await,
+            flush_track_artist_pairs(&sess, track_artist_pairs).await,
+            flush_artist_genre_pairs(&sess, artist_genre_pairs).await,
             match last_update_time {
                 Some(ts) => {
                     let mut map: HashMap<i64, NaiveDateTime> = HashMap::with_capacity(1);
                     map.insert(user_id, ts);
-                    flush_user_last_update_times(conn, map).await
+                    flush_user_last_update_times(&sess, map).await
                 },
                 None => true,
             },
@@ -305,12 +346,13 @@ impl UpdateBuffer {
             .flatten()
             .collect();
 
+        let sess = FlushSession::new(conn);
         let outcomes = [
-            flush_artist_snapshots(conn, snapshot.artist_snapshots).await,
-            flush_track_snapshots(conn, snapshot.track_snapshots).await,
-            flush_track_artist_pairs(conn, track_artist_pairs).await,
-            flush_artist_genre_pairs(conn, artist_genre_pairs).await,
-            flush_user_last_update_times(conn, snapshot.user_last_update_times).await,
+            flush_artist_snapshots(&sess, snapshot.artist_snapshots).await,
+            flush_track_snapshots(&sess, snapshot.track_snapshots).await,
+            flush_track_artist_pairs(&sess, track_artist_pairs).await,
+            flush_artist_genre_pairs(&sess, artist_genre_pairs).await,
+            flush_user_last_update_times(&sess, snapshot.user_last_update_times).await,
         ];
 
         for user_id in user_ids_to_release {
@@ -324,11 +366,20 @@ impl UpdateBuffer {
             update_buffer_flush_success_total().inc();
         }
         update_buffer_flush_time().observe(start.elapsed().as_nanos() as u64);
-        info!(
-            "Flushed {} pending rows in {:?} (any_chunk_dropped={any_failed})",
-            total_pending,
-            start.elapsed()
-        );
+        if sess.should_abort() {
+            error!(
+                "Flush aborted after {:?} ({}); dropped some of {total_pending} pending rows. The \
+                 next flush will run on a freshly checked-out connection.",
+                start.elapsed(),
+                sess.abort_reason()
+            );
+        } else {
+            info!(
+                "Flushed {} pending rows in {:?} (any_chunk_dropped={any_failed})",
+                total_pending,
+                start.elapsed()
+            );
+        }
     }
 }
 
@@ -356,9 +407,23 @@ fn extract_user(
 enum ErrorKind {
     Transient,
     Permanent,
+    /// The underlying connection is dead. Retrying is pointless: `conn.run` hands the closure the
+    /// same pooled connection every time, so every attempt fails identically.
+    ConnectionLost,
+}
+
+fn is_connection_lost(err: &DieselError) -> bool {
+    let DieselError::DatabaseError(_, info) = err else {
+        return false;
+    };
+    let msg = info.message().to_ascii_lowercase();
+    msg.contains("gone away") || msg.contains("lost connection") || msg.contains("broken pipe")
 }
 
 fn classify_error(err: &DieselError) -> ErrorKind {
+    if is_connection_lost(err) {
+        return ErrorKind::ConnectionLost;
+    }
     match err {
         DieselError::DatabaseError(kind, _) => match kind {
             DatabaseErrorKind::UniqueViolation
@@ -378,7 +443,11 @@ fn classify_error(err: &DieselError) -> ErrorKind {
     }
 }
 
-async fn run_with_retry<F, Fut>(table_name: &'static str, mut op: F) -> Result<(), String>
+async fn run_with_retry<F, Fut>(
+    sess: &FlushSession<'_>,
+    table_name: &'static str,
+    mut op: F,
+) -> Result<(), String>
 where
     F: FnMut() -> Fut,
     Fut: std::future::Future<Output = QueryResult<usize>>,
@@ -391,6 +460,14 @@ where
         match op().await {
             Ok(_) => return Ok(()),
             Err(err) => match classify_error(&err) {
+                ErrorKind::ConnectionLost => {
+                    sess.connection_lost.store(true, Ordering::Relaxed);
+                    error!(
+                        "Lost DB connection while flushing to {table_name} (attempt {attempt}); \
+                         aborting the rest of this flush: {err}"
+                    );
+                    return Err(err.to_string());
+                },
                 ErrorKind::Permanent => {
                     error!(
                         "Permanent DB error flushing to {table_name} (attempt {attempt}); \
@@ -399,7 +476,7 @@ where
                     return Err(err.to_string());
                 },
                 ErrorKind::Transient => {
-                    if start.elapsed() >= RETRY_MAX_ELAPSED {
+                    if start.elapsed() >= RETRY_MAX_ELAPSED || sess.should_abort() {
                         error!(
                             "Gave up flushing to {table_name} after {:?} ({attempt} attempts): \
                              {err}",
@@ -420,7 +497,10 @@ where
 }
 
 /// Returns `true` if every chunk made it; `false` if any chunk was dropped.
-async fn flush_artist_snapshots(conn: &DbConn, entries: Vec<NewArtistHistoryEntry>) -> bool {
+async fn flush_artist_snapshots(
+    sess: &FlushSession<'_>,
+    entries: Vec<NewArtistHistoryEntry>,
+) -> bool {
     if entries.is_empty() {
         return true;
     }
@@ -433,16 +513,22 @@ async fn flush_artist_snapshots(conn: &DbConn, entries: Vec<NewArtistHistoryEntr
         .collect();
     for chunk in chunks {
         let row_count = chunk.len();
+        if sess.should_abort() {
+            update_buffer_dropped_rows_total("artist_rank_snapshots").inc_by(row_count as u64);
+            all_ok = false;
+            continue;
+        }
         let chunk = Arc::new(chunk);
-        let res = run_with_retry("artist_rank_snapshots", || {
+        let res = run_with_retry(sess, "artist_rank_snapshots", || {
             let chunk = Arc::clone(&chunk);
             async move {
-                conn.run(move |conn| {
-                    diesel::insert_into(crate::schema::artist_rank_snapshots::table)
-                        .values(chunk.as_ref())
-                        .execute(conn)
-                })
-                .await
+                sess.conn
+                    .run(move |conn| {
+                        diesel::insert_into(crate::schema::artist_rank_snapshots::table)
+                            .values(chunk.as_ref())
+                            .execute(conn)
+                    })
+                    .await
             }
         })
         .await;
@@ -452,11 +538,14 @@ async fn flush_artist_snapshots(conn: &DbConn, entries: Vec<NewArtistHistoryEntr
         }
     }
 
-    let first_seen_ok = flush_artist_first_seen(conn, first_seen).await;
+    let first_seen_ok = flush_artist_first_seen(sess, first_seen).await;
     all_ok && first_seen_ok
 }
 
-async fn flush_track_snapshots(conn: &DbConn, entries: Vec<NewTrackHistoryEntry>) -> bool {
+async fn flush_track_snapshots(
+    sess: &FlushSession<'_>,
+    entries: Vec<NewTrackHistoryEntry>,
+) -> bool {
     if entries.is_empty() {
         return true;
     }
@@ -469,16 +558,22 @@ async fn flush_track_snapshots(conn: &DbConn, entries: Vec<NewTrackHistoryEntry>
         .collect();
     for chunk in chunks {
         let row_count = chunk.len();
+        if sess.should_abort() {
+            update_buffer_dropped_rows_total("track_rank_snapshots").inc_by(row_count as u64);
+            all_ok = false;
+            continue;
+        }
         let chunk = Arc::new(chunk);
-        let res = run_with_retry("track_rank_snapshots", || {
+        let res = run_with_retry(sess, "track_rank_snapshots", || {
             let chunk = Arc::clone(&chunk);
             async move {
-                conn.run(move |conn| {
-                    diesel::insert_into(crate::schema::track_rank_snapshots::table)
-                        .values(chunk.as_ref())
-                        .execute(conn)
-                })
-                .await
+                sess.conn
+                    .run(move |conn| {
+                        diesel::insert_into(crate::schema::track_rank_snapshots::table)
+                            .values(chunk.as_ref())
+                            .execute(conn)
+                    })
+                    .await
             }
         })
         .await;
@@ -488,7 +583,7 @@ async fn flush_track_snapshots(conn: &DbConn, entries: Vec<NewTrackHistoryEntry>
         }
     }
 
-    let first_seen_ok = flush_track_first_seen(conn, first_seen).await;
+    let first_seen_ok = flush_track_first_seen(sess, first_seen).await;
     all_ok && first_seen_ok
 }
 
@@ -543,7 +638,7 @@ struct TrackFirstSeenRow {
 }
 
 async fn flush_artist_first_seen(
-    conn: &DbConn,
+    sess: &FlushSession<'_>,
     map: HashMap<(i64, i32), NaiveDateTime>,
 ) -> bool {
     if map.is_empty() {
@@ -560,16 +655,24 @@ async fn flush_artist_first_seen(
     let mut all_ok = true;
     for chunk in rows.chunks(FLUSH_CHUNK_SIZE) {
         let row_count = chunk.len();
+        if sess.should_abort() {
+            update_buffer_dropped_rows_total("artists_users_first_seen").inc_by(row_count as u64);
+            all_ok = false;
+            continue;
+        }
         let chunk = Arc::new(chunk.to_vec());
-        let res = run_with_retry("artists_users_first_seen", || {
+        let res = run_with_retry(sess, "artists_users_first_seen", || {
             let chunk = Arc::clone(&chunk);
             async move {
-                conn.run(move |conn| {
-                    diesel::insert_or_ignore_into(crate::schema::artists_users_first_seen::table)
+                sess.conn
+                    .run(move |conn| {
+                        diesel::insert_or_ignore_into(
+                            crate::schema::artists_users_first_seen::table,
+                        )
                         .values(chunk.as_ref())
                         .execute(conn)
-                })
-                .await
+                    })
+                    .await
             }
         })
         .await;
@@ -581,7 +684,10 @@ async fn flush_artist_first_seen(
     all_ok
 }
 
-async fn flush_track_first_seen(conn: &DbConn, map: HashMap<(i64, i32), NaiveDateTime>) -> bool {
+async fn flush_track_first_seen(
+    sess: &FlushSession<'_>,
+    map: HashMap<(i64, i32), NaiveDateTime>,
+) -> bool {
     if map.is_empty() {
         return true;
     }
@@ -596,16 +702,22 @@ async fn flush_track_first_seen(conn: &DbConn, map: HashMap<(i64, i32), NaiveDat
     let mut all_ok = true;
     for chunk in rows.chunks(FLUSH_CHUNK_SIZE) {
         let row_count = chunk.len();
+        if sess.should_abort() {
+            update_buffer_dropped_rows_total("tracks_users_first_seen").inc_by(row_count as u64);
+            all_ok = false;
+            continue;
+        }
         let chunk = Arc::new(chunk.to_vec());
-        let res = run_with_retry("tracks_users_first_seen", || {
+        let res = run_with_retry(sess, "tracks_users_first_seen", || {
             let chunk = Arc::clone(&chunk);
             async move {
-                conn.run(move |conn| {
-                    diesel::insert_or_ignore_into(crate::schema::tracks_users_first_seen::table)
-                        .values(chunk.as_ref())
-                        .execute(conn)
-                })
-                .await
+                sess.conn
+                    .run(move |conn| {
+                        diesel::insert_or_ignore_into(crate::schema::tracks_users_first_seen::table)
+                            .values(chunk.as_ref())
+                            .execute(conn)
+                    })
+                    .await
             }
         })
         .await;
@@ -617,7 +729,7 @@ async fn flush_track_first_seen(conn: &DbConn, map: HashMap<(i64, i32), NaiveDat
     all_ok
 }
 
-async fn flush_track_artist_pairs(conn: &DbConn, pairs: HashSet<(i32, i32)>) -> bool {
+async fn flush_track_artist_pairs(sess: &FlushSession<'_>, pairs: HashSet<(i32, i32)>) -> bool {
     if pairs.is_empty() {
         return true;
     }
@@ -631,16 +743,22 @@ async fn flush_track_artist_pairs(conn: &DbConn, pairs: HashSet<(i32, i32)>) -> 
     let mut all_ok = true;
     for chunk in rows.chunks(FLUSH_CHUNK_SIZE) {
         let row_count = chunk.len();
+        if sess.should_abort() {
+            update_buffer_dropped_rows_total("tracks_artists").inc_by(row_count as u64);
+            all_ok = false;
+            continue;
+        }
         let chunk = Arc::new(chunk.to_vec());
-        let res = run_with_retry("tracks_artists", || {
+        let res = run_with_retry(sess, "tracks_artists", || {
             let chunk = Arc::clone(&chunk);
             async move {
-                conn.run(move |conn| {
-                    diesel::insert_or_ignore_into(crate::schema::tracks_artists::table)
-                        .values(chunk.as_ref())
-                        .execute(conn)
-                })
-                .await
+                sess.conn
+                    .run(move |conn| {
+                        diesel::insert_or_ignore_into(crate::schema::tracks_artists::table)
+                            .values(chunk.as_ref())
+                            .execute(conn)
+                    })
+                    .await
             }
         })
         .await;
@@ -653,19 +771,23 @@ async fn flush_track_artist_pairs(conn: &DbConn, pairs: HashSet<(i32, i32)>) -> 
 }
 
 async fn flush_user_last_update_times(
-    conn: &DbConn,
+    sess: &FlushSession<'_>,
     updates: HashMap<i64, NaiveDateTime>,
 ) -> bool {
     if updates.is_empty() {
         return true;
     }
     let count = updates.len();
+    if sess.should_abort() {
+        update_buffer_dropped_rows_total("users_last_update_time").inc_by(count as u64);
+        return false;
+    }
     let updates: Vec<(i64, NaiveDateTime)> = updates.into_iter().collect();
     let updates = Arc::new(updates);
-    let res = run_with_retry("users.last_update_time", || {
+    let res = run_with_retry(sess, "users.last_update_time", || {
         let updates = Arc::clone(&updates);
         async move {
-            conn.run(move |conn| {
+            sess.conn.run(move |conn| {
                 conn.transaction::<usize, DieselError, _>(|conn| {
                     let mut total = 0usize;
                     for (user_id, ts) in updates.iter() {
@@ -690,7 +812,10 @@ async fn flush_user_last_update_times(
     true
 }
 
-async fn flush_artist_genre_pairs(conn: &DbConn, pairs: HashSet<(i32, String)>) -> bool {
+async fn flush_artist_genre_pairs(
+    sess: &FlushSession<'_>,
+    pairs: HashSet<(i32, String)>,
+) -> bool {
     if pairs.is_empty() {
         return true;
     }
@@ -701,16 +826,22 @@ async fn flush_artist_genre_pairs(conn: &DbConn, pairs: HashSet<(i32, String)>) 
     let mut all_ok = true;
     for chunk in rows.chunks(FLUSH_CHUNK_SIZE) {
         let row_count = chunk.len();
+        if sess.should_abort() {
+            update_buffer_dropped_rows_total("artists_genres").inc_by(row_count as u64);
+            all_ok = false;
+            continue;
+        }
         let chunk = Arc::new(chunk.to_vec());
-        let res = run_with_retry("artists_genres", || {
+        let res = run_with_retry(sess, "artists_genres", || {
             let chunk = Arc::clone(&chunk);
             async move {
-                conn.run(move |conn| {
-                    diesel::insert_or_ignore_into(crate::schema::artists_genres::table)
-                        .values(chunk.as_ref())
-                        .execute(conn)
-                })
-                .await
+                sess.conn
+                    .run(move |conn| {
+                        diesel::insert_or_ignore_into(crate::schema::artists_genres::table)
+                            .values(chunk.as_ref())
+                            .execute(conn)
+                    })
+                    .await
             }
         })
         .await;
@@ -722,10 +853,22 @@ async fn flush_artist_genre_pairs(conn: &DbConn, pairs: HashSet<(i32, String)>) 
     all_ok
 }
 
+/// Checks out a connection for the duration of one flush and returns it to the pool afterwards.
+///
+/// Holding a single connection across the process lifetime instead exempts it from r2d2's
+/// idle/max-lifetime reaping and from checkout-time validation, so an idle stretch longer than the
+/// server's `wait_timeout` kills it permanently with no way to recover short of a restart.
+async fn flush_once(buffer: &UpdateBuffer, pool: &DbPool) {
+    match pool.get().await {
+        Some(conn) => buffer.flush_all(&DbConn(conn)).await,
+        None => error!("Flusher could not check out a DB connection; deferring to the next flush"),
+    }
+}
+
 /// Periodic flusher loop. Flushes on interval, on size-threshold notify, and once on shutdown.
 pub(crate) async fn run_flusher(
     buffer: Arc<UpdateBuffer>,
-    conn: DbConn,
+    pool: DbPool,
     flush_interval: Duration,
     mut shutdown: rocket::Shutdown,
 ) {
@@ -737,19 +880,57 @@ pub(crate) async fn run_flusher(
     loop {
         tokio::select! {
             _ = tokio::time::sleep(flush_interval) => {
-                buffer.flush_all(&conn).await;
+                flush_once(&buffer, &pool).await;
             }
             _ = buffer.flush_notify.notified() => {
                 info!("Update buffer crossed size threshold; flushing");
-                buffer.flush_all(&conn).await;
+                flush_once(&buffer, &pool).await;
             }
             _ = &mut shutdown => {
                 info!("Update buffer flusher: shutdown requested; doing final flush");
-                buffer.flush_all(&conn).await;
+                flush_once(&buffer, &pool).await;
                 break;
             }
         }
     }
 
     info!("Update buffer flusher exited");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn db_err(kind: DatabaseErrorKind, msg: &str) -> DieselError {
+        DieselError::DatabaseError(kind, Box::new(msg.to_string()))
+    }
+
+    /// Pins the exact strings MariaDB surfaces through diesel when the server has closed a
+    /// connection. Classifying these as transient is what let a dead connection retry for hours.
+    #[test]
+    fn lost_connections_are_not_retried() {
+        for msg in [
+            "Server has gone away",
+            "MySQL server has gone away",
+            "Lost connection to MySQL server during query",
+        ] {
+            let err = db_err(DatabaseErrorKind::Unknown, msg);
+            assert!(
+                matches!(classify_error(&err), ErrorKind::ConnectionLost),
+                "{msg} should classify as ConnectionLost"
+            );
+        }
+    }
+
+    #[test]
+    fn ordinary_errors_keep_their_classification() {
+        let deadlock = db_err(
+            DatabaseErrorKind::SerializationFailure,
+            "Deadlock found when trying to get lock",
+        );
+        assert!(matches!(classify_error(&deadlock), ErrorKind::Transient));
+
+        let dupe = db_err(DatabaseErrorKind::UniqueViolation, "Duplicate entry '1'");
+        assert!(matches!(classify_error(&dupe), ErrorKind::Permanent));
+    }
 }

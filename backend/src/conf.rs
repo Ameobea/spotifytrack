@@ -53,7 +53,7 @@ impl Conf {
                 .expect("Invalid value provided for `TELEMETRY_SERVER_PORT`; must be a u16"),
             update_buffer_flush_interval: std::time::Duration::from_secs(
                 env::var("UPDATE_BUFFER_FLUSH_INTERVAL_SECONDS")
-                    .unwrap_or_else(|_| "500".to_string())
+                    .unwrap_or_else(|_| "100".to_string())
                     .parse()
                     .expect(
                         "Invalid value provided for `UPDATE_BUFFER_FLUSH_INTERVAL_SECONDS`; must \
@@ -61,7 +61,7 @@ impl Conf {
                     ),
             ),
             update_buffer_max_pending_rows: env::var("UPDATE_BUFFER_MAX_PENDING_ROWS")
-                .unwrap_or_else(|_| "500000".to_string())
+                .unwrap_or_else(|_| "100000".to_string())
                 .parse()
                 .expect(
                     "Invalid value provided for `UPDATE_BUFFER_MAX_PENDING_ROWS`; must be an \
