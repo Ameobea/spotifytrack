@@ -513,6 +513,8 @@ pub(crate) async fn oauth_cb(
     error: Option<&str>,
     code: &str,
     state: Option<&str>,
+    user_agent: UserAgent,
+    client_ip: ClientIP,
 ) -> Result<Redirect, String> {
     use crate::schema::users;
 
@@ -588,7 +590,7 @@ pub(crate) async fn oauth_cb(
     };
 
     let query = diesel::insert_into(crate::schema::users::table).values(user);
-    match conn1.run(move |conn| query.execute(conn)).await {
+    let is_new_user = match conn1.run(move |conn| query.execute(conn)).await {
         Err(diesel::result::Error::DatabaseError(
             diesel::result::DatabaseErrorKind::UniqueViolation,
             _,
@@ -612,6 +614,7 @@ pub(crate) async fn oauth_cb(
                 })?;
 
             info!("Already have a row for user; skipping manual update and redirecting directly.");
+            false
         },
         Err(err) => {
             error!("Error inserting row: {:?}", err);
@@ -654,8 +657,19 @@ pub(crate) async fn oauth_cb(
                     user.spotify_id
                 );
             }
+            true
         },
     };
+
+    // This point is only reachable when the token exchange + user upsert genuinely succeeded,
+    // making it the decisive marker that a user completed the OAuth flow
+    crate::server_analytics::submit_server_analytics_event(
+        "oauth",
+        "connect_complete",
+        serde_json::json!({ "new_user": is_new_user }),
+        client_ip.0,
+        Some(user_agent.0),
+    );
 
     match state {
         Some(s) if s == "_" => (),
@@ -1422,6 +1436,26 @@ pub(crate) async fn crawl_related_artists(
             fetched.len()
         ),
     ))
+}
+
+pub(crate) struct ClientIP(Option<String>);
+
+#[async_trait]
+impl<'a, 'r> rocket::request::FromRequest<'r> for ClientIP {
+    type Error = Infallible;
+
+    async fn from_request(
+        req: &'r rocket::request::Request<'_>,
+    ) -> rocket::request::Outcome<Self, Self::Error> {
+        let ip = req
+            .headers()
+            .get_one("x-forwarded-for")
+            .and_then(|v| v.split(',').next())
+            .map(|v| v.trim().to_owned())
+            .or_else(|| req.headers().get_one("x-real-ip").map(|v| v.to_owned()))
+            .or_else(|| req.client_ip().map(|ip| ip.to_string()));
+        Outcome::Success(ClientIP(ip))
+    }
 }
 
 pub(crate) struct UserAgent(String);

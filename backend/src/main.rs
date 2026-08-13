@@ -37,6 +37,7 @@ pub mod metrics;
 pub mod models;
 pub mod routes;
 pub mod schema;
+pub mod server_analytics;
 pub mod shared_playlist_gen;
 pub mod spotify_api;
 pub mod spotify_token;

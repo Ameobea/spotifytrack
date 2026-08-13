@@ -83,15 +83,16 @@ export const fetchRelatedArtistsForUser = makeRetryable(
   }
 );
 
-export const fetchRelatedArtists = makeRetryable(
-  async (artistID: string): Promise<RelatedArtistsGraphRes | null> => {
-    const url = getUrl(`/related_artists/${artistID}`);
-
-    logEvent('graph', 'expand_artist', { artistID });
-
-    return getJsonEndpoint(url);
-  }
+const fetchRelatedArtistsInner = makeRetryable(
+  async (artistID: string): Promise<RelatedArtistsGraphRes | null> =>
+    getJsonEndpoint(getUrl(`/related_artists/${artistID}`))
 );
+
+export const fetchRelatedArtists = (artistID: string): Promise<RelatedArtistsGraphRes | null> => {
+  // Outside the retry wrapper so retried requests don't re-log
+  logEvent('graph', 'expand_artist', { artistID });
+  return fetchRelatedArtistsInner(artistID);
+};
 
 export const getUserDisplayName = makeRetryable(async (username: string): Promise<string> => {
   const res = await fetch(getUrl(`/display_name/${username}`)).then(async (res) => {
